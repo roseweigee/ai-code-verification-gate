@@ -53,12 +53,19 @@ public final class RunContext {
 
     /** Calls one AI role in a fresh context and stores prompt and answer for the audit trail. */
     public String askAi(String role, String system, String user) {
+        // Responsible AI: check the prompt BEFORE it leaves the machine. Blocked prompts are never sent.
+        java.util.List<String> problems = dev.aiverify.ai.AiPolicy.scanOutbound(system + "\n" + user);
+        if (!problems.isEmpty()) {
+            throw new IllegalStateException("Blocked: the prompt for the " + role
+                    + " contains sensitive data " + problems + ". Nothing was sent to the model.");
+        }
         String answer = ai.complete(role, system, user);
         Map<String, Object> rec = new LinkedHashMap<>();
         rec.put("promptFile", "ai/" + role + ".prompt.txt");
         rec.put("answerFile", "ai/" + role + ".answer.txt");
         rec.put("promptSha256", Hashing.sha256(system + "\n---\n" + user));
         rec.put("answerSha256", Hashing.sha256(answer));
+        rec.put("outboundCheck", "PASSED: no card numbers, secrets, emails or national IDs in the prompt");
         write("ai/" + role + ".prompt.txt", "### SYSTEM\n" + system + "\n### USER\n" + user);
         write("ai/" + role + ".answer.txt", answer);
         aiExchanges.put(role, rec);

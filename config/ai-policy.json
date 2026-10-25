@@ -1,0 +1,6 @@
+{
+  "_about": "Responsible AI policy, owned by the architect. Only approved models may be called, and every prompt is checked before it leaves the machine.",
+  "approvedProvider": "Anthropic API (enterprise account, no training on inputs)",
+  "approvedModels": ["claude-sonnet-5-5", "claude-opus-5-5"],
+  "outboundChecks": ["card numbers (Luhn-valid 13-19 digits)", "API keys and passwords", "email addresses", "Taiwan national ID numbers"]
+}

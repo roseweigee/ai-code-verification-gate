@@ -56,6 +56,17 @@ Blue gates **decide**. Amber AI roles **advise**. Purple steps belong to **a hum
 5. **A named human is accountable.** Approval needs a name. Approving despite a HIGH AI finding needs an
    explicit `--ack-high`. Every run and decision goes into a hash-chained audit log.
 
+## Responsible AI, enforced in code
+
+| Principle | How the pipeline enforces it |
+| --- | --- |
+| Approved tools only | Live mode refuses any model that is not on the allow-list in [`config/ai-policy.json`](config/ai-policy.json). |
+| No sensitive data to AI | Every prompt is scanned **before it is sent**. A card number (Luhn-valid), API key, password, email or Taiwan national ID blocks the call; nothing leaves the machine. PANs are masked in every report. |
+| Disclose and review AI output | AI code gets a provenance record (`candidate/PROVENANCE.json`). Every prompt and answer is saved and hashed. Deterministic gates verify the code; an independent AI review is shown to the human. |
+| A human is accountable | Gate G6 needs a named person. Approving despite a HIGH AI finding needs `--ack-high`. Approval is refused if the code changed after verification. |
+
+The report shows this checklist with evidence from the latest run.
+
 ## The demo scenario
 
 The component is a **card authorization pre-check** (ISO 8583 MTI 0100): it returns field 39 response
@@ -87,7 +98,7 @@ Claude call.
 Requires **JDK 21**. No other dependencies; nothing is downloaded.
 
 ```bash
-./run.sh selftest                 # 21 checks of the engine itself
+./run.sh selftest                 # 27 checks of the engine itself
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
 ./run.sh run --attempt 3 --golden 1.1

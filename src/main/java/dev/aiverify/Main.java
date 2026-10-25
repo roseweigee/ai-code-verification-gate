@@ -108,10 +108,14 @@ public final class Main {
     }
 
     private static void run(int attempt, boolean live, String goldenVersion) throws IOException {
-        LlmClient ai = live
-                ? new ClaudeClient(System.getenv("ANTHROPIC_API_KEY"),
-                        System.getenv().getOrDefault("AI_MODEL", "claude-sonnet-5-5"))
-                : new ReplayClient(ROOT.resolve("replay"), attempt);
+        LlmClient ai;
+        if (live) {
+            String model = System.getenv().getOrDefault("AI_MODEL", "claude-sonnet-5-5");
+            new dev.aiverify.ai.AiPolicy(ROOT).requireApprovedModel(model);
+            ai = new ClaudeClient(System.getenv("ANTHROPIC_API_KEY"), model);
+        } else {
+            ai = new ReplayClient(ROOT.resolve("replay"), attempt);
+        }
         String runId = "run-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                 + "-a" + attempt;
         Path runDir = ROOT.resolve("runs").resolve(runId);

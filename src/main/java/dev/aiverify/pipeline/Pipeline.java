@@ -49,6 +49,15 @@ public final class Pipeline {
         Prompts.Prompt ap = Prompts.author(ctx.spec, ctx.contractSource, feedbackForAuthor);
         ctx.candidateSource = Prompts.extractJava(ctx.askAi("author", ap.system(), ap.user()));
         ctx.write("candidate/AuthorizationPrecheckImpl.java", ctx.candidateSource);
+        Map<String, Object> provenance = new LinkedHashMap<>();
+        provenance.put("file", "AuthorizationPrecheckImpl.java");
+        provenance.put("origin", "AI-generated");
+        provenance.put("generatedBy", ctx.ai.describe());
+        provenance.put("runId", ctx.runId);
+        provenance.put("sha256", Hashing.sha256(ctx.candidateSource));
+        provenance.put("promptAndAnswer", "ai/author.prompt.txt, ai/author.answer.txt");
+        provenance.put("status", "Not approved. May be used only after gates G1-G5 and a named human approval (G6).");
+        ctx.write("candidate/PROVENANCE.json", Json.write(provenance));
 
         log("  test-writer   writes tests from the spec only (never sees the code)");
         Prompts.Prompt tp = Prompts.testWriter(ctx.spec);
@@ -115,6 +124,7 @@ public final class Pipeline {
         result.put("candidateSha256", Hashing.sha256(ctx.candidateSource));
         result.put("inputs", inputHashes(ctx));
         result.put("aiExchanges", ctx.aiExchanges);
+        result.put("responsibleAi", responsibleAi(ctx));
         List<Map<String, Object>> gateMaps = new ArrayList<>();
         results.forEach(r -> gateMaps.add(r.toMap()));
         result.put("gates", gateMaps);
@@ -149,6 +159,25 @@ public final class Pipeline {
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read pipeline inputs: " + e.getMessage(), e);
         }
+    }
+
+    /** Evidence for the Responsible AI principles, from what this run actually did. Principle 4 is G6 itself. */
+    private static Map<String, Object> responsibleAi(RunContext ctx) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        dev.aiverify.ai.AiPolicy policy = new dev.aiverify.ai.AiPolicy(ctx.projectRoot);
+        String mode = ctx.ai.describe();
+        m.put("approvedTools", mode.startsWith("live")
+                ? "Model " + mode.substring(6) + " is on the approved list " + policy.approvedModels()
+                        + " (" + policy.provider() + ")."
+                : "Offline replay: no model was called. Live mode only calls models on the approved list "
+                        + policy.approvedModels() + ".");
+        m.put("noSensitiveData", ctx.aiExchanges.size() + " of " + ctx.aiExchanges.size()
+                + " prompts were scanned before sending: no card numbers, secrets, emails or national IDs. "
+                + "Card numbers are masked in every report and in the diagnostician's input.");
+        m.put("disclosureAndReview", "The code is marked AI-generated (candidate/PROVENANCE.json). Every prompt and "
+                + "answer is saved and hashed. Correctness is checked by deterministic gates G1-G4; "
+                + "an independent AI review (G5) is shown to the human.");
+        return m;
     }
 
     private static Map<String, Object> inputHashes(RunContext ctx) {

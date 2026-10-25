@@ -204,6 +204,7 @@ footer { font-size: 13px; color: var(--ink-3); display: grid; gap: 6px; }
   </header>
   <section id="highlights" aria-label="What this run shows"></section>
   <section id="matrix-section"></section>
+  <section id="rai"></section>
   <section id="attempts"></section>
   <section id="audit"></section>
   <section id="spec"></section>
@@ -311,6 +312,26 @@ function render() {
       <div class="principle ai"><b>AI advises, it never decides</b>Only deterministic gates can pass or fail a run. AI findings go to the human, and HIGH findings must be explicitly accepted.</div>
       <div class="principle hum"><b>Who tests the tests?</b>Mutation testing plants small bugs on purpose. Tests that do not notice them are not trusted, whoever wrote them.</div>
     </div>`;
+
+  // ---------- Responsible AI checklist (evidence from the latest run)
+  const last = runs[runs.length - 1];
+  if (last && last.responsibleAi) {
+    const g6 = gate(last, "G6"), rai = last.responsibleAi;
+    const human = g6.details && g6.details.decidedBy
+      ? `${g6.details.decision === "APPROVED" ? "Approved" : "Rejected"} by ${g6.details.decidedBy}, recorded in the hash-chained audit log.`
+      : "Waiting for a named human. The code cannot be approved without a name, and approving despite a HIGH finding needs explicit acceptance.";
+    const rows = [
+      ["Approved tools only", "Live mode refuses any model not on the architect's allow-list (config/ai-policy.json).", rai.approvedTools, true],
+      ["No sensitive data to AI", "Every prompt is scanned before it is sent. Card numbers, secrets, emails or national IDs block the call.", rai.noSensitiveData, true],
+      ["Disclose and review AI output", "AI code carries a provenance record. Deterministic gates verify it; an independent AI review is shown to the human.", rai.disclosureAndReview, true],
+      ["A human is accountable", "Gate G6 needs a named person. HIGH AI findings must be explicitly accepted or the code rejected.", human, !!(g6.details && g6.details.decidedBy)]
+    ];
+    document.getElementById("rai").innerHTML = `<h2>Responsible AI checklist</h2>
+      <p class="muted" style="max-width:70ch">How each principle is enforced by the pipeline, with evidence from attempt ${last.attempt}.</p>
+      <div class="tbl-wrap"><table class="data"><thead><tr><th>Principle</th><th>How it is enforced</th><th>Evidence</th><th>Status</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td><b>${esc(r[0])}</b></td><td class="wrap">${esc(r[1])}</td><td class="wrap">${esc(r[2])}</td>
+        <td>${r[3] ? pill("PASSED", "Enforced") : pill("PENDING", "Waiting")}</td></tr>`).join("")}</tbody></table></div>`;
+  }
 
   // ---------- attempts
   document.getElementById("attempts").innerHTML = `<h2>Attempts</h2>` + runs.map(renderAttempt).join("");

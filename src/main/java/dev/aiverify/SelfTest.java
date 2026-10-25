@@ -32,6 +32,7 @@ final class SelfTest {
         compilerAndRunner();
         policy();
         audit();
+        outbound();
         System.out.printf("%nSelf-test: %d passed, %d failed%n", passed, failed);
         return failed == 0;
     }
@@ -127,6 +128,24 @@ final class SelfTest {
         check("Audit chain verifies when untouched", log.verify() == null);
         Files.writeString(file, Files.readString(file).replace("\"B\"", "\"C\""));
         check("Audit chain detects an edited entry", log.verify() != null);
+    }
+
+    private static void outbound() {
+        check("Outbound: blocks a full card number in a prompt",
+                !dev.aiverify.ai.AiPolicy.scanOutbound("pan=4111111111111111").isEmpty());
+        check("Outbound: allows a masked card number", dev.aiverify.ai.AiPolicy.scanOutbound("pan=411111******1111").isEmpty());
+        check("Outbound: blocks a Taiwan national ID", !dev.aiverify.ai.AiPolicy.scanOutbound("id A123456789").isEmpty());
+        check("Outbound: blocks an email address", !dev.aiverify.ai.AiPolicy.scanOutbound("mail rose@example.com").isEmpty());
+        check("Outbound: allows ordinary amounts and dates",
+                dev.aiverify.ai.AiPolicy.scanOutbound("amountMinor=12345, date 2026-10-28, code 51").isEmpty());
+        boolean refused;
+        try {
+            new dev.aiverify.ai.AiPolicy(Path.of(System.getProperty("aiverify.root", "."))).requireApprovedModel("some-public-chatbot");
+            refused = false;
+        } catch (IllegalStateException e) {
+            refused = true;
+        }
+        check("Approved tools: refuses a model that is not on the list", refused);
     }
 
     private static AuthorizationPrecheck instance(InMemoryCompiler.Result r) {
