@@ -1,9 +1,11 @@
 steps:
-  # 1. The generated tests must pass before anything is built
-  - id: test
+  # 1. Mockito tests and the JaCoCo coverage check (mvn verify), then the SonarQube quality gate.
+  #    sonar.qualitygate.wait=true makes this step fail when the quality gate fails.
+  - id: test-and-sonar
     name: 'maven:3.9-eclipse-temurin-17'
-    entrypoint: 'mvn'
-    args: ['-B', 'verify']
+    entrypoint: 'bash'
+    args: ['-c', 'mvn -B verify sonar:sonar -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=roseweigee -Dsonar.projectKey=roseweigee_product -Dsonar.qualitygate.wait=true -Dsonar.token=$$SONAR_TOKEN']
+    secretEnv: ['SONAR_TOKEN']
 
   # 2. Verification gate for AI-generated code: Java policy, CodingStyle.md, K8s manifests, pipeline.
   #    Exit code 1 (blocked) stops the build here, so unchecked code never reaches the cluster.
@@ -41,6 +43,11 @@ steps:
     env:
       - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
       - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/sonar-token/versions/latest
+      env: 'SONAR_TOKEN'
 
 options:
   logging: CLOUD_LOGGING_ONLY

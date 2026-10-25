@@ -235,8 +235,8 @@ footer { font-size: 13px; color: var(--ink-3); display: grid; gap: 6px; }
     <div class="flow" aria-label="Delivery flow">
       <div class="step"><b>API spec</b>Approved by a person</div><span class="arrow">→</span>
       <div class="step"><b>SpecBlast</b>AI generates code, K8s and pipeline</div><span class="arrow">→</span>
-      <div class="step"><b>mvn verify</b>Generated tests run</div><span class="arrow">→</span>
-      <div class="step gate"><b>Verification gate</b>P1–P5 decide. Exit 1 stops the build</div><span class="arrow">→</span>
+      <div class="step"><b>mvn verify + Sonar</b>Mockito tests, coverage, quality gate</div><span class="arrow">→</span>
+      <div class="step gate"><b>Verification gate</b>P1–P6 decide. Exit 1 stops the build</div><span class="arrow">→</span>
       <div class="step hum"><b>Human approval</b>Named reviewer accepts warnings</div><span class="arrow">→</span>
       <div class="step"><b>Cloud Build</b>Deploys the image for this commit</div>
     </div>
@@ -251,7 +251,7 @@ footer { font-size: 13px; color: var(--ink-3); display: grid; gap: 6px; }
 
 <script>
 const DATA = /*__REPORT_DATA__*/null;
-const GATES = ["P1", "P2", "P3", "P4", "P5"];
+const GATES = ["P1", "P2", "P3", "P4", "P5", "P6"];
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function pill(status, label) { return `<span class="pill s-${esc(status)}">${esc(label || status.replace(/_/g, " "))}</span>`; }
 const VERDICT = { BLOCKED: "Blocked", READY_FOR_HUMAN_APPROVAL: "Ready for human approval" };
@@ -313,7 +313,7 @@ function render() {
       <div class="body">${gates}</div></article>`;
   }).join("");
 
-  document.getElementById("foot").innerHTML = `<p>P5 (Maven build and tests) runs where Maven can download dependencies, such as Cloud Build. It was not run for this report. Every other result was computed from the project files.</p>`;
+  document.getElementById("foot").innerHTML = `<p>P6 (Maven build and tests) runs where Maven can download dependencies, such as Cloud Build. It was not run for this report. Every other result was computed from the project files.</p>`;
 }
 render();
 </script>

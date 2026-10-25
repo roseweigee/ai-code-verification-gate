@@ -183,6 +183,8 @@ final class SelfTest {
         check("Project: missing probes and limits are ERRORs",
                 text.contains("Missing health probes") && text.contains("Missing resource requests or limits"));
         check("Project: verdict BLOCKED", "BLOCKED".equals(r.get("verdict")));
+        check("Quality: no JaCoCo threshold is a WARN", text.contains("No coverage threshold"));
+        check("Quality: no SonarQube quality gate is a WARN", text.contains("No SonarQube quality gate"));
     }
 
     private static AuthorizationPrecheck instance(InMemoryCompiler.Result r) {

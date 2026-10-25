@@ -41,16 +41,17 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 | P2 CodingStyle.md 合約 | SpecBlast 把 `CodingStyle.md` 當成給模型的指示；閘門把它變成可檢查的規則：package、命名、允許的 `ApiResponse` 方法、`BusinessException` 建構子、Controller 不得 try-catch、查詢方法必須唯讀交易 |
 | P3 Kubernetes 設定 | 資源 requests/limits、liveness/readiness probe、dev 以外不得用可變的映像檔標籤、非 root 執行、密碼必須用 `secretKeyRef`、正式環境至少 2 個 replica、提交到 Git 的 Secret 不得含真實值 |
 | P4 交付流程 | 部署前必須先跑測試和閘門、映像檔以 commit SHA 標記、每個環境使用的映像檔都必須是流程真正建置的 |
-| P5 Maven 建置與測試 | `mvn verify`，加上 `--build` 才會執行（需要能下載相依套件） |
+| P5 測試與程式品質 | 每個 Controller 和 Service 都要有 Mockito/MockMvc 測試、至少一個失敗情境的測試、`mvn verify` 強制 JaCoCo 覆蓋率門檻、流程中有會擋下部署的 SonarQube 品質閘門 |
+| P6 Maven 建置與測試 | `mvn verify`，加上 `--build` 才會執行（需要能下載相依套件） |
 
 只要有 ERROR 就擋下，指令會回傳 exit code 1，讓 CI 停止建置。
 
 ```bash
-./run.sh verify-project examples/specblast-product/before   # BLOCKED：7 個錯誤、10 個警告
+./run.sh verify-project examples/specblast-product/before   # BLOCKED：7 個錯誤、12 個警告
 ./run.sh verify-project examples/specblast-product/after    # READY_FOR_HUMAN_APPROVAL：0 個錯誤、2 個警告
 ```
 
-`examples/specblast-product/before` 是 SpecBlast 真實產生的專案（`roseweigee/product` 的 `25bb253`）。閘門抓到的問題包括：資料庫錯誤訊息直接回傳給 API 客戶端、SIT/UAT/正式環境都用 `:latest` 映像檔、UAT 和正式環境指向流程從未推送過的映像檔庫，以及流程完全沒跑測試就部署。每個問題與修正方式請見 [`examples/specblast-product/CHANGES.md`](examples/specblast-product/CHANGES.md)。
+`examples/specblast-product/before` 是 SpecBlast 真實產生的專案（`roseweigee/product` 的 `25bb253`）。閘門抓到的問題包括：資料庫錯誤訊息直接回傳給 API 客戶端、SIT/UAT/正式環境都用 `:latest` 映像檔、UAT 和正式環境指向流程從未推送過的映像檔庫，以及流程完全沒跑測試就部署。SpecBlast 產生的 Mockito 測試通過了測試規則，缺的是覆蓋率門檻和 SonarQube 品質閘門。每個問題與修正方式請見 [`examples/specblast-product/CHANGES.md`](examples/specblast-product/CHANGES.md)。
 
 **在 Cloud Build 中**，閘門放在 `mvn verify` 之後、`docker build` 之前，請見 [`examples/specblast-product/after/k8s/cloudbuild.yaml`](examples/specblast-product/after/k8s/cloudbuild.yaml)。
 
@@ -79,7 +80,7 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 需要 **JDK 21**，沒有其他相依套件，也不需要下載任何東西。
 
 ```bash
-./run.sh selftest                 # 驗證引擎本身（33 項檢查）
+./run.sh selftest                 # 驗證引擎本身（35 項檢查）
 ./run.sh demo                     # 跑嘗試 1 和 2，停在人工關卡
 ./run.sh reject --by "你的名字" --note "全形數字必須被拒絕"
 ./run.sh run --attempt 3 --golden 1.1

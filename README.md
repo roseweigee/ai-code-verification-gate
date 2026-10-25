@@ -78,19 +78,21 @@ manifests and a Cloud Build pipeline. `verify-project` checks that output before
 | P2 CodingStyle.md contract | SpecBlast gives `CodingStyle.md` to the model as instructions; the gate checks it as rules: packages, naming, allowed `ApiResponse` methods, `BusinessException` constructor, no try-catch in controllers, read-only query transactions |
 | P3 Kubernetes manifests | Requests and limits, liveness and readiness probes, immutable image tags outside dev, non-root, secrets via `secretKeyRef`, at least 2 prod replicas, no real values in committed Secret files |
 | P4 Delivery pipeline | Tests and the gate run before any deploy step, images tagged with the commit SHA, every environment runs an image the pipeline actually builds |
-| P5 Maven build and tests | `mvn verify`, with `--build` (needs Maven access to download dependencies) |
+| P5 Tests and code quality | A Mockito/MockMvc test class for every controller and service, at least one failure-path test, a JaCoCo coverage minimum enforced by `mvn verify`, a SonarQube quality gate that blocks the pipeline |
+| P6 Maven build and tests | `mvn verify`, with `--build` (needs Maven access to download dependencies) |
 
 Any ERROR blocks; the command exits with code 1 so a CI step stops the build.
 
 ```bash
-./run.sh verify-project examples/specblast-product/before   # BLOCKED: 7 errors, 10 warnings
+./run.sh verify-project examples/specblast-product/before   # BLOCKED: 7 errors, 12 warnings
 ./run.sh verify-project examples/specblast-product/after    # READY_FOR_HUMAN_APPROVAL: 0 errors, 2 warnings
 ```
 
 `examples/specblast-product/before` is a real SpecBlast output (`roseweigee/product` at `25bb253`).
 The gate found, among others, a database error message returned to API clients, `:latest` images in
 SIT, UAT and prod, UAT and prod pointing at an image repository the pipeline never pushes to, and a
-pipeline that deployed without running any test. See [`examples/specblast-product/CHANGES.md`](examples/specblast-product/CHANGES.md)
+pipeline that deployed without running any test. SpecBlast's generated Mockito tests passed the test
+rules; what was missing was a coverage threshold and a SonarQube quality gate. See [`examples/specblast-product/CHANGES.md`](examples/specblast-product/CHANGES.md)
 for each finding and its fix.
 
 **In Cloud Build** the gate runs right after `mvn verify` and before `docker build`; see
@@ -146,7 +148,7 @@ Claude call.
 Requires **JDK 21**. No other dependencies; nothing is downloaded.
 
 ```bash
-./run.sh selftest                 # 33 checks of the engine itself
+./run.sh selftest                 # 35 checks of the engine itself
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
 ./run.sh run --attempt 3 --golden 1.1
