@@ -47,6 +47,7 @@ public final class Main {
                     opts.getOrDefault("golden", "latest"));
             case "approve" -> decide(opts, true);
             case "reject" -> decide(opts, false);
+            case "verify-project" -> verifyProject(opts);
             case "audit" -> audit();
             case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
             case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
@@ -66,6 +67,10 @@ public final class Main {
                   reject  --by NAME [--run ID] --note TEXT
                                         The human gate for the latest (or given) run. A rejection note
                                         becomes spec-level feedback for the next attempt.
+                  verify-project PATH [--label TEXT] [--build]
+                                        Verify a whole generated project (e.g. SpecBlast output):
+                                        Java policy, CodingStyle.md, Kubernetes, pipeline, Maven build.
+                                        Exit code 1 when blocked, so a CI step can stop the deploy.
                   audit                 Verify the hash-chained audit log
                   report                Rebuild runs/report.html
                   selftest              Check the engine itself
@@ -213,6 +218,40 @@ public final class Main {
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
     }
 
+    @SuppressWarnings("unchecked")
+    private static void verifyProject(Map<String, String> opts) throws IOException {
+        String path = opts.get("path");
+        if (path == null) {
+            fail("Usage: verify-project PATH [--label TEXT] [--build]");
+        }
+        Map<String, Object> r = dev.aiverify.project.ProjectVerifier.verify(ROOT, Path.of(path), opts.get("label"),
+                opts.containsKey("build"));
+        String slug = String.valueOf(r.get("label")).replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-|-$", "").toLowerCase();
+        Path dir = ROOT.resolve("runs/projects/" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                + "-" + slug);
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("result.json"), Json.write(r));
+
+        System.out.println("Project " + r.get("label") + (r.get("gitCommit") != null ? " @ " + r.get("gitCommit") : "")
+                + "  (" + ((Map<String, Object>) r.get("filesChecked")).get("total") + " files)");
+        for (Map<String, Object> g : (List<Map<String, Object>>) r.get("gates")) {
+            System.out.printf("  %s %-26s %-8s %s error(s), %s warning(s)%n", g.get("id"), g.get("name"), g.get("status"),
+                    g.get("errors"), g.get("warnings"));
+            for (Map<String, Object> f : (List<Map<String, Object>>) g.get("findings")) {
+                if (!"PASS".equals(f.get("severity"))) {
+                    String where = f.get("file") == null ? "" : "  [" + f.get("file")
+                            + (((Number) f.get("line")).intValue() > 0 ? ":" + f.get("line") : "") + "]";
+                    System.out.printf("      %-5s %s %s%s%n", f.get("severity"), f.get("rule"), f.get("title"), where);
+                }
+            }
+        }
+        System.out.println("  verdict: " + r.get("verdict"));
+        System.out.println("Report: " + ROOT.relativize(dev.aiverify.report.ProjectReportWriter.write(ROOT)));
+        if ("BLOCKED".equals(r.get("verdict"))) {
+            System.exit(1);
+        }
+    }
+
     private static void audit() {
         AuditLog log = new AuditLog(ROOT.resolve("runs/audit-log.jsonl"));
         String problem = log.verify();
@@ -225,6 +264,9 @@ public final class Main {
 
     private static Map<String, String> options(String[] args) {
         Map<String, String> m = new LinkedHashMap<>();
+        if (args.length > 1 && !args[1].startsWith("--")) {
+            m.put("path", args[1]);
+        }
         for (int k = 1; k < args.length; k++) {
             if (args[k].startsWith("--")) {
                 String key = args[k].substring(2);

@@ -1,0 +1,75 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+build:
+  artifacts:
+    - image: product
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          CACHEBUST: "{{.RunID}}"
+  local:
+    push: false
+    useDockerCLI: true
+manifests:
+  rawYaml:
+    - k8s/namespace.yaml
+    - k8s/dev/deployment.yaml
+deploy:
+  kubectl: {}
+
+profiles:
+  - name: sit
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/sit/deployment.yaml
+    deploy:
+      kubectl: {}
+    hooks:
+      before:
+        - host:
+            command:
+              - "bash"
+              - "-c"
+              - "kubectl create secret generic product-db-secret --from-literal=DB_HOST=$(gcloud secrets versions access latest --secret=product-db-host --project=momo-microservices-gke) --from-literal=DB_NAME=productdb --from-literal=DB_USERNAME=$(gcloud secrets versions access latest --secret=product-db-username --project=momo-microservices-gke) --from-literal=DB_PASSWORD=$(gcloud secrets versions access latest --secret=product-db-password --project=momo-microservices-gke) -n product --dry-run=client -o yaml | kubectl apply -f -"
+
+  - name: uat
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/uat/deployment.yaml
+    deploy:
+      kubectl: {}
+
+  - name: prod
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/prod/deployment.yaml
+        - k8s/prod/hpa.yaml
+    deploy:
+      kubectl: {}

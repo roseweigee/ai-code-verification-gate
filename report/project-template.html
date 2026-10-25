@@ -1,0 +1,319 @@
+<title>SpecBlast Project Gate</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a verification ledger. Run matrix on top (attempts x gates), then one dossier per attempt. */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --sunk: #e9edef;
+  --ink: #142029;
+  --ink-2: #4b5a65;
+  --ink-3: #7a8893;
+  --line: #d3dbe0;
+  --accent: #1f5f8b;
+  --accent-soft: #dcebf5;
+  --pass: #1d7a4c;
+  --pass-soft: #dcf1e5;
+  --fail: #b3261e;
+  --fail-soft: #fbe2df;
+  --warn: #9a6200;
+  --warn-soft: #fbedcf;
+  --wait: #5b4bb0;
+  --wait-soft: #e7e3fa;
+  --skip: #8c979f;
+  --skip-soft: #eceff1;
+  --code-bg: #f7f9fa;
+  --hl: #fff3c4;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+    --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a;
+    --pass: #5cc98f; --pass-soft: #163527; --fail: #f08a80; --fail-soft: #401c1a;
+    --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2; --wait-soft: #2a2550;
+    --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+  --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a;
+  --pass: #5cc98f; --pass-soft: #163527; --fail: #f08a80; --fail-soft: #401c1a;
+  --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2; --wait-soft: #2a2550;
+  --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; line-height: 1.1; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+.muted { color: var(--ink-2); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.tabular { font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 16px; min-width: 0; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* header */
+header.top { display: grid; gap: 14px; }
+.thesis { font-size: 18px; max-width: 62ch; color: var(--ink-2); }
+.thesis b { color: var(--ink); font-weight: 600; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.tag { font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.tag.replay { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.tag.ok { border-color: var(--pass); color: var(--pass); background: var(--pass-soft); }
+.tag.bad { border-color: var(--fail); color: var(--fail); background: var(--fail-soft); }
+
+/* findings strip */
+.findings-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.finding .big { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.finding p { font-size: 14px; color: var(--ink-2); }
+
+/* run matrix */
+.matrix-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table.matrix { border-collapse: collapse; width: 100%; min-width: 760px; }
+.matrix th, .matrix td { padding: 10px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.matrix thead th { font-weight: 500; font-size: 12px; color: var(--ink-2); background: var(--sunk); }
+.matrix thead th .who { display: block; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+.who.det { color: var(--accent); }
+.who.ai { color: var(--warn); }
+.who.hum { color: var(--wait); }
+.matrix tbody tr:last-child td, .matrix tbody tr:last-child th { border-bottom: 0; }
+.matrix tbody th { font-family: var(--font-display); font-size: 16px; font-weight: 600; white-space: nowrap; }
+.matrix tbody th small { display: block; font-family: var(--font-body); font-weight: 400; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.cell { display: grid; gap: 4px; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; width: fit-content; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.s-PASSED, .s-APPROVED { color: var(--pass); background: var(--pass-soft); }
+.s-FAILED, .s-BLOCKED, .s-REJECTED_BY_HUMAN { color: var(--fail); background: var(--fail-soft); }
+.s-WARNING { color: var(--warn); background: var(--warn-soft); }
+.s-PENDING, .s-READY_FOR_HUMAN_APPROVAL { color: var(--wait); background: var(--wait-soft); }
+.s-SKIPPED { color: var(--skip); background: var(--skip-soft); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* attempt dossier */
+.attempt { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.attempt > header { padding: 18px 20px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.attempt > header .title { display: grid; gap: 4px; }
+.attempt .body { padding: 18px 20px 22px; display: grid; gap: 22px; }
+.story { font-size: 15.5px; max-width: 70ch; }
+.story li + li { margin-top: 6px; }
+.story ul { margin: 0; padding-left: 20px; }
+.block { display: grid; gap: 10px; min-width: 0; }
+.block h3 .muted { font-family: var(--font-body); font-weight: 400; font-size: 14px; }
+
+.gates { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.gate-row { display: grid; grid-template-columns: 46px minmax(150px, 210px) 132px 1fr; gap: 12px; padding: 10px 12px; align-items: start; border-bottom: 1px solid var(--line); font-size: 14px; }
+.gate-row:last-child { border-bottom: 0; }
+.gate-row .gid { font-family: var(--font-mono); font-weight: 600; color: var(--ink-3); }
+.gate-row .gname { font-weight: 500; }
+.gate-row .gname small { display: block; font-size: 11.5px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+.gate-row .gsum { color: var(--ink-2); min-width: 0; }
+@media (max-width: 680px) {
+  .gate-row { grid-template-columns: 38px 1fr; }
+  .gate-row .gstat, .gate-row .gsum { grid-column: 2; }
+}
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
+.data th, .data td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.data td.wrap { white-space: normal; min-width: 220px; }
+.data thead th { background: var(--sunk); color: var(--ink-2); font-weight: 500; font-size: 12px; }
+.data tbody tr:last-child td { border-bottom: 0; }
+.data .bad { color: var(--fail); font-weight: 600; }
+.data .good { color: var(--pass); font-weight: 600; }
+
+/* mutation bars */
+.bars { display: grid; gap: 10px; max-width: 640px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 64px; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar-track { position: relative; height: 18px; background: var(--sunk); border-radius: 3px; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.bar-thr { position: absolute; top: -5px; bottom: -5px; width: 0; border-left: 2px dashed var(--ink); }
+.bar-thr-label { position: absolute; top: -20px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.bar-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 520px) { .bar-row { grid-template-columns: 1fr 58px; } .bar-row .bar-name { grid-column: 1 / -1; } }
+
+/* review findings */
+.rf { display: grid; gap: 10px; }
+.rf-item { border: 1px solid var(--line); border-left: 4px solid var(--skip); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; background: var(--surface); }
+.rf-item.HIGH { border-left-color: var(--fail); }
+.rf-item.MEDIUM { border-left-color: var(--warn); }
+.rf-item.LOW { border-left-color: var(--skip); }
+.rf-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.sev { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; }
+.sev.HIGH { color: var(--fail); } .sev.MEDIUM { color: var(--warn); } .sev.LOW { color: var(--ink-3); }
+.rf-item p { font-size: 14px; color: var(--ink-2); max-width: 75ch; }
+
+.callout { border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; font-size: 14px; }
+.callout.human { border-color: var(--wait); background: var(--wait-soft); }
+.callout.diag { border-color: var(--accent); background: var(--accent-soft); }
+.callout .eyebrow { color: inherit; opacity: 0.85; }
+.callout p { max-width: 75ch; }
+
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+details > summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 14px; list-style-position: inside; }
+details[open] > summary { border-bottom: 1px solid var(--line); }
+pre.code { margin: 0; padding: 10px 0; overflow-x: auto; background: var(--code-bg); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; border-radius: 0 0 6px 6px; }
+pre.code .ln { display: block; padding: 0 14px 0 0; white-space: pre; }
+pre.code .ln.hl { background: var(--hl); }
+pre.code .n { display: inline-block; width: 44px; padding-right: 12px; text-align: right; color: var(--ink-3); user-select: none; }
+pre.code .note { color: var(--warn); font-style: italic; }
+pre.spec { margin: 0; padding: 14px; white-space: pre-wrap; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; background: var(--code-bg); border-radius: 0 0 6px 6px; overflow-x: auto; }
+
+/* pipeline principle */
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.principle { border-top: 3px solid var(--line); padding-top: 10px; display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); }
+.principle b { color: var(--ink); font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+.principle.det { border-top-color: var(--accent); }
+.principle.ai { border-top-color: var(--warn); }
+.principle.hum { border-top-color: var(--wait); }
+
+footer { font-size: 13px; color: var(--ink-3); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .bar-fill { transition: width 0.6s ease-out; }
+}
+
+/* project gate additions */
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.flow .step { flex: 1 1 150px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--surface); display: grid; gap: 3px; font-size: 13.5px; color: var(--ink-2); }
+.flow .step b { color: var(--ink); font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+.flow .step.gate { border: 2px solid var(--accent); background: var(--accent-soft); }
+.flow .step.hum { border-color: var(--wait); }
+.flow .arrow { align-self: center; color: var(--ink-3); font-family: var(--font-mono); }
+@media (max-width: 720px) { .flow .arrow { display: none; } }
+.compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.pcard { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; display: grid; gap: 12px; align-content: start; }
+.pcard .nums { display: flex; gap: 24px; flex-wrap: wrap; }
+.pcard .num { display: grid; gap: 2px; }
+.pcard .num .big { font-family: var(--font-display); font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.pcard .num.err .big { color: var(--fail); }
+.pcard .num.warn .big { color: var(--warn); }
+.pcard .num.ok .big { color: var(--pass); }
+.f-list { display: grid; gap: 8px; }
+.f-item { border: 1px solid var(--line); border-left: 4px solid var(--skip); border-radius: 6px; padding: 10px 12px; display: grid; gap: 4px; background: var(--surface); font-size: 14px; }
+.f-item.ERROR { border-left-color: var(--fail); }
+.f-item.WARN { border-left-color: var(--warn); }
+.f-item p { color: var(--ink-2); max-width: 80ch; }
+.f-item .fix { color: var(--ink); }
+.f-item .loc { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.sev.ERROR { color: var(--fail); } .sev.WARN { color: var(--warn); }
+.passes { columns: 2 280px; font-size: 13.5px; color: var(--ink-2); padding: 12px 14px 12px 32px; margin: 0; }
+.passes li { break-inside: avoid; margin-bottom: 4px; }
+</style>
+
+<div class="page" id="app">
+  <header class="top">
+    <span class="eyebrow">SpecBlast · AI Code Verification Gate</span>
+    <h1>SpecBlast Project Gate</h1>
+    <p class="thesis">SpecBlast generates a Spring Boot service and its Kubernetes deployment from an API spec. <b>The gate checks that output before Cloud Build is allowed to deploy it</b>, and a named human approves what is left.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section>
+    <h2>Where the gate sits</h2>
+    <div class="flow" aria-label="Delivery flow">
+      <div class="step"><b>API spec</b>Approved by a person</div><span class="arrow">→</span>
+      <div class="step"><b>SpecBlast</b>AI generates code, K8s and pipeline</div><span class="arrow">→</span>
+      <div class="step"><b>mvn verify</b>Generated tests run</div><span class="arrow">→</span>
+      <div class="step gate"><b>Verification gate</b>P1–P5 decide. Exit 1 stops the build</div><span class="arrow">→</span>
+      <div class="step hum"><b>Human approval</b>Named reviewer accepts warnings</div><span class="arrow">→</span>
+      <div class="step"><b>Cloud Build</b>Deploys the image for this commit</div>
+    </div>
+    <p class="muted" style="max-width:75ch">The same gate is also exposed as an MCP tool, so a coding agent can check its own output while it works. The tool reports the verdict; it cannot approve a deployment.</p>
+  </section>
+
+  <section id="compare"></section>
+  <section id="matrix"></section>
+  <section id="details"></section>
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*__REPORT_DATA__*/null;
+const GATES = ["P1", "P2", "P3", "P4", "P5"];
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function pill(status, label) { return `<span class="pill s-${esc(status)}">${esc(label || status.replace(/_/g, " "))}</span>`; }
+const VERDICT = { BLOCKED: "Blocked", READY_FOR_HUMAN_APPROVAL: "Ready for human approval" };
+
+function render() {
+  if (!DATA || !DATA.projects.length) { document.getElementById("app").innerHTML = "<p>No project results yet.</p>"; return; }
+  const ps = DATA.projects;
+  document.getElementById("meta").innerHTML = [
+    `<span class="tag">${ps.length} verification${ps.length === 1 ? "" : "s"}</span>`,
+    `<span class="tag">Generated ${esc(DATA.generatedAt.replace("T", " ").slice(0, 16))}</span>`
+  ].join("");
+
+  document.getElementById("compare").innerHTML = `<h2>${ps.length > 1 ? "Before and after" : "Result"}</h2><div class="compare">` +
+    ps.map((p, i) => {
+      const passed = p.gates.reduce((n, g) => n + (g.passed || 0), 0);
+      return `<div class="pcard">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline">
+          <h3>${esc(p.label)}</h3>${pill(p.verdict, VERDICT[p.verdict])}</div>
+        <div class="nums">
+          <div class="num err"><span class="big">${p.errors}</span><span class="eyebrow">errors · block</span></div>
+          <div class="num warn"><span class="big">${p.warnings}</span><span class="eyebrow">warnings · human</span></div>
+          <div class="num ok"><span class="big">${passed}</span><span class="eyebrow">rules met</span></div>
+        </div>
+        <p class="muted" style="font-size:13px">${p.filesChecked.total} files checked · content SHA-256 <span class="mono">${esc(p.contentSha256.slice(0, 12))}…</span></p>
+        <a href="#p${i}">See findings</a></div>`;
+    }).join("") + `</div>`;
+
+  const head = ps.map((p, i) => `<th scope="col"><a href="#p${i}">${esc(p.label)}</a></th>`).join("");
+  const rows = GATES.map(id => {
+    const g0 = ps[0].gates.find(g => g.id === id);
+    const cells = ps.map(p => {
+      const g = p.gates.find(x => x.id === id);
+      const counts = g.status === "SKIPPED" ? "Not run here" : `${g.errors} error${g.errors == 1 ? "" : "s"} · ${g.warnings} warning${g.warnings == 1 ? "" : "s"}`;
+      return `<td><div class="cell">${pill(g.status)}<span>${esc(counts)}</span></div></td>`;
+    }).join("");
+    return `<tr><th scope="row">${esc(id)}<small>${esc(g0.name)}</small></th>${cells}</tr>`;
+  }).join("");
+  document.getElementById("matrix").innerHTML = `<h2>Gates</h2>
+    <div class="matrix-wrap"><table class="matrix" style="min-width:${260 + ps.length * 220}px">
+    <thead><tr><th scope="col">Gate</th>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+
+  document.getElementById("details").innerHTML = `<h2>Findings</h2>` + ps.map((p, i) => {
+    const gates = p.gates.map(g => {
+      const issues = g.findings.filter(f => f.severity !== "PASS").sort((a, b) => (a.severity === "ERROR" ? 0 : 1) - (b.severity === "ERROR" ? 0 : 1));
+      const passes = g.findings.filter(f => f.severity === "PASS");
+      if (g.status === "SKIPPED") return `<div class="block"><h3>${esc(g.id)} ${esc(g.name)} ${pill("SKIPPED")}</h3><p class="muted">${esc(g.note)}</p></div>`;
+      return `<div class="block"><h3>${esc(g.id)} ${esc(g.name)} ${pill(g.status)}</h3>
+        ${g.note ? `<p class="muted" style="max-width:75ch">${esc(g.note)}</p>` : ""}
+        ${issues.length ? `<div class="f-list">${issues.map(f => `<div class="f-item ${esc(f.severity)}">
+          <div class="rf-head"><span class="sev ${esc(f.severity)}">${esc(f.severity)}</span><b>${esc(f.title)}</b><span class="mono muted">${esc(f.rule)}</span></div>
+          ${f.file ? `<span class="loc">${esc(f.file)}${f.line ? ":" + f.line : ""}</span>` : ""}
+          ${f.detail ? `<p>${esc(f.detail)}</p>` : ""}
+          ${f.fix ? `<p class="fix"><b>Fix.</b> ${esc(f.fix)}</p>` : ""}</div>`).join("")}</div>` : ""}
+        ${passes.length ? `<details><summary>${passes.length} rule${passes.length === 1 ? "" : "s"} met</summary><ul class="passes">${passes.map(f => `<li><span class="mono">${esc(f.rule)}</span> ${esc(f.title)}</li>`).join("")}</ul></details>` : ""}
+      </div>`;
+    }).join("");
+    return `<article class="attempt" id="p${i}"><header><div class="title"><span class="eyebrow">${esc(p.verifiedAt.replace("T", " ").slice(0, 16))}</span>
+      <h3 style="font-size:20px">${esc(p.label)}</h3></div>${pill(p.verdict, VERDICT[p.verdict])}</header>
+      <div class="body">${gates}</div></article>`;
+  }).join("");
+
+  document.getElementById("foot").innerHTML = `<p>P5 (Maven build and tests) runs where Maven can download dependencies, such as Cloud Build. It was not run for this report. Every other result was computed from the project files.</p>`;
+}
+render();
+</script>

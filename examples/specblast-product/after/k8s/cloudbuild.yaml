@@ -1,0 +1,46 @@
+steps:
+  # 1. The generated tests must pass before anything is built
+  - id: test
+    name: 'maven:3.9-eclipse-temurin-17'
+    entrypoint: 'mvn'
+    args: ['-B', 'verify']
+
+  # 2. Verification gate for AI-generated code: Java policy, CodingStyle.md, K8s manifests, pipeline.
+  #    Exit code 1 (blocked) stops the build here, so unchecked code never reaches the cluster.
+  - id: fetch-gate
+    name: 'gcr.io/cloud-builders/git'
+    args: ['clone', '--depth', '1', 'https://github.com/roseweigee/ai-code-verification-gate', '/workspace/.gate']
+
+  - id: verify-ai-code
+    name: 'eclipse-temurin:21-jdk'
+    entrypoint: 'bash'
+    args: ['-c', '/workspace/.gate/run.sh verify-project /workspace --label "product@$SHORT_SHA"']
+
+  # 3. Build and push one immutable image per commit
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'buildx'
+      - 'build'
+      - '--platform'
+      - 'linux/amd64'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product:$COMMIT_SHA'
+      - '--push'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args: ['apply', '-f', 'k8s/namespace.yaml']
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+  # 4. Deploy exactly the image built above: IMAGE_TAG in the manifest becomes the commit SHA
+  - name: 'gcr.io/cloud-builders/kubectl'
+    entrypoint: 'bash'
+    args: ['-c', 'sed "s|IMAGE_TAG|$COMMIT_SHA|" k8s/sit/deployment.yaml > /workspace/sit.yaml && /builder/kubectl.bash apply -f /workspace/sit.yaml']
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -33,6 +33,7 @@ final class SelfTest {
         policy();
         audit();
         outbound();
+        projectRules();
         System.out.printf("%nSelf-test: %d passed, %d failed%n", passed, failed);
         return failed == 0;
     }
@@ -146,6 +147,42 @@ final class SelfTest {
             refused = true;
         }
         check("Approved tools: refuses a model that is not on the list", refused);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void projectRules() throws Exception {
+        String yaml = """
+                apiVersion: apps/v1
+                kind: Deployment
+                spec:
+                  replicas: 1
+                  template:
+                    spec:
+                      containers:
+                        - name: app   # comment
+                          image: "registry.example/app:latest"
+                          env:
+                            - name: DB_PASSWORD
+                              value: "hunter2"
+                ---
+                kind: Service
+                """;
+        List<Object> docs = dev.aiverify.project.MiniYaml.parseAll(yaml);
+        Object c = dev.aiverify.project.MiniYaml.list(docs.get(0), "spec", "template", "spec", "containers").get(0);
+        check("YAML: two documents, list of maps, quotes and comments",
+                docs.size() == 2 && "registry.example/app:latest".equals(dev.aiverify.project.MiniYaml.str(c, "image"))
+                        && "app".equals(dev.aiverify.project.MiniYaml.str(c, "name")));
+        Path dir = Files.createTempDirectory("proj");
+        Files.createDirectories(dir.resolve("k8s/prod"));
+        Files.writeString(dir.resolve("k8s/prod/deployment.yaml"), yaml);
+        Map<String, Object> r = dev.aiverify.project.ProjectVerifier.verify(dir, dir, "selftest", false);
+        String text = r.toString();
+        check("Project: prod :latest is an ERROR", text.contains("Mutable image tag in prod"));
+        check("Project: password as plain env value is an ERROR", text.contains("Secret written as a plain environment value"));
+        check("Project: single prod replica is an ERROR", text.contains("Production runs a single replica"));
+        check("Project: missing probes and limits are ERRORs",
+                text.contains("Missing health probes") && text.contains("Missing resource requests or limits"));
+        check("Project: verdict BLOCKED", "BLOCKED".equals(r.get("verdict")));
     }
 
     private static AuthorizationPrecheck instance(InMemoryCompiler.Result r) {

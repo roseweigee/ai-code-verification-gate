@@ -67,6 +67,54 @@ Blue gates **decide**. Amber AI roles **advise**. Purple steps belong to **a hum
 
 The report shows this checklist with evidence from the latest run.
 
+## SpecBlast integration: verify a whole generated project
+
+SpecBlast, a separate side project, turns an API spec into a Spring Boot service with Kubernetes
+manifests and a Cloud Build pipeline. `verify-project` checks that output before it can be deployed:
+
+| Gate | What it checks |
+| --- | --- |
+| P1 Java security policy | Internal error details sent to clients (CWE-209), dangerous APIs, hard-coded secrets, sensitive values in logs, HTTP 200 for errors, broad catches |
+| P2 CodingStyle.md contract | SpecBlast gives `CodingStyle.md` to the model as instructions; the gate checks it as rules: packages, naming, allowed `ApiResponse` methods, `BusinessException` constructor, no try-catch in controllers, read-only query transactions |
+| P3 Kubernetes manifests | Requests and limits, liveness and readiness probes, immutable image tags outside dev, non-root, secrets via `secretKeyRef`, at least 2 prod replicas, no real values in committed Secret files |
+| P4 Delivery pipeline | Tests and the gate run before any deploy step, images tagged with the commit SHA, every environment runs an image the pipeline actually builds |
+| P5 Maven build and tests | `mvn verify`, with `--build` (needs Maven access to download dependencies) |
+
+Any ERROR blocks; the command exits with code 1 so a CI step stops the build.
+
+```bash
+./run.sh verify-project examples/specblast-product/before   # BLOCKED: 7 errors, 10 warnings
+./run.sh verify-project examples/specblast-product/after    # READY_FOR_HUMAN_APPROVAL: 0 errors, 2 warnings
+```
+
+`examples/specblast-product/before` is a real SpecBlast output (`roseweigee/product` at `25bb253`).
+The gate found, among others, a database error message returned to API clients, `:latest` images in
+SIT, UAT and prod, UAT and prod pointing at an image repository the pipeline never pushes to, and a
+pipeline that deployed without running any test. See [`examples/specblast-product/CHANGES.md`](examples/specblast-product/CHANGES.md)
+for each finding and its fix.
+
+**In Cloud Build** the gate runs right after `mvn verify` and before `docker build`; see
+[`examples/specblast-product/after/k8s/cloudbuild.yaml`](examples/specblast-product/after/k8s/cloudbuild.yaml).
+
+**As an MCP tool** a coding agent can call the gate while it works
+([`integrations/mcp/verify_server.py`](integrations/mcp/verify_server.py), tested with
+[`test_client.py`](integrations/mcp/test_client.py)). Add it to Claude Code with a `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ai-code-verification-gate": {
+      "command": "python",
+      "args": ["/path/to/ai-code-verification-gate/integrations/mcp/verify_server.py"]
+    }
+  }
+}
+```
+
+The tool reports the verdict and every finding with its fix. It cannot approve a deployment.
+To add it to SpecBlast's own MCP server instead, import `verify_generated_project` from
+`verify_server.py` and register it with `mcp.tool()`.
+
 ## The demo scenario
 
 The component is a **card authorization pre-check** (ISO 8583 MTI 0100): it returns field 39 response
@@ -98,7 +146,7 @@ Claude call.
 Requires **JDK 21**. No other dependencies; nothing is downloaded.
 
 ```bash
-./run.sh selftest                 # 27 checks of the engine itself
+./run.sh selftest                 # 33 checks of the engine itself
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
 ./run.sh run --attempt 3 --golden 1.1

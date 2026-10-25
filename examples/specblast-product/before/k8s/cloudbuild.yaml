@@ -1,0 +1,38 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'buildx'
+      - 'build'
+      - '--platform'
+      - 'linux/amd64'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product:$COMMIT_SHA'
+      - '--push'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args: ['apply', '-f', 'k8s/namespace.yaml']
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args: ['apply', '-f', 'k8s/sit/deployment.yaml']
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'set'
+      - 'image'
+      - 'deployment/product'
+      - 'product=asia-east1-docker.pkg.dev/momo-microservices-gke/specblast/product:$COMMIT_SHA'
+      - '-n'
+      - 'product'
+    env:
+      - 'CLOUDSDK_COMPUTE_REGION=asia-east1'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=momo-cluster'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
