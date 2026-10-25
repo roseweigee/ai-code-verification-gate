@@ -83,6 +83,13 @@ public final class PolicyGate implements Gate {
             }
         }
 
+        String[] srcLines = src.split("\n", -1);
+        for (int k = 0; k < srcLines.length; k++) {
+            if (!dev.aiverify.ai.AiPolicy.scanInjection(srcLines[k]).isEmpty()) {
+                violations.add(finding("NF-05", "Text aimed at the AI reviewer", k + 1, srcLines[k].strip()));
+            }
+        }
+
         Matcher pm = PAN_LITERAL.matcher(src);
         while (pm.find()) {
             if (luhn(pm.group(1))) {
@@ -94,7 +101,8 @@ public final class PolicyGate implements Gate {
         details.put("rulesChecked", List.of("NF-01 no PAN in logs / no hard-coded card numbers",
                 "NF-02 no file, network, process, reflection or System.exit",
                 "NF-03 imports only from java.time, java.util, dev.aiverify.contract",
-                "NF-04 no hard-coded secrets"));
+                "NF-04 no hard-coded secrets",
+                "NF-05 no comments or strings that try to steer the AI reviewer"));
         details.put("violations", violations);
         details.put("notes", notes);
         long ms = System.currentTimeMillis() - t0;
@@ -103,7 +111,7 @@ public final class PolicyGate implements Gate {
                     violations.size() + " policy violation(s). The code is not compiled.", details, ms);
         }
         return new GateResult(id(), name(), GateResult.Status.PASSED, decidedBy(),
-                "No policy violations (4 rule groups).", details, ms);
+                "No policy violations (5 rule groups).", details, ms);
     }
 
     private static Map<String, Object> finding(String rule, String title, int line, String evidence) {

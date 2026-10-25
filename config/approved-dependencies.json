@@ -1,0 +1,18 @@
+{
+  "_about": "Dependencies the architect has vetted. AI-generated projects may only use these. A name that is not here may be a hallucinated package (a name an attacker can register) or an unvetted library.",
+  "approved": [
+    "org.springframework.boot:*",
+    "org.springframework:*",
+    "org.projectlombok:lombok",
+    "com.h2database:h2",
+    "com.mysql:mysql-connector-j",
+    "org.postgresql:postgresql",
+    "org.flywaydb:*",
+    "org.springdoc:springdoc-openapi-starter-webmvc-ui",
+    "io.micrometer:*",
+    "org.junit.jupiter:*",
+    "org.mockito:*",
+    "org.assertj:assertj-core",
+    "org.testcontainers:*"
+  ]
+}

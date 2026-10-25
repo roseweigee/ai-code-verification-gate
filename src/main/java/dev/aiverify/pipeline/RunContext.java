@@ -59,6 +59,11 @@ public final class RunContext {
             throw new IllegalStateException("Blocked: the prompt for the " + role
                     + " contains sensitive data " + problems + ". Nothing was sent to the model.");
         }
+        java.util.List<String> injection = dev.aiverify.ai.AiPolicy.scanInjection(user);
+        if (!injection.isEmpty()) {
+            throw new IllegalStateException("Blocked: the input for the " + role + " contains text that tries to "
+                    + "steer the AI " + injection + ". Nothing was sent to the model. A human must review the input.");
+        }
         String answer = ai.complete(role, system, user);
         Map<String, Object> rec = new LinkedHashMap<>();
         rec.put("promptFile", "ai/" + role + ".prompt.txt");
@@ -66,6 +71,7 @@ public final class RunContext {
         rec.put("promptSha256", Hashing.sha256(system + "\n---\n" + user));
         rec.put("answerSha256", Hashing.sha256(answer));
         rec.put("outboundCheck", "PASSED: no card numbers, secrets, emails or national IDs in the prompt");
+        rec.put("injectionCheck", "PASSED: no instructions aimed at the AI in the input");
         write("ai/" + role + ".prompt.txt", "### SYSTEM\n" + system + "\n### USER\n" + user);
         write("ai/" + role + ".answer.txt", answer);
         aiExchanges.put(role, rec);

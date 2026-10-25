@@ -25,6 +25,11 @@ public final class AiPolicy {
     private static final Pattern EMAIL = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
     private static final Pattern TW_ID = Pattern.compile("(?<![A-Za-z0-9])[A-Z][12][0-9]{8}(?![0-9])");
 
+    private static final Pattern INJECTION = Pattern.compile("(?i)ignore (all |any )?(the )?(previous|prior|above|earlier) "
+            + "(instructions|rules)|disregard (the |all )?(previous|prior|system|above)|you are now\\b|new instructions\\s*:"
+            + "|reveal (the |your )?system prompt|do not (tell|inform) the (user|reviewer|human)"
+            + "|(this|the) code is (safe|secure|correct)[,.]? (approve|no need)|<\\|im_start\\|>|\\[/?INST\\]");
+
     private final List<String> approvedModels;
     private final String provider;
 
@@ -45,6 +50,20 @@ public final class AiPolicy {
 
     public String provider() {
         return provider;
+    }
+
+    /**
+     * Prompt injection: text written to steer an AI instead of informing it, for example an instruction
+     * hidden in a client's spec, or a comment in generated code addressed to the AI reviewer.
+     * Returns the phrases found (empty list = none).
+     */
+    public static List<String> scanInjection(String text) {
+        List<String> found = new ArrayList<>();
+        Matcher m = INJECTION.matcher(text);
+        while (m.find()) {
+            found.add("\"" + m.group() + "\"");
+        }
+        return found;
     }
 
     /** Principle 1: approved tools only. */
