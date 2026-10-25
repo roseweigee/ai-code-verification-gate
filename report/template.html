@@ -1,0 +1,476 @@
+<title>AI Code Verification Gate</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a verification ledger. Run matrix on top (attempts x gates), then one dossier per attempt. */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --sunk: #e9edef;
+  --ink: #142029;
+  --ink-2: #4b5a65;
+  --ink-3: #7a8893;
+  --line: #d3dbe0;
+  --accent: #1f5f8b;
+  --accent-soft: #dcebf5;
+  --pass: #1d7a4c;
+  --pass-soft: #dcf1e5;
+  --fail: #b3261e;
+  --fail-soft: #fbe2df;
+  --warn: #9a6200;
+  --warn-soft: #fbedcf;
+  --wait: #5b4bb0;
+  --wait-soft: #e7e3fa;
+  --skip: #8c979f;
+  --skip-soft: #eceff1;
+  --code-bg: #f7f9fa;
+  --hl: #fff3c4;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+    --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a;
+    --pass: #5cc98f; --pass-soft: #163527; --fail: #f08a80; --fail-soft: #401c1a;
+    --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2; --wait-soft: #2a2550;
+    --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+  --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a;
+  --pass: #5cc98f; --pass-soft: #163527; --fail: #f08a80; --fail-soft: #401c1a;
+  --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2; --wait-soft: #2a2550;
+  --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1080px; margin: 0 auto; padding-block: 28px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: 0.005em; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; line-height: 1.1; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+.muted { color: var(--ink-2); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+.tabular { font-variant-numeric: tabular-nums; }
+section { display: grid; gap: 16px; min-width: 0; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* header */
+header.top { display: grid; gap: 14px; }
+.thesis { font-size: 18px; max-width: 62ch; color: var(--ink-2); }
+.thesis b { color: var(--ink); font-weight: 600; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.tag { font-family: var(--font-mono); font-size: 12px; padding: 3px 9px; border-radius: 4px; border: 1px solid var(--line); color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.tag.replay { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+.tag.ok { border-color: var(--pass); color: var(--pass); background: var(--pass-soft); }
+.tag.bad { border-color: var(--fail); color: var(--fail); background: var(--fail-soft); }
+
+/* findings strip */
+.findings-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; }
+.finding .big { font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.finding p { font-size: 14px; color: var(--ink-2); }
+
+/* run matrix */
+.matrix-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table.matrix { border-collapse: collapse; width: 100%; min-width: 760px; }
+.matrix th, .matrix td { padding: 10px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.matrix thead th { font-weight: 500; font-size: 12px; color: var(--ink-2); background: var(--sunk); }
+.matrix thead th .who { display: block; font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
+.who.det { color: var(--accent); }
+.who.ai { color: var(--warn); }
+.who.hum { color: var(--wait); }
+.matrix tbody tr:last-child td, .matrix tbody tr:last-child th { border-bottom: 0; }
+.matrix tbody th { font-family: var(--font-display); font-size: 16px; font-weight: 600; white-space: nowrap; }
+.matrix tbody th small { display: block; font-family: var(--font-body); font-weight: 400; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.cell { display: grid; gap: 4px; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 999px; width: fit-content; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.s-PASSED, .s-APPROVED { color: var(--pass); background: var(--pass-soft); }
+.s-FAILED, .s-BLOCKED, .s-REJECTED_BY_HUMAN { color: var(--fail); background: var(--fail-soft); }
+.s-WARNING { color: var(--warn); background: var(--warn-soft); }
+.s-PENDING, .s-READY_FOR_HUMAN_APPROVAL { color: var(--wait); background: var(--wait-soft); }
+.s-SKIPPED { color: var(--skip); background: var(--skip-soft); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* attempt dossier */
+.attempt { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.attempt > header { padding: 18px 20px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.attempt > header .title { display: grid; gap: 4px; }
+.attempt .body { padding: 18px 20px 22px; display: grid; gap: 22px; }
+.story { font-size: 15.5px; max-width: 70ch; }
+.story li + li { margin-top: 6px; }
+.story ul { margin: 0; padding-left: 20px; }
+.block { display: grid; gap: 10px; min-width: 0; }
+.block h3 .muted { font-family: var(--font-body); font-weight: 400; font-size: 14px; }
+
+.gates { display: grid; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.gate-row { display: grid; grid-template-columns: 46px minmax(150px, 210px) 132px 1fr; gap: 12px; padding: 10px 12px; align-items: start; border-bottom: 1px solid var(--line); font-size: 14px; }
+.gate-row:last-child { border-bottom: 0; }
+.gate-row .gid { font-family: var(--font-mono); font-weight: 600; color: var(--ink-3); }
+.gate-row .gname { font-weight: 500; }
+.gate-row .gname small { display: block; font-size: 11.5px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+.gate-row .gsum { color: var(--ink-2); min-width: 0; }
+@media (max-width: 680px) {
+  .gate-row { grid-template-columns: 38px 1fr; }
+  .gate-row .gstat, .gate-row .gsum { grid-column: 2; }
+}
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+table.data { border-collapse: collapse; width: 100%; font-size: 13px; }
+.data th, .data td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.data td.wrap { white-space: normal; min-width: 220px; }
+.data thead th { background: var(--sunk); color: var(--ink-2); font-weight: 500; font-size: 12px; }
+.data tbody tr:last-child td { border-bottom: 0; }
+.data .bad { color: var(--fail); font-weight: 600; }
+.data .good { color: var(--pass); font-weight: 600; }
+
+/* mutation bars */
+.bars { display: grid; gap: 10px; max-width: 640px; }
+.bar-row { display: grid; grid-template-columns: 150px 1fr 64px; gap: 10px; align-items: center; font-size: 13.5px; }
+.bar-track { position: relative; height: 18px; background: var(--sunk); border-radius: 3px; }
+.bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; }
+.bar-thr { position: absolute; top: -5px; bottom: -5px; width: 0; border-left: 2px dashed var(--ink); }
+.bar-thr-label { position: absolute; top: -20px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); white-space: nowrap; }
+.bar-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+@media (max-width: 520px) { .bar-row { grid-template-columns: 1fr 58px; } .bar-row .bar-name { grid-column: 1 / -1; } }
+
+/* review findings */
+.rf { display: grid; gap: 10px; }
+.rf-item { border: 1px solid var(--line); border-left: 4px solid var(--skip); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; background: var(--surface); }
+.rf-item.HIGH { border-left-color: var(--fail); }
+.rf-item.MEDIUM { border-left-color: var(--warn); }
+.rf-item.LOW { border-left-color: var(--skip); }
+.rf-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.sev { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; }
+.sev.HIGH { color: var(--fail); } .sev.MEDIUM { color: var(--warn); } .sev.LOW { color: var(--ink-3); }
+.rf-item p { font-size: 14px; color: var(--ink-2); max-width: 75ch; }
+
+.callout { border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; font-size: 14px; }
+.callout.human { border-color: var(--wait); background: var(--wait-soft); }
+.callout.diag { border-color: var(--accent); background: var(--accent-soft); }
+.callout .eyebrow { color: inherit; opacity: 0.85; }
+.callout p { max-width: 75ch; }
+
+details { border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+details > summary { cursor: pointer; padding: 10px 14px; font-weight: 500; font-size: 14px; list-style-position: inside; }
+details[open] > summary { border-bottom: 1px solid var(--line); }
+pre.code { margin: 0; padding: 10px 0; overflow-x: auto; background: var(--code-bg); font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; border-radius: 0 0 6px 6px; }
+pre.code .ln { display: block; padding: 0 14px 0 0; white-space: pre; }
+pre.code .ln.hl { background: var(--hl); }
+pre.code .n { display: inline-block; width: 44px; padding-right: 12px; text-align: right; color: var(--ink-3); user-select: none; }
+pre.code .note { color: var(--warn); font-style: italic; }
+pre.spec { margin: 0; padding: 14px; white-space: pre-wrap; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; background: var(--code-bg); border-radius: 0 0 6px 6px; overflow-x: auto; }
+
+/* pipeline principle */
+.principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.principle { border-top: 3px solid var(--line); padding-top: 10px; display: grid; gap: 4px; font-size: 14px; color: var(--ink-2); }
+.principle b { color: var(--ink); font-family: var(--font-display); font-size: 16px; font-weight: 600; }
+.principle.det { border-top-color: var(--accent); }
+.principle.ai { border-top-color: var(--warn); }
+.principle.hum { border-top-color: var(--wait); }
+
+footer { font-size: 13px; color: var(--ink-3); display: grid; gap: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  .bar-fill { transition: width 0.6s ease-out; }
+}
+</style>
+
+<div class="page" id="app">
+  <header class="top">
+    <span class="eyebrow">Card authorization pre-check · ISO 8583 DE 39</span>
+    <h1>AI Code Verification Gate</h1>
+    <p class="thesis">AI writes the code. <b>Deterministic gates decide</b> whether it is correct. A second AI <b>reviews and advises</b>. <b>A named human approves</b>, and every step is hashed into an audit log.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+  <section id="highlights" aria-label="What this run shows"></section>
+  <section id="matrix-section"></section>
+  <section id="attempts"></section>
+  <section id="audit"></section>
+  <section id="spec"></section>
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const DATA = /*__REPORT_DATA__*/null;
+
+const GATE_ORDER = ["G1", "G2", "G3", "G4", "G5", "G6"];
+const WHO = { "deterministic": ["det", "Decides"], "AI (advisory)": ["ai", "Advises"], "human": ["hum", "Approves"] };
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function pill(status, label) {
+  return `<span class="pill s-${esc(status)}">${esc(label || status.replace(/_/g, " "))}</span>`;
+}
+function gate(run, id) { return run.gates.find(g => g.id === id); }
+function pct(x) { return (x * 100).toFixed(1) + "%"; }
+const VERDICT_LABEL = {
+  BLOCKED: "Blocked", READY_FOR_HUMAN_APPROVAL: "Waiting for human", APPROVED: "Approved", REJECTED_BY_HUMAN: "Rejected by human"
+};
+
+function render() {
+  if (!DATA) {
+    document.getElementById("app").innerHTML = "<p>No report data. Run <code>./run.sh demo</code> first.</p>";
+    return;
+  }
+  const runs = DATA.runs;
+  const replay = runs.some(r => String(r.mode).startsWith("replay"));
+
+  // ---------- meta
+  const a = DATA.audit;
+  document.getElementById("meta").innerHTML = [
+    replay ? `<span class="tag replay" title="Sample AI answers from replay/. Every gate is real.">AI answers: offline samples</span>`
+           : `<span class="tag">${esc(runs[0]?.mode || "")}</span>`,
+    `<span class="tag">${runs.length} attempt${runs.length === 1 ? "" : "s"}</span>`,
+    a.intact ? `<span class="tag ok">Audit chain intact · ${a.entries} entries</span>`
+             : `<span class="tag bad">Audit chain broken</span>`,
+    `<span class="tag">Generated ${esc(DATA.generatedAt.replace("T", " ").slice(0, 16))}</span>`
+  ].join("");
+
+  // ---------- highlights (computed from the data, nothing hard-coded)
+  const hl = [];
+  const blockedByGolden = runs.find(r => { const g = gate(r, "G3"); return g && g.status === "FAILED" && g.details.aiOnlyVerdict === "would have PASSED"; });
+  if (blockedByGolden) {
+    const d = gate(blockedByGolden, "G3").details;
+    hl.push(`<div class="finding"><span class="eyebrow">Attempt ${blockedByGolden.attempt} · spec tests</span>
+      <span class="big">${d.aiSuite.passed}/${d.aiSuite.total}</span>
+      <p>AI-written tests passed the buggy code. Human golden tests caught <b>${d.goldenSuite.total - d.goldenSuite.passed}</b> boundary failures and blocked it.</p></div>`);
+  }
+  const lastMut = runs.find(r => { const g = gate(r, "G4"); return g && g.status !== "SKIPPED"; });
+  if (lastMut) {
+    const d = gate(lastMut, "G4").details;
+    hl.push(`<div class="finding"><span class="eyebrow">Attempt ${lastMut.attempt} · mutation testing</span>
+      <span class="big">${pct(d.scoreAiOnly)}</span>
+      <p>of planted bugs detected by AI tests alone, against <b>${pct(d.scoreCombined)}</b> with the human golden tests added (gate: ${Math.round(d.threshold * 100)}%).</p></div>`);
+  }
+  const reviewCatch = runs.find(r => { const g3 = gate(r, "G3"), g5 = gate(r, "G5"); return g3?.status === "PASSED" && g5 && g5.details.highFindings > 0; });
+  if (reviewCatch) {
+    const d3 = gate(reviewCatch, "G3").details, d5 = gate(reviewCatch, "G5").details;
+    hl.push(`<div class="finding"><span class="eyebrow">Attempt ${reviewCatch.attempt} · independent AI review</span>
+      <span class="big">${d5.highFindings} HIGH</span>
+      <p>defect found that all <b>${d3.aiSuite.total + d3.goldenSuite.total}</b> tests missed. A human confirmed it and turned it into permanent regression tests.</p></div>`);
+  }
+  const decided = runs.filter(r => r.verdict === "APPROVED" || r.verdict === "REJECTED_BY_HUMAN");
+  if (decided.length) {
+    const last = decided[decided.length - 1];
+    const d = gate(last, "G6").details;
+    hl.push(`<div class="finding"><span class="eyebrow">Human gate</span>
+      <span class="big">${decided.length}</span>
+      <p>decision${decided.length === 1 ? "" : "s"} by a named person, each recorded in the hash-chained audit log. Latest: <b>${esc(d.decision?.toLowerCase())}</b> by ${esc(d.decidedBy)}.</p></div>`);
+  }
+  document.getElementById("highlights").innerHTML = hl.length
+    ? `<h2>What these runs show</h2><div class="findings-strip">${hl.join("")}</div>` : "";
+
+  // ---------- matrix
+  const gateMeta = {};
+  runs.forEach(r => r.gates.forEach(g => { gateMeta[g.id] = gateMeta[g.id] || g; }));
+  const head = GATE_ORDER.filter(id => gateMeta[id]).map(id => {
+    const g = gateMeta[id], w = WHO[g.decidedBy] || ["det", ""];
+    return `<th scope="col">${esc(id)} ${esc(g.name)}<span class="who ${w[0]}">${w[1]}</span></th>`;
+  }).join("");
+  const rows = runs.map(r => {
+    const cells = GATE_ORDER.filter(id => gateMeta[id]).map(id => {
+      const g = gate(r, id);
+      return `<td><div class="cell">${pill(g.status)}<span>${esc(shortSummary(g))}</span></div></td>`;
+    }).join("");
+    return `<tr><th scope="row"><a href="#attempt-${r.attempt}">Attempt ${r.attempt}</a><small>golden v${esc(r.goldenVersion)}</small></th>${cells}
+      <td>${pill(r.verdict, VERDICT_LABEL[r.verdict])}</td></tr>`;
+  }).join("");
+  document.getElementById("matrix-section").innerHTML = `
+    <h2>Run matrix</h2>
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i>Deterministic gates decide pass or fail</span>
+      <span><i style="background:var(--warn)"></i>AI gates advise only</span>
+      <span><i style="background:var(--wait)"></i>A named human approves or rejects</span>
+    </div>
+    <div class="matrix-wrap"><table class="matrix">
+      <thead><tr><th scope="col">Attempt</th>${head}<th scope="col">Verdict</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="principles">
+      <div class="principle det"><b>Roles never see each other's work</b>The author never sees the tests. The test writer never sees the code. The reviewer never sees the author's conversation.</div>
+      <div class="principle ai"><b>AI advises, it never decides</b>Only deterministic gates can pass or fail a run. AI findings go to the human, and HIGH findings must be explicitly accepted.</div>
+      <div class="principle hum"><b>Who tests the tests?</b>Mutation testing plants small bugs on purpose. Tests that do not notice them are not trusted, whoever wrote them.</div>
+    </div>`;
+
+  // ---------- attempts
+  document.getElementById("attempts").innerHTML = `<h2>Attempts</h2>` + runs.map(renderAttempt).join("");
+
+  // ---------- audit
+  const log = (a.log || []);
+  document.getElementById("audit").innerHTML = `
+    <h2>Audit log</h2>
+    <p class="muted" style="max-width:70ch">Append-only. Each entry stores the hash of the one before it, so editing or deleting any past entry breaks the chain. Status: <b>${a.intact ? "intact" : "BROKEN: " + esc(a.problem)}</b>.</p>
+    <div class="tbl-wrap"><table class="data tabular">
+      <thead><tr><th>#</th><th>Event</th><th>Run</th><th>Verdict / by</th><th>Code SHA-256</th><th>Entry hash</th><th>Previous hash</th></tr></thead>
+      <tbody>${log.map((e, i) => `<tr>
+        <td>${i + 1}</td><td class="mono">${esc(e.event)}</td><td class="mono">${esc(e.runId)}</td>
+        <td>${esc(e.verdict || e.decidedBy || "")}</td>
+        <td class="mono">${esc(String(e.candidateSha256 || "").slice(0, 12))}…</td>
+        <td class="mono">${esc(String(e.entryHash).slice(0, 12))}…</td>
+        <td class="mono">${esc(String(e.prevHash).slice(0, 12))}…</td></tr>`).join("")}</tbody></table></div>`;
+
+  // ---------- spec
+  document.getElementById("spec").innerHTML = `
+    <h2>Specification</h2>
+    <p class="muted">Human-owned. Every AI role reads it; none can change it.</p>
+    <details><summary>spec/authorization-precheck.md</summary><pre class="spec">${esc(DATA.spec)}</pre></details>`;
+
+  document.getElementById("foot").innerHTML = replay
+    ? `<p>This report was produced in offline replay mode: the AI answers are sample answers stored in <span class="mono">replay/</span> so the demo runs without an API key. Every gate, test, mutant, hash and decision shown here was computed by the pipeline. Run with <span class="mono">--live</span> to use Claude for every AI role.</p>`
+    : `<p>Live mode: every AI answer came from ${esc(runs[0]?.mode)}.</p>`;
+}
+
+function shortSummary(g) {
+  const d = g.details || {};
+  switch (g.id) {
+    case "G1": return g.status === "PASSED" ? "No violations" : (d.violations || []).length + " violations";
+    case "G2": return g.status === "PASSED" ? "Compiles, honours contract" : g.status === "SKIPPED" ? "" : "Does not compile";
+    case "G3": return d.aiSuite ? `AI ${d.aiSuite.passed}/${d.aiSuite.total} · golden ${d.goldenSuite.passed}/${d.goldenSuite.total}` : "";
+    case "G4": return d.validMutants ? `${pct(d.scoreCombined)} combined · ${pct(d.scoreAiOnly)} AI only` : "";
+    case "G5": if (g.status === "SKIPPED") return ""; { const n = (d.findings || []).length; return `${n} finding${n === 1 ? "" : "s"} · ${d.highFindings || 0} HIGH`; }
+    case "G6": return d.decidedBy ? `${d.decision === "APPROVED" ? "Approved" : "Rejected"} by ${d.decidedBy}` : (g.status === "PENDING" ? "Waiting" : "");
+    default: return "";
+  }
+}
+
+function renderAttempt(r) {
+  const g3 = gate(r, "G3"), g4 = gate(r, "G4"), g5 = gate(r, "G5"), g6 = gate(r, "G6");
+  const story = [];
+  if (r.feedbackReceived) story.push(`The author received spec-level feedback from the previous attempt (no hidden test data).`);
+  if (g3.status === "FAILED") {
+    const d = g3.details;
+    story.push(`The AI's own tests passed (${d.aiSuite.passed}/${d.aiSuite.total}), but <b>${d.goldenSuite.total - d.goldenSuite.passed} human golden tests failed</b>. The run was blocked before mutation testing and review.`);
+  } else if (g3.status === "PASSED") {
+    story.push(`All ${g3.details.aiSuite.total + g3.details.goldenSuite.total} spec tests passed (golden set v${esc(r.goldenVersion)}).`);
+  }
+  if (g4.status !== "SKIPPED" && g4.details.validMutants) {
+    story.push(`Mutation testing planted ${g4.details.validMutants} bugs; the tests caught ${g4.details.killedCombined}. AI tests alone caught ${g4.details.killedByAiTests}.`);
+  }
+  if (g5.status !== "SKIPPED") {
+    const f = g5.details.findings || [];
+    story.push(f.length ? `The independent reviewer raised ${f.length} finding${f.length === 1 ? "" : "s"}${g5.details.highFindings ? `, including <b>${g5.details.highFindings} HIGH</b>` : ""}.` : `The independent reviewer found nothing.`);
+  }
+  if (g6.details && g6.details.decidedBy) {
+    story.push(`<b>${g6.details.decision === "APPROVED" ? "Approved" : "Rejected"}</b> by ${esc(g6.details.decidedBy)}.`);
+  } else if (g6.status === "PENDING") {
+    story.push(`Waiting for a named human to approve or reject.`);
+  }
+
+  // lines to highlight in the code
+  const marks = {};
+  if (r.diagnosis && r.diagnosis.line) marks[r.diagnosis.line] = "diagnosis";
+  (g5.details.findings || []).forEach(f => { if (f.line) marks[f.line] = (marks[f.line] ? marks[f.line] + ", " : "") + f.severity + " review finding"; });
+
+  return `<article class="attempt" id="attempt-${r.attempt}">
+    <header>
+      <div class="title"><span class="eyebrow">${esc(r.runId)}</span><h3 style="font-size:20px">Attempt ${r.attempt}</h3></div>
+      ${pill(r.verdict, VERDICT_LABEL[r.verdict])}
+    </header>
+    <div class="body">
+      <div class="story"><ul>${story.map(s => `<li>${s}</li>`).join("")}</ul></div>
+
+      <div class="block"><h3>Gates</h3><div class="gates">${r.gates.map(g => {
+        const w = WHO[g.decidedBy] || ["det", ""];
+        return `<div class="gate-row"><span class="gid">${esc(g.id)}</span>
+          <span class="gname">${esc(g.name)}<small class="who ${w[0]}">${esc(w[1])}</small></span>
+          <span class="gstat">${pill(g.status)}</span><span class="gsum">${esc(g.summary)}</span></div>`;
+      }).join("")}</div></div>
+
+      ${r.feedbackReceived ? `<div class="callout"><span class="eyebrow">Feedback given to the author</span><p>${esc(r.feedbackReceived)}</p></div>` : ""}
+      ${g3.status === "FAILED" ? failuresBlock(g3) : ""}
+      ${r.diagnosis ? diagnosisBlock(r.diagnosis) : ""}
+      ${g4.status !== "SKIPPED" && g4.details.validMutants ? mutationBlock(g4) : ""}
+      ${g5.status !== "SKIPPED" ? reviewBlock(g5) : ""}
+      ${g6.details && g6.details.decidedBy ? humanBlock(g6) : ""}
+
+      <details><summary>AI-written code · SHA-256 ${esc(String(r.candidateSha256).slice(0, 12))}…${Object.keys(marks).length ? " · highlighted lines" : ""}</summary>${codeBlock(r.candidateSource, marks)}</details>
+    </div>
+  </article>`;
+}
+
+function failuresBlock(g) {
+  const f = g.details.failures;
+  return `<div class="block"><h3>Failing tests <span class="muted">· PANs masked</span></h3>
+    <div class="tbl-wrap"><table class="data tabular"><thead><tr>
+      <th>Test</th><th>Rule</th><th>Written by</th><th>Case</th><th>Expiry (DE 14)</th><th>Amount / available</th><th>Date</th><th>Expected</th><th>Actual</th></tr></thead>
+      <tbody>${f.map(x => `<tr><td class="mono">${esc(x.id)}</td><td class="mono">${esc(x.criterion)}</td>
+        <td>${x.origin === "golden" ? "Human" : "AI"}</td><td class="wrap">${esc(x.description)}</td>
+        <td class="mono">${esc(x.expiry)}</td><td class="mono">${x.amountMinor} / ${x.availableMinor}</td>
+        <td class="mono">${esc(x.transactionDate)}</td><td class="mono good">${esc(x.expected)}</td>
+        <td class="mono bad">${esc(x.actual ?? x.status)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+function diagnosisBlock(d) {
+  return `<div class="callout diag"><span class="eyebrow">Diagnostician AI · confidence ${esc(d.confidence || "")}</span>
+    <p><b>Root cause.</b> ${esc(d.rootCause)}</p>
+    ${d.suggestedFix ? `<p><b>Suggested fix.</b> ${esc(d.suggestedFix)}</p>` : ""}
+    ${d.feedbackForAuthor ? `<p><b>Feedback sent to the author</b> (spec level, no test data). ${esc(d.feedbackForAuthor)}</p>` : ""}</div>`;
+}
+
+function mutationBlock(g) {
+  const d = g.details;
+  const bar = (name, v, color) => `<div class="bar-row"><span class="bar-name">${name}</span>
+    <div class="bar-track"><div class="bar-fill" style="width:${(v * 100).toFixed(1)}%;background:${color}"></div>
+      <div class="bar-thr" style="left:${d.threshold * 100}%"></div></div>
+    <span class="bar-val">${pct(v)}</span></div>`;
+  const surv = d.survivors || [];
+  return `<div class="block"><h3>Mutation testing <span class="muted">· ${d.validMutants} planted bugs, gate at ${Math.round(d.threshold * 100)}%</span></h3>
+    <div class="bars" style="padding-top:18px">
+      <div class="bar-row" aria-hidden="true"><span class="bar-name"></span><div class="bar-track" style="background:none;height:0">
+        <span class="bar-thr-label" style="left:${d.threshold * 100}%">gate ${Math.round(d.threshold * 100)}%</span></div><span></span></div>
+      ${bar("AI tests only", d.scoreAiOnly, "var(--warn)")}
+      ${bar("Human golden only", d.scoreGoldenOnly, "var(--accent)")}
+      ${bar("Combined (decides)", d.scoreCombined, "var(--pass)")}
+    </div>
+    ${surv.length ? `<p class="muted" style="max-width:75ch">Surviving mutants are shown to the reviewer. A survivor can be a real test gap, or an equivalent mutant that cannot change behavior.</p>
+    <div class="tbl-wrap"><table class="data"><thead><tr><th>Line</th><th>Change</th><th>Mutated line</th></tr></thead>
+      <tbody>${surv.map(s => `<tr><td class="mono">${s.line}</td><td class="mono">${esc(s.change)}</td><td class="mono">${esc(s.mutatedLine)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+  </div>`;
+}
+
+function reviewBlock(g) {
+  const d = g.details, f = d.findings || [];
+  return `<div class="block"><h3>Independent AI review <span class="muted">· advisory, fresh context</span></h3>
+    ${d.reviewSummary ? `<p class="muted" style="max-width:75ch">${esc(d.reviewSummary)}</p>` : ""}
+    <div class="rf">${f.map(x => `<div class="rf-item ${esc(x.severity)}">
+      <div class="rf-head"><span class="sev ${esc(x.severity)}">${esc(x.severity)}</span><b>${esc(x.title)}</b>
+        <span class="mono muted">${esc(x.criterion)}${x.line ? " · line " + x.line : ""}</span></div>
+      <p>${esc(x.detail)}</p></div>`).join("") || `<p class="muted">No findings.</p>`}</div></div>`;
+}
+
+function humanBlock(g) {
+  const d = g.details;
+  return `<div class="callout human"><span class="eyebrow">G6 · human decision · ${esc((d.decidedAt || "").replace("T", " ").slice(0, 16))}</span>
+    <p><b>${d.decision === "APPROVED" ? "Approved" : "Rejected"} by ${esc(d.decidedBy)}.</b> ${esc(d.note)}</p></div>`;
+}
+
+function codeBlock(src, marks) {
+  const lines = String(src || "").replace(/\n$/, "").split("\n");
+  return `<pre class="code">${lines.map((l, i) => {
+    const n = i + 1, m = marks[n];
+    return `<span class="ln${m ? " hl" : ""}"><span class="n">${n}</span>${esc(l)}${m ? `  <span class="note">← ${esc(m)}</span>` : ""}</span>`;
+  }).join("")}</pre>`;
+}
+
+render();
+</script>

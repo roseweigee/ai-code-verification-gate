@@ -1,0 +1,238 @@
+package dev.aiverify;
+
+import dev.aiverify.ai.ClaudeClient;
+import dev.aiverify.ai.LlmClient;
+import dev.aiverify.ai.ReplayClient;
+import dev.aiverify.json.Json;
+import dev.aiverify.pipeline.AuditLog;
+import dev.aiverify.pipeline.Hashing;
+import dev.aiverify.pipeline.Pipeline;
+import dev.aiverify.pipeline.RunContext;
+import dev.aiverify.report.ReportWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+/** Command line entry point. Run with no arguments for help. */
+public final class Main {
+
+    private static final Path ROOT = Path.of(System.getProperty("aiverify.root", ".")).toAbsolutePath().normalize();
+
+    /** Name used when the demo itself plays the human, so a scripted decision is never mistaken for a real one. */
+    private static final String SCRIPTED_HUMAN = "Scripted demo reviewer";
+
+    public static void main(String[] args) throws Exception {
+        String cmd = args.length == 0 ? "help" : args[0];
+        Map<String, String> opts = options(args);
+        try {
+            dispatch(cmd, opts);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            fail("Error: " + e.getMessage());
+        }
+    }
+
+    private static void dispatch(String cmd, Map<String, String> opts) throws Exception {
+        switch (cmd) {
+            case "demo" -> demo(opts.containsKey("full"));
+            case "run" -> run(Integer.parseInt(opts.getOrDefault("attempt", "1")), opts.containsKey("live"),
+                    opts.getOrDefault("golden", "latest"));
+            case "approve" -> decide(opts, true);
+            case "reject" -> decide(opts, false);
+            case "audit" -> audit();
+            case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+            case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
+            default -> help();
+        }
+    }
+
+    private static void help() {
+        System.out.println("""
+                AI Code Verification Gate
+
+                  demo                  Offline demo: attempt 1 (blocked by tests), attempt 2 (stops at the human gate)
+                  demo --full           Also plays the human: rejects attempt 2, runs attempt 3, approves it
+                  run --attempt N [--live] [--golden 1.0|1.1|latest]
+                                        One run. --live calls Claude (needs ANTHROPIC_API_KEY, optional AI_MODEL)
+                  approve --by NAME [--run ID] [--note TEXT] [--ack-high]
+                  reject  --by NAME [--run ID] --note TEXT
+                                        The human gate for the latest (or given) run. A rejection note
+                                        becomes spec-level feedback for the next attempt.
+                  audit                 Verify the hash-chained audit log
+                  report                Rebuild runs/report.html
+                  selftest              Check the engine itself
+                """);
+    }
+
+    private static void demo(boolean full) throws IOException {
+        Path runs = ROOT.resolve("runs");
+        if (Files.exists(runs)) {
+            try (Stream<Path> s = Files.walk(runs)) {
+                for (Path p : s.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.delete(p);
+                }
+            }
+        }
+        run(1, false, "1.0");
+        System.out.println();
+        run(2, false, "1.0");
+        System.out.println();
+        if (!full) {
+            System.out.println("Attempt 2 is waiting for a human. Read the AI review in runs/report.html, then either:");
+            System.out.println("  ./run.sh reject --by \"Your Name\" --note \"...\"   and   ./run.sh run --attempt 3 --golden 1.1");
+            System.out.println("  ./run.sh approve --by \"Your Name\" --ack-high");
+            return;
+        }
+        Map<String, String> reject = new LinkedHashMap<>();
+        reject.put("by", SCRIPTED_HUMAN);
+        reject.put("note", "The AI reviewer's HIGH finding is real: a PAN containing a full-width Unicode digit is "
+                + "approved. AC-01 and AC-02 mean ASCII digits 0-9 only. Regression tests G-32 and G-33 added to the "
+                + "golden set (v1.1).");
+        decide(reject, false);
+        System.out.println();
+        run(3, false, "1.1");
+        System.out.println();
+        Map<String, String> approve = new LinkedHashMap<>();
+        approve.put("by", SCRIPTED_HUMAN);
+        approve.put("note", "Accepted. transactionDate is always set by the switch; the MEDIUM null-input finding "
+                + "goes to the spec v1.1 backlog.");
+        decide(approve, true);
+    }
+
+    private static void run(int attempt, boolean live, String goldenVersion) throws IOException {
+        LlmClient ai = live
+                ? new ClaudeClient(System.getenv("ANTHROPIC_API_KEY"),
+                        System.getenv().getOrDefault("AI_MODEL", "claude-sonnet-5-5"))
+                : new ReplayClient(ROOT.resolve("replay"), attempt);
+        String runId = "run-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                + "-a" + attempt;
+        Path runDir = ROOT.resolve("runs").resolve(runId);
+        Files.createDirectories(runDir);
+
+        String feedback = null;
+        if (attempt > 1) {
+            Path prev = previousRun(runDir);
+            if (prev != null && Files.exists(prev.resolve("feedback-for-author.txt"))) {
+                feedback = Files.readString(prev.resolve("feedback-for-author.txt"));
+            }
+        }
+        RunContext ctx = new RunContext(ROOT, runDir, runId, attempt, ai);
+        ctx.goldenVersion = goldenVersion;
+        new Pipeline().run(ctx, feedback);
+        System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+    }
+
+    private static Path previousRun(Path current) throws IOException {
+        try (Stream<Path> s = Files.list(current.getParent())) {
+            return s.filter(Files::isDirectory).filter(p -> !p.equals(current))
+                    .filter(p -> p.getFileName().toString().startsWith("run-"))
+                    .max(Comparator.naturalOrder()).orElse(null);
+        }
+    }
+
+    /** G6: a named human approves or rejects. Both decisions go into the audit log. */
+    @SuppressWarnings("unchecked")
+    private static void decide(Map<String, String> opts, boolean approve) throws IOException {
+        String by = opts.get("by");
+        if (by == null || by.isBlank()) {
+            fail("A named human must decide: --by \"Your Name\"");
+        }
+        String note = opts.getOrDefault("note", "");
+        if (!approve && note.isBlank()) {
+            fail("A rejection needs a reason: --note \"...\". It becomes spec-level feedback for the next attempt.");
+        }
+        Path runDir = opts.containsKey("run") ? ROOT.resolve("runs").resolve(opts.get("run"))
+                : Pipeline.latestRun(ROOT.resolve("runs"));
+        Path resultFile = runDir.resolve("result.json");
+        Map<String, Object> result = Json.parseObject(Files.readString(resultFile));
+        if (!Pipeline.VERDICT_READY.equals(result.get("verdict"))) {
+            fail("Run " + result.get("runId") + " is not waiting for a human: verdict is " + result.get("verdict") + ".");
+        }
+        String currentCode = Files.readString(runDir.resolve("candidate/AuthorizationPrecheckImpl.java"));
+        if (!Hashing.sha256(currentCode).equals(result.get("candidateSha256"))) {
+            fail("The candidate code changed after verification. Run the pipeline again.");
+        }
+        List<Map<String, Object>> gates = (List<Map<String, Object>>) result.get("gates");
+        long high = 0;
+        for (Map<String, Object> g : gates) {
+            if ("G5".equals(g.get("id"))) {
+                Object h = ((Map<String, Object>) g.get("details")).get("highFindings");
+                high = h instanceof Number n ? n.longValue() : 0;
+            }
+        }
+        if (approve && high > 0 && !opts.containsKey("ack-high")) {
+            fail("The AI reviewer raised " + high + " HIGH finding(s). Read them in the report. To approve anyway, "
+                    + "add --ack-high (your name is recorded as accepting the risk). Otherwise use reject.");
+        }
+
+        String at = OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString();
+        String verb = approve ? "Approved" : "Rejected";
+        for (Map<String, Object> g : gates) {
+            if ("G6".equals(g.get("id"))) {
+                g.put("status", approve ? "PASSED" : "FAILED");
+                g.put("summary", verb + " by " + by
+                        + (approve && high > 0 ? " (accepted " + high + " HIGH AI finding(s))" : "")
+                        + (note.isBlank() ? "." : ": " + note));
+                Map<String, Object> d = new LinkedHashMap<>();
+                d.put("decision", approve ? "APPROVED" : "REJECTED");
+                d.put("decidedBy", by);
+                d.put("decidedAt", at);
+                d.put("note", note);
+                d.put("acceptedHighFindings", approve ? high : 0);
+                g.put("details", d);
+            }
+        }
+        result.put("verdict", approve ? Pipeline.VERDICT_APPROVED : Pipeline.VERDICT_REJECTED);
+        Files.writeString(resultFile, Json.write(result));
+        if (!approve) {
+            Files.writeString(runDir.resolve("feedback-for-author.txt"), note);
+        }
+
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("event", approve ? "HUMAN_APPROVED" : "HUMAN_REJECTED");
+        event.put("at", at);
+        event.put("runId", result.get("runId"));
+        event.put("decidedBy", by);
+        event.put("note", note);
+        event.put("acceptedHighFindings", approve ? high : 0);
+        event.put("candidateSha256", result.get("candidateSha256"));
+        new AuditLog(ROOT.resolve("runs/audit-log.jsonl")).append(event);
+        System.out.println(verb + " " + result.get("runId") + " by " + by + ". Recorded in runs/audit-log.jsonl.");
+        System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+    }
+
+    private static void audit() {
+        AuditLog log = new AuditLog(ROOT.resolve("runs/audit-log.jsonl"));
+        String problem = log.verify();
+        if (problem == null) {
+            System.out.println("Audit log intact: " + log.size() + " entries, hash chain verified.");
+        } else {
+            fail("Audit log TAMPERED. " + problem);
+        }
+    }
+
+    private static Map<String, String> options(String[] args) {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (int k = 1; k < args.length; k++) {
+            if (args[k].startsWith("--")) {
+                String key = args[k].substring(2);
+                boolean hasValue = k + 1 < args.length && !args[k + 1].startsWith("--");
+                m.put(key, hasValue ? args[++k] : "true");
+            }
+        }
+        return m;
+    }
+
+    private static void fail(String msg) {
+        System.err.println(msg);
+        System.exit(2);
+    }
+}

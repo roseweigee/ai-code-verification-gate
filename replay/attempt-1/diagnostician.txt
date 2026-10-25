@@ -1,0 +1,8 @@
+{
+  "rootCause": "Two boundary errors. (1) Line 39 treats the card as expired from the FIRST day of its expiry month: !transactionDate.isBefore(expiryMonth.atDay(1)). AC-03 says the card is valid THROUGH the last day of that month, so every transaction inside the expiry month is wrongly declined with 54. (2) Line 49 declines when the amount is EQUAL to the available balance (>=). AC-05 allows an amount equal to the balance; only a larger amount should return 51.",
+  "criterion": "AC-03, AC-05",
+  "line": 39,
+  "suggestedFix": "Line 39: decline only if transactionDate.isAfter(expiryMonth.atEndOfMonth()). Line 49: use > instead of >=.",
+  "confidence": "HIGH",
+  "feedbackForAuthor": "Your implementation does not follow two boundary rules in the specification. Re-read AC-03: a card stays valid through the last day of its expiry month, including that whole month. Re-read AC-05: an amount equal to the available balance must be approved; only an amount greater than the balance is insufficient funds. Keep all other behavior unchanged."
+}

@@ -1,0 +1,74 @@
+```java
+package dev.aiverify.candidate;
+
+import dev.aiverify.contract.AuthRequest;
+import dev.aiverify.contract.AuthorizationPrecheck;
+import java.time.LocalDate;
+import java.time.YearMonth;
+
+public class AuthorizationPrecheckImpl implements AuthorizationPrecheck {
+
+    private static final String APPROVED = "00";
+    private static final String INVALID_AMOUNT = "13";
+    private static final String INVALID_CARD = "14";
+    private static final String FORMAT_ERROR = "30";
+    private static final String INSUFFICIENT_FUNDS = "51";
+    private static final String EXPIRED_CARD = "54";
+
+    @Override
+    public String check(AuthRequest request, LocalDate transactionDate) {
+        String pan = request.pan();
+        String expiry = request.expiry();
+
+        // AC-01 format
+        if (pan == null || expiry == null || !expiry.matches("\\d{4}")) {
+            return FORMAT_ERROR;
+        }
+        int year = 2000 + Integer.parseInt(expiry.substring(0, 2));
+        int month = Integer.parseInt(expiry.substring(2, 4));
+        if (month < 1 || month > 12) {
+            return FORMAT_ERROR;
+        }
+
+        // AC-02 card number
+        if (!pan.matches("\\d{13,19}") || !passesLuhn(pan)) {
+            return INVALID_CARD;
+        }
+
+        // AC-03 expiry: the card expires at its expiry date
+        YearMonth expiryMonth = YearMonth.of(year, month);
+        if (!transactionDate.isBefore(expiryMonth.atDay(1))) {
+            return EXPIRED_CARD;
+        }
+
+        // AC-04 amount
+        if (request.amountMinor() <= 0) {
+            return INVALID_AMOUNT;
+        }
+
+        // AC-05 funds
+        if (request.amountMinor() >= request.availableMinor()) {
+            return INSUFFICIENT_FUNDS;
+        }
+
+        return APPROVED;
+    }
+
+    private static boolean passesLuhn(String digits) {
+        int sum = 0;
+        boolean doubleIt = false;
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            int d = digits.charAt(i) - '0';
+            if (doubleIt) {
+                d = d * 2;
+                if (d > 9) {
+                    d = d - 9;
+                }
+            }
+            sum += d;
+            doubleIt = !doubleIt;
+        }
+        return sum % 10 == 0;
+    }
+}
+```

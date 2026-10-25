@@ -1,0 +1,83 @@
+```java
+package dev.aiverify.candidate;
+
+import dev.aiverify.contract.AuthRequest;
+import dev.aiverify.contract.AuthorizationPrecheck;
+import java.time.LocalDate;
+import java.time.YearMonth;
+
+public class AuthorizationPrecheckImpl implements AuthorizationPrecheck {
+
+    private static final String APPROVED = "00";
+    private static final String INVALID_AMOUNT = "13";
+    private static final String INVALID_CARD = "14";
+    private static final String FORMAT_ERROR = "30";
+    private static final String INSUFFICIENT_FUNDS = "51";
+    private static final String EXPIRED_CARD = "54";
+
+    @Override
+    public String check(AuthRequest request, LocalDate transactionDate) {
+        String pan = request.pan();
+        String expiry = request.expiry();
+
+        // AC-01 format
+        if (pan == null || expiry == null || expiry.length() != 4 || !allDigits(expiry)) {
+            return FORMAT_ERROR;
+        }
+        int year = 2000 + Integer.parseInt(expiry.substring(0, 2));
+        int month = Integer.parseInt(expiry.substring(2, 4));
+        if (month < 1 || month > 12) {
+            return FORMAT_ERROR;
+        }
+
+        // AC-02 card number: 13-19 digits and Luhn
+        if (pan.length() < 13 || pan.length() > 19 || !allDigits(pan) || !passesLuhn(pan)) {
+            return INVALID_CARD;
+        }
+
+        // AC-03 the card is valid through the last day of its expiry month
+        LocalDate lastValidDay = YearMonth.of(year, month).atEndOfMonth();
+        if (transactionDate.isAfter(lastValidDay)) {
+            return EXPIRED_CARD;
+        }
+
+        // AC-04 amount must be positive
+        if (request.amountMinor() <= 0) {
+            return INVALID_AMOUNT;
+        }
+
+        // AC-05 an amount equal to the available balance is allowed
+        if (request.amountMinor() > request.availableMinor()) {
+            return INSUFFICIENT_FUNDS;
+        }
+
+        return APPROVED;
+    }
+
+    private static boolean allDigits(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (!Character.isDigit(s.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean passesLuhn(String digits) {
+        int sum = 0;
+        boolean doubleIt = false;
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            int d = digits.charAt(i) - '0';
+            if (doubleIt) {
+                d = d * 2;
+                if (d > 9) {
+                    d = d - 9;
+                }
+            }
+            sum += d;
+            doubleIt = !doubleIt;
+        }
+        return sum % 10 == 0;
+    }
+}
+```

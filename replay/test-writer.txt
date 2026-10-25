@@ -1,0 +1,17 @@
+{"cases": [
+  {"id": "AI-01", "criterion": "AC-01", "description": "Expiry month 13 is invalid", "pan": "4111111111111111", "expiry": "2713", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "30"},
+  {"id": "AI-02", "criterion": "AC-01", "description": "Expiry too short", "pan": "4111111111111111", "expiry": "27", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "30"},
+  {"id": "AI-03", "criterion": "AC-01", "description": "Null PAN", "pan": null, "expiry": "2712", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "30"},
+  {"id": "AI-04", "criterion": "AC-02", "description": "PAN fails Luhn check", "pan": "4111111111111112", "expiry": "2712", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "14"},
+  {"id": "AI-05", "criterion": "AC-02", "description": "PAN contains letters", "pan": "4111abcd11111111", "expiry": "2712", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "14"},
+  {"id": "AI-06", "criterion": "AC-02", "description": "PAN too short", "pan": "4111111", "expiry": "2712", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "14"},
+  {"id": "AI-07", "criterion": "AC-03", "description": "Card expired last year", "pan": "4111111111111111", "expiry": "2509", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "54"},
+  {"id": "AI-08", "criterion": "AC-03", "description": "Card expired last month", "pan": "4111111111111111", "expiry": "2609", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "54"},
+  {"id": "AI-09", "criterion": "AC-03", "description": "Card valid until next year", "pan": "4111111111111111", "expiry": "2712", "amountMinor": 1000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "00"},
+  {"id": "AI-10", "criterion": "AC-04", "description": "Zero amount", "pan": "4111111111111111", "expiry": "2712", "amountMinor": 0, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "13"},
+  {"id": "AI-11", "criterion": "AC-04", "description": "Negative amount", "pan": "4111111111111111", "expiry": "2712", "amountMinor": -500, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "13"},
+  {"id": "AI-12", "criterion": "AC-05", "description": "Amount exceeds available balance", "pan": "4111111111111111", "expiry": "2712", "amountMinor": 10000, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "51"},
+  {"id": "AI-13", "criterion": "AC-05", "description": "Amount within available balance", "pan": "4111111111111111", "expiry": "2712", "amountMinor": 2500, "availableMinor": 5000, "transactionDate": "2026-10-28", "expected": "00"},
+  {"id": "AI-14", "criterion": "AC-06", "description": "Approve a Mastercard purchase", "pan": "5555555555554444", "expiry": "2812", "amountMinor": 4200, "availableMinor": 90000, "transactionDate": "2026-10-28", "expected": "00"},
+  {"id": "AI-15", "criterion": "AC-06", "description": "Approve an American Express purchase", "pan": "378282246310005", "expiry": "2812", "amountMinor": 4200, "availableMinor": 90000, "transactionDate": "2026-10-28", "expected": "00"}
+]}
