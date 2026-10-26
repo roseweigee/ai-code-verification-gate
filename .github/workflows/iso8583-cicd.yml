@@ -84,6 +84,17 @@ jobs:
         with:
           name: app-jar
           path: ${{ env.APP_DIR }}/target
+      - name: Check the GCP key secret
+        env:
+          KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Secret GCP_SA_KEY is empty or missing. Add it under Settings > Secrets and variables > Actions > Secrets > New repository secret."
+            exit 1
+          fi
+          echo "GCP_SA_KEY is set (${#KEY} characters)."
+          echo "$KEY" | python3 -c "import json,sys; d=json.load(sys.stdin); print('Service account:', d.get('client_email'))" \
+            || { echo "::error::GCP_SA_KEY is not valid JSON. Paste the whole content of gh-key.json, from { to }."; exit 1; }
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
