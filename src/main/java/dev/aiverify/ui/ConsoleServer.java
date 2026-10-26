@@ -135,6 +135,14 @@ public final class ConsoleServer {
                 case "/api/snippet" -> json(ex, snippet(q));
                 case "/api/tamper-test" -> json(ex, tamperTest());
                 case "/api/cicd" -> json(ex, cicd.get("1".equals(q.get("refresh"))));
+                case "/api/monitor" -> {
+                    String st = q.getOrDefault("stable", ""), ca = q.getOrDefault("canary", "");
+                    String re = "run-[0-9]{8}-[0-9]{6}-a[0-9]+";
+                    if (!st.matches(re) || !ca.matches(re)) {
+                        throw new IllegalArgumentException("unknown run");
+                    }
+                    json(ex, MonitorSim.run(live, "run:" + st, "run:" + ca));
+                }
                 case "/pay" -> {
                     ex.getResponseHeaders().set("Location", "/");
                     ex.sendResponseHeaders(302, -1);

@@ -116,6 +116,17 @@ final class LiveService {
         return p;
     }
 
+    /** The response code one version gives, or "5xx" if it throws. Used by the monitoring simulation. */
+    String answer(String id, AuthRequest req, LocalDate date) throws Exception {
+        AuthorizationPrecheck code = load(id);
+        try {
+            String rc = code.check(req, date);
+            return rc == null ? "5xx" : rc;
+        } catch (RuntimeException e) {
+            return "5xx";
+        }
+    }
+
     /** One authorization request. Returns the HTTP status and the JSON body. */
     Object[] authorize(Map<String, String> q) {
         Map<String, Object> out = new LinkedHashMap<>();
