@@ -178,6 +178,10 @@ email. A rejection email carries the reviewer's reason, which is also the AI aut
 attempt. Copy `notify.properties.example` to `notify.properties` (ignored by git) and fill in the recipient and
 an SMTP account; for Gmail, use an app password. Test it with `./run.sh notify-test`. Each message is also saved
 
+**Live service page.** `/pay` on the console runs the ISO 8583 pre-check as a production simulator: the same code
+deployed without the gate or after it (Claude's attempt 3, or SpecBlast's rules). Leave the date empty: the version
+that skipped the gate crashes with a NullPointerException (HTTP 500); the gated version answers 30, format error.
+
 **Deploy the web console (Google Cloud Run).** The `Dockerfile` builds the gate, runs the self-test, and starts
 the console. On a host that sets `PORT`, the console listens publicly and refuses to start without
 `DEMO_PASSWORD`, because the buttons run real commands; the browser then asks for that password.

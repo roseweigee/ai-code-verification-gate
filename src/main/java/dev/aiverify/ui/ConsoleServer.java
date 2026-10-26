@@ -48,10 +48,12 @@ public final class ConsoleServer {
 
     private final Path root;
     private final byte[] password;
+    private final LiveService live;
 
     private ConsoleServer(Path root, String password) {
         this.root = root;
         this.password = password == null ? null : password.getBytes(StandardCharsets.UTF_8);
+        this.live = new LiveService(root);
     }
 
     public static void start(Path root, int port) throws IOException {
@@ -126,6 +128,17 @@ public final class ConsoleServer {
                 }
                 case "/api/snippet" -> json(ex, snippet(q));
                 case "/api/tamper-test" -> json(ex, tamperTest());
+                case "/pay" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/live.html")));
+                case "/api/pay" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    Object[] r = live.authorize(q);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> body = (Map<String, Object>) r[1];
+                    json(ex, (Integer) r[0], body);
+                }
                 default -> json(ex, 404, Map.of("error", "not found"));
             }
         } catch (Exception e) {

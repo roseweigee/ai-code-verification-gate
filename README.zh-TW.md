@@ -99,6 +99,8 @@ Windows 請用 `run.cmd`，參數相同。
 
 **Email 通知。** 執行被擋下、等待人工核准，以及人工核准或退回時，都會寄出通知信。退回的信會附上審核者的理由，這個理由也是 AI 撰寫者下一次嘗試的回饋。把 `notify.properties.example` 複製成 `notify.properties`（不會進 git），填入收件人和 SMTP 帳號；Gmail 請用應用程式密碼。用 `./run.sh notify-test` 測試。每封信都會先存到 `runs/outbox/`，寄信失敗也不會改變閘門的判定。
 
+**上線服務頁面。** 網頁版的 `/pay` 是 ISO 8583 授權前檢查的正式環境模擬：同一份程式（Claude 第三次嘗試，或 SpecBlast 的規則），分成「跳過品質關卡直接上線」和「通過品質關卡後上線」。把交易日期留空：跳過關卡的版本會拋出 NullPointerException（HTTP 500），通過關卡的版本回傳 30 格式錯誤。
+
 **部署網頁版到雲端（Google Cloud Run）。** `Dockerfile` 會建置閘門、跑自我測試，再啟動網頁版。在會設定 `PORT` 的雲端主機上，網頁會對外開放，所以沒有設定 `DEMO_PASSWORD` 就拒絕啟動，因為按鈕會執行真正的指令；瀏覽器會先要求輸入這個密碼。
 
 ```bash
