@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Code Verification Gate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --sunk: #e9edef; --ink: #142029; --ink-2: #4b5a65; --ink-3: #7a8893;
+  --line: #d3dbe0; --accent: #1f5f8b; --accent-soft: #dcebf5;
+  --pass: #1d7a4c; --pass-soft: #dcf1e5; --fail: #b3261e; --fail-soft: #fbe2df;
+  --warn: #9a6200; --warn-soft: #fbedcf; --human: #5b4bb0; --human-soft: #e7e3fa;
+  --skip: #8c979f; --skip-soft: #eceff1; --code-bg: #f7f9fa; --hl: #fff3c4; --dark: #142029;
+  --display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5; }
+button { font: inherit; cursor: pointer; }
+code, .mono { font-family: var(--mono); }
+
+header { background: var(--dark); color: #e4ebef; padding: 22px 40px 0; }
+.brand { display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--display); font-size: 30px; margin: 0; color: #f3f5f6; letter-spacing: .2px; }
+.tagline { font-size: 15px; color: #a9b7c0; }
+.tagline b { font-weight: 600; }
+.t-gate { color: #6fb3e3; } .t-ai { color: #e7b04f; } .t-human { color: #a99cf2; }
+nav { display: flex; gap: 4px; margin-top: 18px; }
+nav button { background: transparent; border: 0; color: #a9b7c0; padding: 12px 20px; font-size: 16px; font-weight: 500; border-radius: 8px 8px 0 0; }
+nav button .num { font-family: var(--mono); font-size: 13px; opacity: .7; margin-right: 8px; }
+nav button.on { background: var(--bg); color: var(--ink); }
+nav button:not(.on):hover { color: #f3f5f6; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 32px 40px 140px; }
+.view { display: none; } .view.on { display: block; }
+.lead { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 24px; }
+.lead h2 { font-family: var(--display); font-size: 34px; line-height: 1.1; margin: 0 0 6px; }
+.lead p { margin: 0; color: var(--ink-2); max-width: 720px; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 11px 18px; border-radius: 8px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.human { background: var(--human); border-color: var(--human); color: #fff; }
+.btn.danger { background: var(--surface); border-color: var(--fail); color: var(--fail); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-3); font-weight: 500; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn .spin { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.empty { text-align: center; color: var(--ink-3); padding: 64px 24px; border: 1px dashed var(--line); border-radius: 12px; }
+.chip { display: inline-block; font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: .4px; padding: 3px 9px; border-radius: 999px; text-transform: uppercase; white-space: nowrap; }
+.s-PASSED, .s-APPROVED, .s-PASS, .s-READY { background: var(--pass-soft); color: var(--pass); }
+.s-FAILED, .s-BLOCKED, .s-ERROR, .s-HIGH, .s-REJECTED { background: var(--fail-soft); color: var(--fail); }
+.s-WARNING, .s-WARN, .s-MEDIUM { background: var(--warn-soft); color: var(--warn); }
+.s-SKIPPED, .s-LOW, .s-INFO { background: var(--skip-soft); color: var(--skip); }
+.s-WAITING { background: var(--human-soft); color: var(--human); }
+
+/* verdict hero */
+.hero { display: grid; grid-template-columns: auto 1fr auto; gap: 28px; align-items: center; padding: 28px 32px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.hero .word { font-family: var(--display); font-size: 52px; font-weight: 700; line-height: 1; }
+.hero.bad { border-left: 10px solid var(--fail); } .hero.bad .word { color: var(--fail); }
+.hero.good { border-left: 10px solid var(--pass); } .hero.good .word { color: var(--pass); }
+.hero.wait { border-left: 10px solid var(--human); } .hero.wait .word { color: var(--human); }
+.hero .facts { color: var(--ink-2); font-size: 17px; }
+.hero .facts b { color: var(--ink); }
+.exit { font-family: var(--mono); font-size: 14px; padding: 10px 14px; border-radius: 8px; background: var(--sunk); color: var(--ink-2); text-align: right; }
+.exit b { font-size: 22px; color: var(--ink); display: block; }
+
+.compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: center; margin-bottom: 20px; }
+.cmp { padding: 16px 20px; border-radius: 10px; border: 2px solid var(--line); background: var(--surface); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.cmp.sel { border-color: var(--accent); }
+.cmp .k { font-size: 13px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
+.cmp .v { font-family: var(--display); font-size: 26px; font-weight: 700; }
+.arrow { font-size: 28px; color: var(--ink-3); }
+
+.gates { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin: 20px 0; }
+.gate { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; min-height: 118px; }
+.gate.sel { outline: 3px solid var(--accent); outline-offset: -1px; }
+.gate .id { font-family: var(--mono); font-size: 13px; color: var(--ink-3); }
+.gate .nm { font-weight: 600; font-size: 14px; line-height: 1.3; flex: 1; }
+.gate .ct { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.gate.st-FAILED { border-top: 5px solid var(--fail); } .gate.st-WARNING { border-top: 5px solid var(--warn); }
+.gate.st-PASSED { border-top: 5px solid var(--pass); } .gate.st-SKIPPED { border-top: 5px solid var(--skip); }
+
+.findings { display: flex; flex-direction: column; gap: 12px; }
+.f { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.f.err { border-left: 6px solid var(--fail); } .f.warn { border-left: 6px solid var(--warn); }
+.f .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.f .rule { font-family: var(--mono); font-size: 13px; color: var(--ink-3); }
+.f .title { font-weight: 600; font-size: 17px; }
+.f .where { font-family: var(--mono); font-size: 13px; color: var(--accent); margin-top: 6px; word-break: break-all; }
+.f .detail { color: var(--ink-2); margin: 8px 0 0; }
+.f .fix { margin: 8px 0 0; font-size: 15px; } .f .fix b { color: var(--pass); }
+.code { margin-top: 12px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; font-family: var(--mono); font-size: 13.5px; overflow-x: auto; }
+.code div { display: flex; white-space: pre; padding: 1px 0; }
+.code .ln { width: 52px; flex: none; text-align: right; padding-right: 14px; color: var(--ink-3); user-select: none; }
+.code .hit { background: var(--hl); font-weight: 600; }
+.sub { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; color: var(--ink-3); margin: 28px 0 12px; }
+details.more summary { cursor: pointer; color: var(--accent); font-weight: 600; margin: 8px 0; }
+
+/* attempts */
+.steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.step { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+.step:last-child { border-right: 0; }
+.step .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 14px; background: var(--sunk); color: var(--ink-3); flex: none; }
+.step .l { font-size: 14px; font-weight: 500; line-height: 1.3; color: var(--ink-3); }
+.step.done .n { background: var(--pass); color: #fff; } .step.done .l { color: var(--ink); }
+.step.cur { background: var(--accent-soft); } .step.cur .n { background: var(--accent); color: #fff; } .step.cur .l { color: var(--ink); font-weight: 600; }
+.step.cur.h { background: var(--human-soft); } .step.cur.h .n { background: var(--human); }
+
+.atabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.atab { padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); display: flex; gap: 10px; align-items: center; font-weight: 600; }
+.atab.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.pipe { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 20px 0; }
+.pg { border-radius: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-top: 5px solid var(--accent); display: flex; flex-direction: column; gap: 6px; }
+.pg.ai { border-top-color: #d99a2b; } .pg.hu { border-top-color: var(--human); }
+.pg .id { font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+.pg .nm { font-weight: 600; font-size: 14px; line-height: 1.25; }
+.legend { display: flex; gap: 20px; font-size: 13px; color: var(--ink-2); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.big { display: flex; flex-direction: column; gap: 4px; }
+.big .num { font-family: var(--display); font-size: 56px; font-weight: 700; line-height: 1; }
+.big .cap { color: var(--ink-2); }
+.big.good .num { color: var(--pass); } .big.bad .num { color: var(--fail); }
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--sunk); vertical-align: top; }
+td.mono { font-family: var(--mono); font-size: 13px; }
+.bar { position: relative; height: 34px; background: var(--sunk); border-radius: 6px; margin: 6px 0 16px; }
+.bar .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: #fff; font-family: var(--mono); font-weight: 600; font-size: 15px; transition: width .6s; }
+.bar .thr { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px dashed var(--ink); }
+.bar .thr span { position: absolute; top: -20px; left: -18px; font-family: var(--mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+.callout { background: var(--fail-soft); border-radius: 8px; padding: 12px 16px; margin-top: 12px; font-family: var(--mono); font-size: 18px; color: var(--fail); }
+.callout small { display: block; font-family: var(--body); font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+.decision { border: 2px solid var(--human); background: var(--human-soft); border-radius: 12px; padding: 22px 24px; margin-top: 16px; }
+.decision h3 { margin: 0 0 6px; color: var(--human); font-family: var(--display); font-size: 24px; }
+.form { display: grid; grid-template-columns: 220px 1fr; gap: 12px 16px; align-items: start; margin-top: 14px; }
+.form label { font-weight: 600; padding-top: 9px; }
+.form input[type=text], .form textarea { width: 100%; font: inherit; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.form textarea { min-height: 68px; resize: vertical; }
+.ack { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.errbox { margin-top: 12px; background: var(--fail-soft); color: var(--fail); border-radius: 8px; padding: 12px 14px; font-weight: 500; }
+.note { color: var(--ink-2); font-size: 15px; }
+.feedback { background: var(--accent-soft); border-radius: 8px; padding: 14px 18px; margin-top: 16px; }
+.feedback b { display: block; margin-bottom: 4px; }
+
+/* audit */
+.chain { display: flex; flex-direction: column; gap: 0; }
+.link { display: grid; grid-template-columns: 48px 1fr 220px; gap: 16px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+.link .idx { font-family: var(--mono); font-weight: 600; color: var(--ink-3); }
+.link .ev { font-weight: 600; }
+.link .meta { color: var(--ink-2); font-size: 14px; }
+.link .h { font-family: var(--mono); font-size: 12px; color: var(--ink-3); text-align: right; line-height: 1.6; }
+.link .h b { color: var(--ink); font-weight: 600; }
+.joint { height: 18px; margin-left: 39px; border-left: 2px solid var(--line); }
+.link.broken { border-color: var(--fail); background: var(--fail-soft); }
+
+/* command bar */
+.cmdbar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--dark); color: #e4ebef; font-family: var(--mono); font-size: 14px; padding: 12px 40px; display: none; z-index: 5; }
+.cmdbar.on { display: block; }
+.cmdbar .row { display: flex; gap: 16px; align-items: center; max-width: 1280px; margin: 0 auto; }
+.cmdbar .cmd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdbar .cmd::before { content: "$ "; color: #6fb3e3; }
+.cmdbar .code0 { color: #5cc98f; } .cmdbar .code1 { color: #f08a80; }
+.cmdbar button { background: transparent; border: 1px solid #2b3a44; color: #a9b7c0; border-radius: 6px; padding: 4px 10px; font-family: var(--mono); font-size: 13px; }
+.cmdbar pre { max-width: 1280px; margin: 10px auto 0; max-height: 34vh; overflow: auto; color: #a9b7c0; font-size: 13px; display: none; white-space: pre-wrap; }
+.cmdbar.open pre { display: block; }
+
+@media (max-width: 1100px) {
+  .gates { grid-template-columns: repeat(4, 1fr); }
+  .pipe { grid-template-columns: repeat(3, 1fr); }
+  .steps { grid-template-columns: 1fr; }
+  .step { border-right: 0; border-bottom: 1px solid var(--line); }
+  .grid2 { grid-template-columns: 1fr; }
+  .hero { grid-template-columns: 1fr; }
+  main { padding: 24px 16px 140px; } header { padding: 18px 16px 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>AI Code Verification Gate</h1>
+    <div class="tagline">AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b></div>
+  </div>
+  <nav>
+    <button data-view="project" class="on"><span class="num">01</span>SpecBlast output</button>
+    <button data-view="attempts"><span class="num">02</span>Three attempts</button>
+    <button data-view="audit"><span class="num">03</span>Audit trail</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 1. SpecBlast -->
+  <section class="view on" id="v-project">
+    <div class="lead">
+      <div>
+        <h2>Checking a project SpecBlast generated</h2>
+        <p>Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed.</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary" data-act="project" data-which="before">Check generated project</button>
+        <button class="btn" data-act="project" data-which="after">Check fixed project</button>
+      </div>
+    </div>
+    <div id="project-out"></div>
+  </section>
+
+  <!-- 2. Attempts -->
+  <section class="view" id="v-attempts">
+    <div class="lead">
+      <div>
+        <h2>AI writes a payment component, three times</h2>
+        <p>Card authorization pre-check (ISO 8583). The AI author never sees the tests; the AI test writer never sees the code; human golden tests are held out.</p>
+      </div>
+      <div class="actions" id="attempt-actions"></div>
+    </div>
+    <div class="steps" id="steps"></div>
+    <div id="attempt-out"></div>
+  </section>
+
+  <!-- 3. Audit -->
+  <section class="view" id="v-audit">
+    <div class="lead">
+      <div>
+        <h2>Every run and decision, hash-chained</h2>
+        <p>Each entry carries the hash of the one before it. Editing any past entry breaks the chain, so nobody can quietly rewrite history.</p>
+      </div>
+      <div class="actions">
+        <button class="btn primary" data-act="audit">Verify audit log</button>
+        <button class="btn danger" id="tamper">Simulate tampering</button>
+      </div>
+    </div>
+    <div id="audit-out"></div>
+  </section>
+</main>
+
+<div class="cmdbar" id="cmdbar">
+  <div class="row"><span class="cmd" id="cmd"></span><span id="code"></span><button id="toggle-out">Output</button></div>
+  <pre id="out"></pre>
+</div>
+
+<script>
+const S = { state: null, sel: 'before', gate: null, attempt: null, busy: false, lastError: '', tamper: null };
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pct = x => (Math.round(x * 1000) / 10).toFixed(1) + '%';
+
+async function load() {
+  const r = await fetch('/api/state');
+  S.state = await r.json();
+  render();
+}
+
+async function act(name, params = {}, btn) {
+  if (S.busy) return;
+  S.busy = true; S.lastError = '';
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Running…'; }
+  try {
+    const q = new URLSearchParams({ name, ...params });
+    const r = await fetch('/api/action?' + q, { method: 'POST' });
+    const res = await r.json();
+    if (res.error) { S.lastError = res.error; }
+    else {
+      showCmd(res);
+      if (name !== 'project' && name !== 'audit' && name !== 'reset' && res.exitCode !== 0) S.lastError = res.output.trim();
+    }
+  } finally {
+    S.busy = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+  await load();
+}
+
+function showCmd(res) {
+  $('#cmdbar').classList.add('on');
+  $('#cmd').textContent = res.command;
+  $('#code').innerHTML = `<span class="code${res.exitCode === 0 ? 0 : 1}">exit ${res.exitCode}</span>`;
+  $('#out').textContent = res.output;
+}
+$('#toggle-out').onclick = () => $('#cmdbar').classList.toggle('open');
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + b.dataset.view));
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'project') { S.sel = b.dataset.which; S.gate = null; act('project', { which: b.dataset.which }, b); }
+  else if (a === 'audit') { S.tamper = null; act('audit', {}, b); }
+  else if (a === 'reset') { S.attempt = null; act('reset', {}, b); }
+  else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
+  else if (a === 'reject' || a === 'approve') {
+    const by = $('#by').value.trim(), note = $('#note').value.trim();
+    const ack = $('#ack') ? $('#ack').checked : false;
+    act(a, { by, note, ackHigh: String(ack) }, b);
+  }
+});
+$('#tamper').onclick = async () => {
+  const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit();
+};
+
+function render() { renderProject(); renderAttempts(); renderAudit(); }
+
+/* ---------- 1. project ---------- */
+function renderProject() {
+  const P = S.state.projects || {};
+  const out = $('#project-out');
+  if (!P.before && !P.after) {
+    out.innerHTML = `<div class="empty">Press <b>Check generated project</b> to run the gate on SpecBlast's output.</div>`;
+    return;
+  }
+  if (!P[S.sel]) S.sel = P.before ? 'before' : 'after';
+  const r = P[S.sel];
+  let html = '';
+  if (P.before && P.after) {
+    const c = (k, lab) => `<div class="cmp ${S.sel === k ? 'sel' : ''}" data-sel="${k}">
+        <div><div class="k">${lab}</div><div class="v" style="color:var(${P[k].verdict === 'BLOCKED' ? '--fail' : '--pass'})">${P[k].errors} errors</div></div>
+        <span class="chip s-${P[k].verdict === 'BLOCKED' ? 'BLOCKED' : 'READY'}">${esc(label(P[k].verdict))}</span></div>`;
+    html += `<div class="compare">${c('before', 'As generated')}<div class="arrow">→</div>${c('after', 'After fixes')}</div>`;
+  }
+  const blocked = r.verdict === 'BLOCKED';
+  html += `<div class="hero ${blocked ? 'bad' : 'wait'}">
+      <div class="word">${blocked ? 'BLOCKED' : 'READY'}</div>
+      <div class="facts"><b>${r.errors} errors · ${r.warnings} warnings</b> in ${r.filesChecked.total} files
+        (${r.filesChecked.java} Java, ${r.filesChecked.kubernetes} Kubernetes).<br>
+        ${blocked ? 'Deployment is stopped. Every error points to a file and line.' : 'No errors. Waiting for a <b>named human</b> to approve, not deployed automatically.'}</div>
+      <div class="exit">exit code<b>${blocked ? 1 : 0}</b>${blocked ? 'Cloud Build stops' : 'build continues'}</div>
+    </div>`;
+  html += `<div class="gates">` + r.gates.map(g => `
+      <div class="gate st-${g.status} ${S.gate === g.id ? 'sel' : ''}" data-gate="${g.id}">
+        <span class="id">${g.id}</span><span class="nm">${esc(g.name)}</span>
+        <span><span class="chip s-${g.status}">${g.status}</span></span>
+        <span class="ct">${g.errors} err · ${g.warnings} warn</span>
+      </div>`).join('') + `</div>`;
+  const all = [];
+  r.gates.forEach(g => g.findings.forEach(f => { if (f.severity !== 'PASS' && (!S.gate || S.gate === g.id)) all.push({ ...f, gate: g.id }); }));
+  const errs = all.filter(f => f.severity === 'ERROR'), warns = all.filter(f => f.severity !== 'ERROR');
+  if (!all.length) html += `<div class="empty">${S.gate ? 'No findings in ' + S.gate + '.' : 'No findings.'}</div>`;
+  if (errs.length) html += `<div class="sub">Errors · must be fixed before deployment</div><div class="findings">` + errs.map((f, i) => finding(f, 'err', 'e' + i)).join('') + `</div>`;
+  if (warns.length) html += `<details class="more" ${errs.length ? '' : 'open'}><summary>${warns.length} warnings for a human to review</summary><div class="findings">` + warns.map((f, i) => finding(f, 'warn', 'w' + i)).join('') + `</div></details>`;
+  if (S.gate) html += `<p><button class="btn ghost" data-gate="">Show all gates</button></p>`;
+  out.innerHTML = html;
+  out.querySelectorAll('[data-sel]').forEach(el => el.onclick = () => { S.sel = el.dataset.sel; S.gate = null; renderProject(); });
+  out.querySelectorAll('[data-gate]').forEach(el => el.onclick = () => { S.gate = el.dataset.gate && S.gate !== el.dataset.gate ? el.dataset.gate : null; renderProject(); });
+  errs.forEach((f, i) => { if (f.file && f.line > 0) loadSnippet(S.sel, f.file, f.line, 'snip-e' + i); });
+}
+function label(v) { return v === 'BLOCKED' ? 'Blocked' : v === 'READY_FOR_HUMAN_APPROVAL' ? 'Ready for human' : v; }
+function finding(f, cls, key) {
+  return `<div class="f ${cls}">
+    <div class="top"><span class="chip s-${f.severity}">${f.severity}</span><span class="rule">${esc(f.gate)} · ${esc(f.rule)}</span><span class="title">${esc(f.title)}</span></div>
+    ${f.file ? `<div class="where">${esc(f.file)}${f.line > 0 ? ':' + f.line : ''}</div>` : ''}
+    <p class="detail">${esc(f.detail)}</p>
+    ${f.fix ? `<p class="fix"><b>Fix:</b> ${esc(f.fix)}</p>` : ''}
+    <div id="snip-${key}"></div></div>`;
+}
+async function loadSnippet(project, file, line, id) {
+  try {
+    const r = await fetch('/api/snippet?' + new URLSearchParams({ project, file, line }));
+    const d = await r.json();
+    const el = document.getElementById(id);
+    if (el && d.lines) el.innerHTML = codeBlock(d.lines);
+  } catch (e) { /* the finding still shows without code */ }
+}
+function codeBlock(lines) {
+  return `<div class="code">` + lines.map(l => `<div class="${l.hit ? 'hit' : ''}"><span class="ln">${l.n}</span><span>${esc(l.text)}</span></div>`).join('') + `</div>`;
+}
+
+/* ---------- 2. attempts ---------- */
+function renderAttempts() {
+  const runs = S.state.runs || [];
+  const byA = {}; runs.forEach(r => byA[r.attempt] = r);
+  const a1 = byA[1], a2 = byA[2], a3 = byA[3];
+  // which step are we on?
+  let cur = 1;
+  if (a1) cur = 2;
+  if (a2) cur = a2.verdict === 'READY_FOR_HUMAN_APPROVAL' ? 3 : 4;
+  if (a3) cur = a3.verdict === 'READY_FOR_HUMAN_APPROVAL' ? 5 : 6;
+  const names = ['Attempt 1', 'Attempt 2', 'Human decision', 'Attempt 3 with new tests', 'Human approval'];
+  $('#steps').innerHTML = names.map((n, i) => {
+    const k = i + 1, cls = k < cur ? 'done' : k === cur ? 'cur' + (k === 3 || k === 5 ? ' h' : '') : '';
+    return `<div class="step ${cls}"><span class="n">${k < cur ? '✓' : k}</span><span class="l">${n}</span></div>`;
+  }).join('');
+  let acts = '';
+  if (cur === 1) acts = `<button class="btn primary" data-act="attempt1">Run attempt 1</button>`;
+  else if (cur === 2) acts = `<button class="btn primary" data-act="attempt2">Run attempt 2</button>`;
+  else if (cur === 4) acts = `<button class="btn primary" data-act="attempt3">Run attempt 3 with golden tests v1.1</button>`;
+  if (runs.length) acts += `<button class="btn ghost" data-act="reset">Start over</button>`;
+  $('#attempt-actions').innerHTML = acts;
+
+  const out = $('#attempt-out');
+  if (!runs.length) {
+    out.innerHTML = `<div class="empty">Press <b>Run attempt 1</b>. The AI writes the component; the gates decide.</div>`;
+    return;
+  }
+  if (!S.attempt || !byA[S.attempt]) S.attempt = runs[runs.length - 1].attempt;
+  const r = byA[S.attempt];
+  let html = `<div class="atabs">` + runs.map(x => `<button class="atab ${x.attempt === S.attempt ? 'on' : ''}" data-att="${x.attempt}">Attempt ${x.attempt} <span class="chip s-${vClass(x.verdict)}">${esc(vLabel(x.verdict))}</span></button>`).join('') + `</div>`;
+  html += attemptDetail(r);
+  out.innerHTML = html;
+  out.querySelectorAll('[data-att]').forEach(el => el.onclick = () => { S.attempt = +el.dataset.att; renderAttempts(); });
+}
+function vClass(v) { return { BLOCKED: 'BLOCKED', READY_FOR_HUMAN_APPROVAL: 'WAITING', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED' }[v] || 'SKIPPED'; }
+function vLabel(v) { return { BLOCKED: 'Blocked', READY_FOR_HUMAN_APPROVAL: 'Waiting for human', APPROVED: 'Approved', REJECTED_BY_HUMAN: 'Rejected' }[v] || v; }
+
+function attemptDetail(r) {
+  const G = {}; r.gates.forEach(g => G[g.id] = g);
+  const v = r.verdict;
+  const heroCls = v === 'BLOCKED' || v === 'REJECTED_BY_HUMAN' ? 'bad' : v === 'APPROVED' ? 'good' : 'wait';
+  const heroText = {
+    BLOCKED: 'A deterministic gate failed. The code never reaches a human.',
+    READY_FOR_HUMAN_APPROVAL: 'Every deterministic gate passed. The AI review is advice only; a named human decides.',
+    REJECTED_BY_HUMAN: 'Rejected by ' + esc(G.G6?.details?.decidedBy) + '. The reason becomes spec-level feedback for the next attempt.',
+    APPROVED: 'Approved by ' + esc(G.G6?.details?.decidedBy) + '. The decision is in the audit log.'
+  }[v] || '';
+  let h = `<div class="hero ${heroCls}"><div class="word">${esc(vLabel(v)).toUpperCase()}</div><div class="facts">${heroText}</div><div class="exit">golden tests<b>v${esc(r.goldenVersion)}</b>${esc(r.inputs?.goldenCount)} cases</div></div>`;
+  h += `<div class="pipe">` + r.gates.map(g => `<div class="pg ${g.id === 'G5' ? 'ai' : g.id === 'G6' ? 'hu' : ''}"><span class="id">${g.id}</span><span class="nm">${esc(g.name)}</span><span><span class="chip s-${g.status === 'SKIPPED' && g.id === 'G6' && v === 'READY_FOR_HUMAN_APPROVAL' ? 'WAITING' : g.status}">${g.id === 'G6' && v === 'READY_FOR_HUMAN_APPROVAL' ? 'waiting' : g.status}</span></span></div>`).join('') + `</div>`;
+  h += `<div class="legend"><span><i style="background:var(--accent)"></i>Decides pass or fail</span><span><i style="background:#d99a2b"></i>AI advises only</span><span><i style="background:var(--human)"></i>A named person</span></div>`;
+
+  if (r.feedbackReceived) h += `<div class="feedback"><b>Feedback the AI author received (rules only, never the hidden tests)</b>${esc(r.feedbackReceived)}</div>`;
+
+  // tests
+  const t = G.G3?.details;
+  if (t && t.aiSuite) {
+    const gFail = t.goldenSuite.total - t.goldenSuite.passed;
+    h += `<div class="sub">G3 · Spec tests</div><div class="grid2">
+      <div class="card big good"><span class="num">${t.aiSuite.passed}/${t.aiSuite.total}</span><span class="cap">The AI's own tests passed</span></div>
+      <div class="card big ${gFail ? 'bad' : 'good'}"><span class="num">${t.goldenSuite.passed}/${t.goldenSuite.total}</span><span class="cap">Human golden tests passed${gFail ? ` · <b>${gFail} failed</b>` : ''}</span></div></div>`;
+    if (t.failures && t.failures.length) {
+      h += `<div class="card" style="margin-top:16px"><table><tr><th>Test</th><th>Rule</th><th>What it checks</th><th>Input</th><th>Expected</th><th>Got</th></tr>` +
+        t.failures.map(f => `<tr><td class="mono">${esc(f.id)}</td><td class="mono">${esc(f.criterion)}</td><td>${esc(f.description)}</td><td class="mono">exp ${esc(f.expiry)} · ${esc(f.transactionDate)}<br>amt ${esc(f.amountMinor)} / bal ${esc(f.availableMinor)}</td><td class="mono">${esc(f.expected)}</td><td class="mono" style="color:var(--fail);font-weight:600">${esc(f.actual)}</td></tr>`).join('') + `</table>
+        <p class="note" style="margin:12px 0 0">Trusting the AI's tests alone, this code would have shipped. Response codes: 00 approved · 51 insufficient funds · 54 expired card.</p></div>`;
+    }
+  }
+  // mutation
+  const m = G.G4?.details;
+  if (m && m.scoreCombined !== undefined) {
+    const bar = (lab, s, col) => `<div style="display:flex;justify-content:space-between"><b>${lab}</b><span class="mono">${pct(s)}</span></div>
+      <div class="bar"><div class="fill" style="width:${s * 100}%;background:${col}"></div><div class="thr" style="left:${m.threshold * 100}%"><span>gate ${Math.round(m.threshold * 100)}%</span></div></div>`;
+    h += `<div class="sub">G4 · Mutation testing: who tests the tests?</div><div class="card">
+      <p class="note" style="margin-top:0">${m.validMutants} small bugs were planted in the code on purpose. A good test suite should notice them.</p>
+      ${bar("AI's tests alone", m.scoreAiOnly, m.scoreAiOnly < m.threshold ? 'var(--fail)' : 'var(--pass)')}
+      ${bar('With human golden tests', m.scoreCombined, 'var(--pass)')}
+      ${m.scoreAiOnly < m.threshold ? `<p class="note" style="margin:0">The AI's tests alone would fail this gate.</p>` : ''}</div>`;
+  }
+  // AI review
+  const a = G.G5?.details;
+  if (a && a.findings) {
+    const src = (r.candidateSource || '').split('\n');
+    h += `<div class="sub">G5 · Separate AI review · advice only</div>`;
+    if (a.reviewSummary) h += `<p class="note">${esc(a.reviewSummary)}</p>`;
+    h += `<div class="findings">` + a.findings.map(f => {
+      const ln = f.line || 0;
+      const lines = ln > 0 ? src.slice(Math.max(0, ln - 3), ln + 2).map((t, i) => ({ n: Math.max(1, ln - 2) + i, text: t, hit: Math.max(1, ln - 2) + i === ln })) : [];
+      const unicode = /isDigit/.test(f.title);
+      return `<div class="f ${f.severity === 'HIGH' ? 'err' : 'warn'}"><div class="top"><span class="chip s-${f.severity}">${f.severity}</span><span class="rule">${esc(f.criterion)}${ln ? ' · line ' + ln : ''}</span><span class="title">${esc(f.title)}</span></div>
+        <p class="detail">${esc(f.detail)}</p>
+        ${unicode ? `<div class="callout"><small>Confirmed by running the code, not by trusting the reviewer:</small>411111111111111３ → 00 (approved)</div>` : ''}
+        ${lines.length ? codeBlock(lines) : ''}</div>`;
+    }).join('') + `</div>`;
+  }
+  // human
+  const g6 = G.G6;
+  if (v === 'READY_FOR_HUMAN_APPROVAL') {
+    const high = a?.highFindings || 0;
+    const defNote = high ? 'Full-width digits must be rejected (AC-01, AC-02). Adding regression tests G-32 and G-33.' : 'Accepted. The null-input gap goes to the spec backlog.';
+    h += `<div class="decision"><h3>G6 · A named human decides</h3>
+      <p class="note" style="margin:0">${high ? `The AI reviewer raised <b>${high} HIGH</b> finding. Approving anyway needs an explicit acknowledgement with your name on it.` : 'All gates passed. Approval is recorded with your name.'}</p>
+      <div class="form"><label for="by">Your name</label><input type="text" id="by" value="Rhosyn Wei">
+      <label for="note">Reason</label><textarea id="note">${esc(defNote)}</textarea>
+      ${high ? `<span></span><label class="ack"><input type="checkbox" id="ack"> I accept the HIGH finding and take responsibility</label>` : ''}
+      <span></span><div class="actions">${high ? `<button class="btn danger" data-act="reject">Reject</button><button class="btn" data-act="approve">Approve anyway</button>` : `<button class="btn human" data-act="approve">Approve</button><button class="btn danger" data-act="reject">Reject</button>`}</div></div>
+      ${S.lastError ? `<div class="errbox">${esc(S.lastError)}</div>` : ''}</div>`;
+  } else if (g6 && g6.details && g6.details.decision) {
+    const d = g6.details;
+    h += `<div class="decision"><h3>G6 · ${d.decision === 'APPROVED' ? 'Approved' : 'Rejected'} by ${esc(d.decidedBy)}</h3><p class="note" style="margin:0">${esc(d.decidedAt)}${d.note ? ' · ' + esc(d.note) : ''}</p></div>`;
+  }
+  return h;
+}
+
+/* ---------- 3. audit ---------- */
+function renderAudit() {
+  const A = S.state.audit || { entries: [] };
+  const out = $('#audit-out');
+  if (!A.entries.length) { out.innerHTML = `<div class="empty">No entries yet. Run the SpecBlast check or an attempt first.</div>`; return; }
+  const ok = !A.problem;
+  let h = `<div class="hero ${ok ? 'good' : 'bad'}"><div class="word">${ok ? 'INTACT' : 'TAMPERED'}</div>
+    <div class="facts"><b>${A.entries.length} entries</b>, ${ok ? 'hash chain verified from the first entry to the last.' : esc(A.problem)}</div>
+    <div class="exit">algorithm<b>SHA-256</b>append-only</div></div>`;
+  if (S.tamper) {
+    const t = S.tamper;
+    h += `<div class="card" style="margin-top:16px;border-left:6px solid var(--fail)">` + (t.message ? esc(t.message) :
+      `<b>Tampering test on a copy of the log</b> (the real log is untouched).<br>Entry ${t.editedEntry}: ${esc(t.change)}.<br>
+       Verification result: <span style="color:var(--fail);font-weight:600">${esc(t.result || 'not detected')}</span>`) + `</div>`;
+  }
+  h += `<div class="sub">The chain</div><div class="chain">` + A.entries.map((e, i) => {
+    const what = e.runId || e.label || e.project || '';
+    const res = e.verdict || (e.event || '').replace('HUMAN_', '');
+    const by = e.decidedBy ? ' · by ' + esc(e.decidedBy) : '';
+    const broken = S.tamper && S.tamper.editedEntry === i + 1;
+    return (i ? `<div class="joint"></div>` : '') + `<div class="link ${broken ? 'broken' : ''}"><span class="idx">#${i + 1}</span>
+      <div><div class="ev">${esc((e.event || '').replace(/_/g, ' ').toLowerCase())} <span class="chip s-${vClass(e.verdict) !== 'SKIPPED' ? vClass(e.verdict) : (e.event === 'HUMAN_APPROVED' ? 'APPROVED' : e.event === 'HUMAN_REJECTED' ? 'REJECTED' : 'INFO')}">${esc(res)}</span></div>
+      <div class="meta">${esc(what)}${by} · ${esc(e.at)}</div></div>
+      <div class="h">prev ${esc((e.prevHash || '').slice(0, 10))}…<br>hash <b>${esc((e.entryHash || '').slice(0, 10))}…</b></div></div>`;
+  }).join('') + `</div>`;
+  out.innerHTML = h;
+}
+
+load();
+</script>
+</body>
+</html>

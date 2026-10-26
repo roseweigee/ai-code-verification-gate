@@ -51,6 +51,7 @@ public final class Main {
             case "audit" -> audit();
             case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
             case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
+            case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
             default -> help();
         }
     }
@@ -74,6 +75,7 @@ public final class Main {
                   audit                 Verify the hash-chained audit log
                   report                Rebuild runs/report.html
                   selftest              Check the engine itself
+                  console [--port N]    Open the web console (http://localhost:8080) for presenting the demo
                 """);
     }
 

@@ -156,6 +156,7 @@ Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 
 ```bash
 ./run.sh selftest                 # 42 checks of the engine itself
+./run.sh console                  # web console at http://localhost:8080: buttons run the real commands
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
 ./run.sh run --attempt 3 --golden 1.1
