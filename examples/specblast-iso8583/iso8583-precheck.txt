@@ -1,0 +1,67 @@
+API 規格書：信用卡授權前檢查服務（ISO 8583 Authorization Pre-check）
+版本：1.0
+擁有者：架構師（人工撰寫）
+
+一、目的
+
+在授權請求（ISO 8583 MTI 0100）送往發卡行主機之前，先由本服務做前檢查，
+把可以在本地直接拒絕的交易擋下來，回傳 ISO 8583 回應碼（Field 39）。
+每一筆檢查都要寫一筆授權檢查紀錄，供稽核使用。
+
+二、API
+
+1. 授權前檢查
+   POST /api/v1/authorizations/precheck
+
+   Request Body（JSON）：
+   | 欄位            | ISO 8583 | 型別    | 必填 | 說明                                  |
+   | pan             | DE 2     | String  | 是   | 主帳號（卡號）                          |
+   | expiry          | DE 14    | String  | 是   | 卡片到期日，格式 YYMM                    |
+   | amountMinor     | DE 4     | Long    | 是   | 交易金額，最小貨幣單位（分）               |
+   | availableMinor  | -        | Long    | 是   | 可用餘額，最小貨幣單位（分）               |
+   | transactionDate | DE 13    | String  | 是   | 交易日期，格式 yyyy-MM-dd               |
+
+   Response Body（JSON，包在 ApiResponse 的 data 裡）：
+   | 欄位          | 型別   | 說明                                 |
+   | responseCode  | String | ISO 8583 回應碼（見第三節）              |
+   | message       | String | 回應碼的說明文字                        |
+
+2. 查詢授權檢查紀錄
+   GET /api/v1/authorizations/precheck/logs?page=0&size=20
+   回傳授權檢查紀錄清單（依建立時間由新到舊）。
+
+三、檢查規則（依序判斷，第一個不符合的規則決定回應碼）
+
+| 規則  | 條件                                                                                      | 回應碼 |
+| AC-01 | pan、expiry 不可為空。expiry 必須剛好 4 個數字，月份（MM）必須是 01 到 12。                     | 30 格式錯誤 |
+| AC-02 | pan 必須是 13 到 19 個數字（只能是 ASCII 數字 0-9），而且要通過 Luhn 檢查碼驗證。                  | 14 卡號無效 |
+| AC-03 | 卡片有效到到期月份的最後一天（含當天）。年份 YY 代表 20YY。只有交易日期晚於到期月份最後一天才算過期。 | 54 卡片過期 |
+| AC-04 | amountMinor 必須大於 0。                                                                  | 13 金額無效 |
+| AC-05 | amountMinor 不可超過 availableMinor。金額剛好等於可用餘額是允許的。                              | 51 餘額不足 |
+| AC-06 | 以上都通過則核准。                                                                         | 00 核准 |
+
+四、資料表：授權檢查紀錄（authorization_logs）
+
+| 欄位            | 型別          | 說明                                   |
+| id              | BIGINT, PK    | 自動遞增                                |
+| masked_pan      | VARCHAR(19)   | 遮罩後的卡號：前 6 碼 + 星號 + 後 4 碼     |
+| amount_minor    | BIGINT        | 交易金額                                |
+| response_code   | CHAR(2)       | 回應碼                                  |
+| created_at      | DATETIME      | 建立時間                                |
+
+五、架構要求
+
+1. 檢查規則必須寫在一個獨立的純 Java 類別：
+   - 類別名稱：AuthorizationRules，放在 {base}.rules package
+   - 方法：public String check(String pan, String expiry, long amountMinor, long availableMinor, java.time.LocalDate transactionDate)
+   - 回傳第三節的回應碼字串，例如 "00"、"54"
+   - 這個類別不可以有任何 Spring 或 Lombok 的 annotation，也不可以依賴資料庫，
+     只能 import java.time 和 java.util，方便單獨做單元測試與驗證
+   - Service 實作負責呼叫 AuthorizationRules，並寫入授權檢查紀錄
+2. 金額一律用 long 的最小貨幣單位，不可以用 double 或 float。
+
+六、資訊安全要求（PCI DSS）
+
+1. 完整卡號（PAN）不可以寫進 log、console、資料庫或任何 API 回應，只能出現遮罩後的卡號。
+2. 錯誤回應不可以包含系統內部的例外訊息或 stack trace。
+3. 程式中不可以寫死任何密碼、金鑰或連線字串。

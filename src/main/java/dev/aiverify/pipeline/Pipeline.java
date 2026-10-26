@@ -45,7 +45,9 @@ public final class Pipeline {
         loadInputs(ctx);
 
         // ---- AI generation: three roles, three separate contexts
-        log("  author        writes the implementation (sees spec + contract, never the tests)");
+        log(ctx.ai instanceof dev.aiverify.ai.SpecBlastClient
+                ? "  author        SpecBlast generated this class from the spec (it never saw the tests)"
+                : "  author        writes the implementation (sees spec + contract, never the tests)");
         Prompts.Prompt ap = Prompts.author(ctx.spec, ctx.contractSource, feedbackForAuthor);
         ctx.candidateSource = Prompts.extractJava(ctx.askAi("author", ap.system(), ap.user()));
         ctx.write("candidate/AuthorizationPrecheckImpl.java", ctx.candidateSource);

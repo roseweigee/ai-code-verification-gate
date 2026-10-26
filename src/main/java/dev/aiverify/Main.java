@@ -51,6 +51,7 @@ public final class Main {
             case "reject" -> decide(opts, false);
             case "verify-project" -> verifyProject(opts);
             case "production" -> production(opts);
+            case "verify-specblast" -> verifySpecBlast(opts);
             case "audit" -> audit();
             case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
             case "notify-test" -> new Notifier(ROOT).send(new Notifier.Message("[AI Gate] Test email",
@@ -77,6 +78,10 @@ public final class Main {
                                         Verify a whole generated project (e.g. SpecBlast output):
                                         Java policy, CodingStyle.md, Kubernetes, pipeline, Maven build.
                                         Exit code 1 when blocked, so a CI step can stop the deploy.
+                  verify-specblast PATH
+                                        A SpecBlast project generated from examples/specblast-iso8583/iso8583-precheck.txt:
+                                        P1-P7 on the whole project, then G1-G6 on its AuthorizationRules class
+                                        (golden tests held out from SpecBlast). Approve with --run specblast/RUN_ID.
                   production [--run ID] After approval: send real-looking transactions to the APPROVED code
                                         (latest approved run by default) and show what it actually does.
                                         Exit code 1 if any transaction covered by the spec is wrong.
@@ -149,6 +154,47 @@ public final class Main {
         Map<String, Object> result = new Pipeline().run(ctx, feedback);
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
         new Notifier(ROOT).send(GateMail.runFinished(result));
+    }
+
+    private static void verifySpecBlast(Map<String, String> opts) throws IOException {
+        String path = opts.get("path");
+        if (path == null) {
+            fail("Usage: verify-specblast PATH   (the SpecBlast project folder)");
+        }
+        Path project = Path.of(path).toAbsolutePath().normalize();
+        System.out.println("== Step 1: the whole project (P1-P7)");
+        Map<String, Object> pr = verifyAndSaveProject(project, "specblast-iso8583", false);
+        System.out.println();
+        System.out.println("== Step 2: SpecBlast's AuthorizationRules through gates G1-G6");
+        Path rulesFile = dev.aiverify.ai.SpecBlastClient.findRules(project);
+        System.out.println("  code under test: " + project.relativize(rulesFile));
+        String candidate = dev.aiverify.ai.SpecBlastClient.wrap(Files.readString(rulesFile));
+        Object commit = pr.get("gitCommit");
+        String origin = project.getFileName() + (commit != null ? " @ " + commit : "");
+        Path sourceNote = project.resolveSibling("SOURCE.txt");
+        if (commit == null && Files.exists(sourceNote)) {
+            origin = Files.readAllLines(sourceNote).get(0).strip();
+        }
+        LlmClient reviewer = null;
+        String key = System.getenv("ANTHROPIC_API_KEY");
+        if (key != null && !key.isBlank()) {
+            String model = System.getenv().getOrDefault("AI_MODEL", "claude-sonnet-5-5");
+            new dev.aiverify.ai.AiPolicy(ROOT).requireApprovedModel(model);
+            reviewer = new ClaudeClient(key, model);
+        }
+        LlmClient ai = new dev.aiverify.ai.SpecBlastClient(candidate, origin, new ReplayClient(ROOT.resolve("replay"), 1),
+                reviewer);
+        String runId = "run-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + "-sb";
+        Path runDir = ROOT.resolve("runs/specblast").resolve(runId);
+        Files.createDirectories(runDir);
+        Files.writeString(runDir.resolve("source.txt"), project.relativize(rulesFile) + "\n" + origin + "\n");
+        RunContext ctx = new RunContext(ROOT, runDir, runId, 1, ai);
+        ctx.goldenVersion = "latest";
+        Map<String, Object> result = new Pipeline().run(ctx, null);
+        new Notifier(ROOT).send(GateMail.runFinished(result));
+        System.out.println();
+        System.out.println("Next: approve or reject with --run specblast/" + runId
+                + ", then ./run.sh production --run specblast/" + runId);
     }
 
     @SuppressWarnings("unchecked")
@@ -262,13 +308,8 @@ public final class Main {
     }
 
     @SuppressWarnings("unchecked")
-    private static void verifyProject(Map<String, String> opts) throws IOException {
-        String path = opts.get("path");
-        if (path == null) {
-            fail("Usage: verify-project PATH [--label TEXT] [--build]");
-        }
-        Map<String, Object> r = dev.aiverify.project.ProjectVerifier.verify(ROOT, Path.of(path), opts.get("label"),
-                opts.containsKey("build"));
+    private static Map<String, Object> verifyAndSaveProject(Path path, String label, boolean build) throws IOException {
+        Map<String, Object> r = dev.aiverify.project.ProjectVerifier.verify(ROOT, path, label, build);
         String slug = String.valueOf(r.get("label")).replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-|-$", "").toLowerCase();
         Path dir = ROOT.resolve("runs/projects/" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                 + "-" + slug);
@@ -290,6 +331,15 @@ public final class Main {
         }
         System.out.println("  verdict: " + r.get("verdict"));
         System.out.println("Report: " + ROOT.relativize(dev.aiverify.report.ProjectReportWriter.write(ROOT)));
+        return r;
+    }
+
+    private static void verifyProject(Map<String, String> opts) throws IOException {
+        String path = opts.get("path");
+        if (path == null) {
+            fail("Usage: verify-project PATH [--label TEXT] [--build]");
+        }
+        Map<String, Object> r = verifyAndSaveProject(Path.of(path), opts.get("label"), opts.containsKey("build"));
         if ("BLOCKED".equals(r.get("verdict"))) {
             System.exit(1);
         }

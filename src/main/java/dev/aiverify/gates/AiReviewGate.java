@@ -45,6 +45,12 @@ public final class AiReviewGate implements Gate {
         try {
             Map<String, Object> parsed = (Map<String, Object>) Json.parseEmbedded(answer);
             details.put("reviewSummary", parsed.get("summary"));
+            if (Boolean.TRUE.equals(parsed.get("skipped"))) {
+                details.put("findings", findings);
+                details.put("highFindings", 0L);
+                return new GateResult(id(), name(), GateResult.Status.SKIPPED, decidedBy(),
+                        String.valueOf(parsed.get("summary")), details, System.currentTimeMillis() - t0);
+            }
             Object f = parsed.get("findings");
             if (f instanceof List<?> l) {
                 for (Object o : l) {

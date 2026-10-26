@@ -31,6 +31,20 @@ import java.util.stream.Stream;
 public final class ConsoleServer {
 
     private static final List<String> PROJECTS = List.of("before", "after");
+    private static final String SPECBLAST_PROJECT = "examples/specblast-iso8583/project";
+
+    /** Adds --run for a run id the console knows (three-attempt runs, or specblast/ runs). Anything else is refused. */
+    private static boolean addRun(List<String> args, Map<String, String> q) {
+        String run = q.getOrDefault("run", "");
+        if (run.isEmpty()) {
+            return false;
+        }
+        if (!run.matches("(specblast/)?run-[0-9]{8}-[0-9]{6}-(a[0-9]+|sb)")) {
+            throw new IllegalArgumentException("unknown run");
+        }
+        args.addAll(List.of("--run", run));
+        return true;
+    }
 
     private final Path root;
     private final byte[] password;
@@ -140,9 +154,13 @@ public final class ConsoleServer {
             case "attempt1" -> args.addAll(List.of("run", "--attempt", "1", "--golden", "1.0"));
             case "attempt2" -> args.addAll(List.of("run", "--attempt", "2", "--golden", "1.0"));
             case "attempt3" -> args.addAll(List.of("run", "--attempt", "3", "--golden", "1.1"));
-            case "reject" -> args.addAll(List.of("reject", "--by", by, "--note", note));
+            case "reject" -> {
+                args.addAll(List.of("reject", "--by", by, "--note", note));
+                addRun(args, q);
+            }
             case "approve" -> {
                 args.addAll(List.of("approve", "--by", by));
+                addRun(args, q);
                 if (!note.isEmpty()) {
                     args.addAll(List.of("--note", note));
                 }
@@ -158,12 +176,12 @@ public final class ConsoleServer {
                 args.addAll(List.of("verify-project", "examples/specblast-product/" + which));
             }
             case "production" -> {
-                String run = q.getOrDefault("run", "");
-                if (!run.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+                args.add("production");
+                if (!addRun(args, q)) {
                     throw new IllegalArgumentException("unknown run");
                 }
-                args.addAll(List.of("production", "--run", run));
             }
+            case "specblast" -> args.addAll(List.of("verify-specblast", SPECBLAST_PROJECT));
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
         }
@@ -244,6 +262,30 @@ public final class ConsoleServer {
         }
         s.put("projects", projects);
 
+        Map<String, Object> sb = null;
+        Path sbDir = runsDir.resolve("specblast");
+        if (Files.isDirectory(sbDir)) {
+            try (Stream<Path> st = Files.list(sbDir)) {
+                Path last = st.filter(p -> p.getFileName().toString().startsWith("run-")).max(Comparator.naturalOrder())
+                        .orElse(null);
+                if (last != null && Files.exists(last.resolve("result.json"))) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> m = (Map<String, Object>) Json.parse(Files.readString(last.resolve("result.json")));
+                    m.put("runPath", "specblast/" + last.getFileName());
+                    Path pc = last.resolve("production-check.json");
+                    if (Files.exists(pc)) {
+                        m.put("productionCheck", Json.parse(Files.readString(pc)));
+                    }
+                    if (Files.exists(last.resolve("source.txt"))) {
+                        m.put("source", Files.readString(last.resolve("source.txt")).strip());
+                    }
+                    sb = m;
+                }
+            }
+        }
+        s.put("specblastRun", sb);
+        s.put("specblastAvailable", Files.isDirectory(root.resolve(SPECBLAST_PROJECT)));
+
         Path log = runsDir.resolve("audit-log.jsonl");
         Map<String, Object> audit = new LinkedHashMap<>();
         List<Object> entries = new ArrayList<>();
@@ -262,10 +304,14 @@ public final class ConsoleServer {
 
     private Map<String, Object> snippet(Map<String, String> q) throws IOException {
         String which = q.getOrDefault("project", "");
-        if (!PROJECTS.contains(which)) {
+        Path base;
+        if ("specblast".equals(which)) {
+            base = root.resolve(SPECBLAST_PROJECT).normalize();
+        } else if (PROJECTS.contains(which)) {
+            base = root.resolve("examples/specblast-product").resolve(which).normalize();
+        } else {
             throw new IllegalArgumentException("unknown project");
         }
-        Path base = root.resolve("examples/specblast-product").resolve(which).normalize();
         Path file = base.resolve(q.getOrDefault("file", "")).normalize();
         if (!file.startsWith(base) || !Files.isRegularFile(file)) {
             throw new IllegalArgumentException("file not found");
