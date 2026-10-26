@@ -181,60 +181,61 @@ td.mono { font-family: var(--mono); font-size: 13px; }
   .hero { grid-template-columns: 1fr; }
   main { padding: 24px 16px 140px; } header { padding: 18px 16px 0; }
 }
+header .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.lang { display: flex; border: 1px solid #2b3a44; border-radius: 8px; overflow: hidden; flex: none; }
+.lang button { background: transparent; border: 0; color: #a9b7c0; padding: 7px 14px; font-size: 14px; font-weight: 600; }
+.lang button.on { background: #e4ebef; color: #142029; }
+html[lang="zh-Hant"] body { font-family: var(--body), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+html[lang="zh-Hant"] .lead h2, html[lang="zh-Hant"] .hero .word, html[lang="zh-Hant"] .brand h1, html[lang="zh-Hant"] .decision h3 { font-family: var(--body), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-weight: 700; }
+html[lang="zh-Hant"] .chip { letter-spacing: 0; }
+.orig { font-size: 13px; color: var(--ink-3); margin: 6px 0 0; }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">
-    <h1>AI Code Verification Gate</h1>
-    <div class="tagline">AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b></div>
+  <div class="top">
+    <div class="brand">
+      <h1 data-i="title"></h1>
+      <div class="tagline" data-i="tagline"></div>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button data-lang="en">EN</button><button data-lang="zh">繁中</button>
+    </div>
   </div>
   <nav>
-    <button data-view="project" class="on"><span class="num">01</span>SpecBlast output</button>
-    <button data-view="attempts"><span class="num">02</span>Three attempts</button>
-    <button data-view="audit"><span class="num">03</span>Audit trail</button>
+    <button data-view="project" class="on"><span class="num">01</span><span data-i="tab1"></span></button>
+    <button data-view="attempts"><span class="num">02</span><span data-i="tab2"></span></button>
+    <button data-view="audit"><span class="num">03</span><span data-i="tab3"></span></button>
   </nav>
 </header>
 
 <main>
-  <!-- 1. SpecBlast -->
   <section class="view on" id="v-project">
     <div class="lead">
-      <div>
-        <h2>Checking a project SpecBlast generated</h2>
-        <p>Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed.</p>
-      </div>
+      <div><h2 data-i="p.h"></h2><p data-i="p.lead"></p></div>
       <div class="actions">
-        <button class="btn primary" data-act="project" data-which="before">Check generated project</button>
-        <button class="btn" data-act="project" data-which="after">Check fixed project</button>
+        <button class="btn primary" data-act="project" data-which="before" data-i="p.before"></button>
+        <button class="btn" data-act="project" data-which="after" data-i="p.after"></button>
       </div>
     </div>
     <div id="project-out"></div>
   </section>
 
-  <!-- 2. Attempts -->
   <section class="view" id="v-attempts">
     <div class="lead">
-      <div>
-        <h2>AI writes a payment component, three times</h2>
-        <p>Card authorization pre-check (ISO 8583). The AI author never sees the tests; the AI test writer never sees the code; human golden tests are held out.</p>
-      </div>
+      <div><h2 data-i="a.h"></h2><p data-i="a.lead"></p></div>
       <div class="actions" id="attempt-actions"></div>
     </div>
     <div class="steps" id="steps"></div>
     <div id="attempt-out"></div>
   </section>
 
-  <!-- 3. Audit -->
   <section class="view" id="v-audit">
     <div class="lead">
-      <div>
-        <h2>Every run and decision, hash-chained</h2>
-        <p>Each entry carries the hash of the one before it. Editing any past entry breaks the chain, so nobody can quietly rewrite history.</p>
-      </div>
+      <div><h2 data-i="u.h"></h2><p data-i="u.lead"></p></div>
       <div class="actions">
-        <button class="btn primary" data-act="audit">Verify audit log</button>
-        <button class="btn danger" id="tamper">Simulate tampering</button>
+        <button class="btn primary" data-act="audit" data-i="u.verify"></button>
+        <button class="btn danger" id="tamper" data-i="u.tamper"></button>
       </div>
     </div>
     <div id="audit-out"></div>
@@ -242,43 +243,233 @@ td.mono { font-family: var(--mono); font-size: 13px; }
 </main>
 
 <div class="cmdbar" id="cmdbar">
-  <div class="row"><span class="cmd" id="cmd"></span><span id="code"></span><button id="toggle-out">Output</button></div>
+  <div class="row"><span class="cmd" id="cmd"></span><span id="code"></span><button id="toggle-out" data-i="output"></button></div>
   <pre id="out"></pre>
 </div>
 
 <script>
-const S = { state: null, sel: 'before', gate: null, attempt: null, busy: false, lastError: '', tamper: null };
+/* ================= translations ================= */
+const T = {
+  en: {
+    title: 'AI Code Verification Gate',
+    tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
+    tab1: 'SpecBlast output', tab2: 'Three attempts', tab3: 'Audit trail', output: 'Output', running: 'Running…',
+    'p.h': 'Checking a project SpecBlast generated',
+    'p.lead': 'Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed.',
+    'p.before': 'Check generated project', 'p.after': 'Check fixed project',
+    'p.empty': 'Press <b>Check generated project</b> to run the gate on SpecBlast\'s output.',
+    'p.asGen': 'As generated', 'p.afterFix': 'After fixes', 'p.errors': n => `${n} errors`,
+    'p.facts': (e, w, f, j, k) => `<b>${e} errors · ${w} warnings</b> in ${f} files (${j} Java, ${k} Kubernetes).`,
+    'p.blocked': 'Deployment is stopped. Every error points to a file and line.',
+    'p.ready': 'No errors. Waiting for a <b>named human</b> to approve, not deployed automatically.',
+    'p.exit': 'exit code', 'p.stops': 'Cloud Build stops', 'p.cont': 'build continues',
+    'p.errHead': 'Errors · must be fixed before deployment', 'p.warns': n => `${n} warnings for a human to review`,
+    'p.noFind': g => g ? `No findings in ${g}.` : 'No findings.', 'p.all': 'Show all gates', fix: 'Fix:',
+    'a.h': 'AI writes a payment component, three times',
+    'a.lead': 'Card authorization pre-check (ISO 8583). The AI author never sees the tests; the AI test writer never sees the code; human golden tests are held out.',
+    'a.steps': ['Attempt 1', 'Attempt 2', 'Human decision', 'Attempt 3 with new tests', 'Human approval'],
+    'a.run1': 'Run attempt 1', 'a.run2': 'Run attempt 2', 'a.run3': 'Run attempt 3 with golden tests v1.1', 'a.reset': 'Start over',
+    'a.empty': 'Press <b>Run attempt 1</b>. The AI writes the component; the gates decide.',
+    'a.attempt': n => `Attempt ${n}`,
+    'a.hero.BLOCKED': () => 'A deterministic gate failed. The code never reaches a human.',
+    'a.hero.READY_FOR_HUMAN_APPROVAL': () => 'Every deterministic gate passed. The AI review is advice only; a named human decides.',
+    'a.hero.REJECTED_BY_HUMAN': by => `Rejected by ${by}. The reason becomes spec-level feedback for the next attempt.`,
+    'a.hero.APPROVED': by => `Approved by ${by}. The decision is in the audit log.`,
+    'a.golden': 'golden tests', 'a.cases': n => `${n} cases`,
+    'a.legend': ['Decides pass or fail', 'AI advises only', 'A named person'],
+    'a.feedback': 'Feedback the AI author received (rules only, never the hidden tests)',
+    'a.g3': 'G3 · Spec tests', 'a.aiTests': "The AI's own tests passed", 'a.goldTests': 'Human golden tests passed', 'a.failed': n => `${n} failed`,
+    'a.cols': ['Test', 'Rule', 'What it checks', 'Input', 'Expected', 'Got'],
+    'a.shipped': "Trusting the AI's tests alone, this code would have shipped. Response codes: 00 approved · 51 insufficient funds · 54 expired card.",
+    'a.g4': 'G4 · Mutation testing: who tests the tests?',
+    'a.planted': n => `${n} small bugs were planted in the code on purpose. A good test suite should notice them.`,
+    'a.aiOnly': "AI's tests alone", 'a.withGold': 'With human golden tests', 'a.gate': p => `gate ${p}%`,
+    'a.aiFail': "The AI's tests alone would fail this gate.",
+    'a.g5': 'G5 · Separate AI review · advice only', 'a.line': n => `line ${n}`,
+    'a.confirmed': 'Confirmed by running the code, not by trusting the reviewer:', 'a.approved00': '411111111111111３ → 00 (approved)',
+    'a.g6': 'G6 · A named human decides',
+    'a.high': n => `The AI reviewer raised <b>${n} HIGH</b> finding. Approving anyway needs an explicit acknowledgement with your name on it.`,
+    'a.allPass': 'All gates passed. Approval is recorded with your name.',
+    'a.name': 'Your name', 'a.reason': 'Reason', 'a.ack': 'I accept the HIGH finding and take responsibility',
+    'a.reject': 'Reject', 'a.approve': 'Approve', 'a.approveAnyway': 'Approve anyway',
+    'a.decided': (d, by) => `G6 · ${d === 'APPROVED' ? 'Approved' : 'Rejected'} by ${by}`,
+    'a.waiting': 'waiting',
+    'u.h': 'Every run and decision, hash-chained',
+    'u.lead': 'Each entry carries the hash of the one before it. Editing any past entry breaks the chain, so nobody can quietly rewrite history.',
+    'u.verify': 'Verify audit log', 'u.tamper': 'Simulate tampering',
+    'u.empty': 'No entries yet. Run the SpecBlast check or an attempt first.',
+    'u.ok': n => `<b>${n} entries</b>, hash chain verified from the first entry to the last.`,
+    'u.bad': (n, p) => `<b>${n} entries</b>. ${p}`,
+    'u.algo': 'algorithm', 'u.append': 'append-only', 'u.chain': 'The chain', 'u.by': 'by',
+    'u.tTitle': '<b>Tampering test on a copy of the log</b> (the real log is untouched).',
+    'u.tEntry': (n, c) => `Entry ${n}: ${c}.`, 'u.tResult': 'Verification result:', 'u.notDetected': 'not detected',
+    'u.change': c => c,
+    words: { BLOCKED: 'BLOCKED', READY: 'READY', READY_FOR_HUMAN_APPROVAL: 'WAITING FOR HUMAN', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED', INTACT: 'INTACT', TAMPERED: 'TAMPERED' },
+    verdictShort: { BLOCKED: 'Blocked', READY_FOR_HUMAN_APPROVAL: 'Waiting for human', APPROVED: 'Approved', REJECTED_BY_HUMAN: 'Rejected', READY: 'Ready for human' },
+    status: {}, events: {}
+  },
+  zh: {
+    title: 'AI 程式碼驗證閘門',
+    tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
+    tab1: 'SpecBlast 產出', tab2: '三次嘗試', tab3: '稽核紀錄', output: '輸出', running: '執行中…',
+    'p.h': '檢查 SpecBlast 產生的專案',
+    'p.lead': '這是 SpecBlast 真實產生的專案（<span class="mono">roseweigee/product @ 25bb253</span>）。部署前，閘門會檢查每個 Java 檔、Kubernetes 設定和 Cloud Build 流程。',
+    'p.before': '檢查產生的專案', 'p.after': '檢查修正後的專案',
+    'p.empty': '按下<b>「檢查產生的專案」</b>，用閘門檢查 SpecBlast 的產出。',
+    'p.asGen': '剛產生時', 'p.afterFix': '修正後', 'p.errors': n => `${n} 個錯誤`,
+    'p.facts': (e, w, f, j, k) => `共檢查 ${f} 個檔案（Java ${j} 個、Kubernetes ${k} 個），<b>${e} 個錯誤、${w} 個警告</b>。`,
+    'p.blocked': '部署已被擋下。每個錯誤都指出檔案和行號。',
+    'p.ready': '沒有錯誤。等待<b>具名的人</b>核准，不會自動部署。',
+    'p.exit': 'exit code', 'p.stops': 'Cloud Build 停止', 'p.cont': '建置繼續',
+    'p.errHead': '錯誤・部署前必須修正', 'p.warns': n => `${n} 個警告，由人判斷是否接受`,
+    'p.noFind': g => g ? `${g} 沒有發現問題。` : '沒有發現問題。', 'p.all': '顯示全部關卡', fix: '修正方式：',
+    'a.h': 'AI 撰寫支付元件，共三次嘗試',
+    'a.lead': '刷卡授權前檢查（ISO 8583）。寫程式的 AI 看不到測試，寫測試的 AI 看不到程式碼，人寫的黃金測試事先藏起來。',
+    'a.steps': ['第一次嘗試', '第二次嘗試', '人工決定', '加入新測試後第三次嘗試', '人工核准'],
+    'a.run1': '執行第一次嘗試', 'a.run2': '執行第二次嘗試', 'a.run3': '用黃金測試 v1.1 執行第三次嘗試', 'a.reset': '重新開始',
+    'a.empty': '按下<b>「執行第一次嘗試」</b>。AI 撰寫元件，由關卡判定對錯。',
+    'a.attempt': n => `第 ${n} 次`,
+    'a.hero.BLOCKED': () => '確定性關卡沒有通過，程式碼不會送到人的手上。',
+    'a.hero.READY_FOR_HUMAN_APPROVAL': () => '所有確定性關卡都通過了。AI 審查只是建議，由具名的人決定。',
+    'a.hero.REJECTED_BY_HUMAN': by => `已由 ${by} 退回。退回原因會變成下一次嘗試的規格層級回饋。`,
+    'a.hero.APPROVED': by => `已由 ${by} 核准，這個決定已寫入稽核紀錄。`,
+    'a.golden': '黃金測試', 'a.cases': n => `${n} 個案例`,
+    'a.legend': ['判定通過或失敗', 'AI 只提供建議', '具名的人'],
+    'a.feedback': 'AI 撰寫者收到的回饋（只講規則，不透露隱藏的測試）',
+    'a.g3': 'G3・規格測試', 'a.aiTests': 'AI 自己寫的測試通過', 'a.goldTests': '人寫的黃金測試通過', 'a.failed': n => `${n} 個失敗`,
+    'a.cols': ['測試', '規則', '檢查內容', '輸入', '應該回傳', '實際回傳'],
+    'a.shipped': '如果只相信 AI 自己的測試，這段程式就上線了。回應碼：00 核准・51 餘額不足・54 卡片過期。',
+    'a.g4': 'G4・突變測試：誰來測試這些測試？',
+    'a.planted': n => `故意在程式裡埋了 ${n} 個小 bug，好的測試應該要抓得到。`,
+    'a.aiOnly': '只用 AI 的測試', 'a.withGold': '加上人寫的黃金測試', 'a.gate': p => `門檻 ${p}%`,
+    'a.aiFail': '只靠 AI 的測試，過不了這道關卡。',
+    'a.g5': 'G5・獨立的 AI 審查・只提供建議', 'a.line': n => `第 ${n} 行`,
+    'a.confirmed': '實際執行程式確認，不是直接相信審查者：', 'a.approved00': '411111111111111３ → 00（被核准）',
+    'a.g6': 'G6・由具名的人決定',
+    'a.high': n => `AI 審查者提出 <b>${n} 個 HIGH</b> 問題。如果仍要核准，必須明確表示接受，並留下你的名字。`,
+    'a.allPass': '所有關卡都通過了。核准會連同你的名字一起記錄。',
+    'a.name': '你的名字', 'a.reason': '原因', 'a.ack': '我接受這個 HIGH 問題，並承擔責任',
+    'a.reject': '退回', 'a.approve': '核准', 'a.approveAnyway': '仍要核准',
+    'a.decided': (d, by) => `G6・已由 ${by} ${d === 'APPROVED' ? '核准' : '退回'}`,
+    'a.waiting': '等待中',
+    'u.h': '每次執行和決定，都寫入雜湊鏈',
+    'u.lead': '每筆紀錄都包含前一筆的雜湊值。改動任何一筆過去的紀錄，整條鏈就會斷掉，沒有人能偷偷改寫歷史。',
+    'u.verify': '驗證稽核紀錄', 'u.tamper': '模擬竄改',
+    'u.empty': '還沒有紀錄。請先檢查 SpecBlast 專案或執行一次嘗試。',
+    'u.ok': n => `<b>共 ${n} 筆紀錄</b>，雜湊鏈從第一筆到最後一筆都驗證通過。`,
+    'u.bad': (n, p) => `<b>共 ${n} 筆紀錄</b>。${p}`,
+    'u.algo': '演算法', 'u.append': '只能新增', 'u.chain': '紀錄鏈', 'u.by': '決定者',
+    'u.tTitle': '<b>在稽核紀錄的副本上做竄改測試</b>（真正的紀錄不會被動到）。',
+    'u.tEntry': (n, c) => `第 ${n} 筆：${c}。`, 'u.tResult': '驗證結果：', 'u.notDetected': '沒有抓到',
+    'u.change': c => ({ 'verdict BLOCKED changed to APPROVED': '把判定結果從 BLOCKED 改成 APPROVED', 'verdict REJECTED_BY_HUMAN changed to APPROVED': '把判定結果從 REJECTED_BY_HUMAN 改成 APPROVED', 'timestamp changed': '修改了時間' }[c] || c),
+    words: { BLOCKED: '已擋下', READY: '可送人工', READY_FOR_HUMAN_APPROVAL: '等待人工決定', APPROVED: '已核准', REJECTED_BY_HUMAN: '已退回', INTACT: '完整', TAMPERED: '遭竄改' },
+    verdictShort: { BLOCKED: '已擋下', READY_FOR_HUMAN_APPROVAL: '等待人工', APPROVED: '已核准', REJECTED_BY_HUMAN: '已退回', READY: '可送人工' },
+    status: { PASSED: '通過', FAILED: '失敗', WARNING: '警告', SKIPPED: '略過', ERROR: '錯誤', WARN: '警告', HIGH: '高', MEDIUM: '中', LOW: '低', INFO: '資訊' },
+    events: { PROJECT_VERIFIED: '專案驗證', RUN_COMPLETED: '執行完成', HUMAN_APPROVED: '人工核准', HUMAN_REJECTED: '人工退回' }
+  }
+};
+
+/* Chinese text for everything the engine can report in this demo. Unknown items fall back to English. */
+const ZH = {
+  gates: { P1: 'Java 安全政策', P2: 'CodingStyle.md 合約', P3: 'Kubernetes 設定', P4: '交付流程', P5: '測試與程式品質', P6: '供應鏈', P7: 'Maven 建置與測試',
+           G1: '政策檢查', G2: '編譯與介面合約', G3: '規格測試', G4: '突變測試', G5: '獨立的 AI 審查', G6: '人工核准' },
+  rules: {
+    'J-01': { title: '內部錯誤細節回傳給 API 客戶端', detail: '資料庫或框架的錯誤訊息被直接放進回給客戶端的例外，呼叫者可以看到系統內部細節（CWE-209）。', fix: '在伺服器端記錄原因，對外只回傳固定、安全的訊息和錯誤碼。' },
+    'J-05': { title: '發生錯誤卻回傳 HTTP 200', detail: '例外處理器在出錯時仍回傳 200，閘道、監控和客戶端的重試機制都看不出呼叫失敗。', fix: '業務錯誤回 4xx、系統錯誤回 5xx，回應內容維持 ApiResponse 格式。' },
+    'J-06': { title: 'Service 攔截所有例外', detail: 'catch (Exception) 會連程式錯誤一起包起來，把真正的 bug 藏住。', fix: '讓非預期的例外交給全域處理器，只攔截你確實會處理的例外。' },
+    'K-03': { title: f => `${(f.title.match(/in (\w+)$/) || [])[1] || ''} 環境使用可變的映像檔標籤`, detail: f => `容器使用 ${(f.detail.match(/uses (\S+?)\. /) || [])[1] || '某個映像檔'}。同一個標籤可能指向不同的建置版本，無法確定、也無法準確回復正在執行的版本。`, fix: '部署以 commit SHA 標記的映像檔（Cloud Build 本來就會建置 :$COMMIT_SHA）。' },
+    'K-04': { title: 'Kubernetes 沒有強制以非 root 執行', detail: '容器沒有設定 securityContext.runAsNonRoot。Dockerfile 雖然切換成非 root 使用者，但映像檔一改，叢集就不會阻擋。', fix: '加上 securityContext: runAsNonRoot: true 和 allowPrivilegeEscalation: false。' },
+    'K-07': { title: 'Secret 設定檔放在程式庫裡', detail: '目前的密碼值都是佔位字串，所以是安全的；但之後可能有人填入真實值並提交。', fix: '在流程中從 Secret Manager 建立 Secret，不要把這個檔案放在 Git 裡。' },
+    'B-01': { title: '沒有驗證產生的程式就部署', detail: '流程直接部署到叢集，前面沒有任何步驟執行測試或驗證閘門，AI 產生的程式碼未經檢查就進入環境。', fix: '在 docker build 之前加入驗證步驟：執行測試和驗證閘門，任何一個失敗就停止建置。' },
+    'B-03': { title: '建置映像檔時跳過測試', detail: 'Dockerfile 用 -DskipTests 建置，流程也沒有獨立的測試步驟，所以產生的測試從來沒有執行過。', fix: '等流程有獨立執行 mvn verify 的步驟後，Dockerfile 才保留 -DskipTests。' },
+    'B-04': { title: '設定檔使用流程從未建置的映像檔', detail: f => { const m = f.detail.match(/runs (\S+?), but Cloud Build pushes only to \[(.+?)\]/); return m ? `這個設定檔執行的是 ${m[1]}，但 Cloud Build 只推送到 ${m[2]}。部署時會拉到舊的映像檔，或因 ImagePullBackOff 失敗。` : '部署時會拉到舊的映像檔，或因 ImagePullBackOff 失敗。'; }, fix: '讓每個環境都指向流程實際推送的映像檔庫。' },
+    'D-03': { title: '沒有相依套件漏洞掃描', detail: '函式庫裡已知的 CVE 漏洞，能通過所有程式碼檢查。', fix: '在建置映像檔前加入 OWASP Dependency-Check（CVSS 7 以上就失敗）。' },
+    'D-04': { title: '沒有容器映像檔掃描', detail: '基礎映像檔可能帶有 Java 程式碼看不出來的漏洞。', fix: '掃描推送後的映像檔（例如用 Trivy），出現 HIGH 或 CRITICAL 就停止。' },
+    'Q-01': { title: '沒有測試覆蓋率門檻', detail: '沒有 JaCoCo 的 check 目標，即使測試幾乎沒覆蓋到程式，mvn verify 也會通過。', fix: '加入 jacoco-maven-plugin，設定 prepare-agent、report 和最低行覆蓋率的 check 目標。' },
+    'Q-02': { title: '沒有 SonarQube 品質閘門', detail: '部署前沒有任何靜態分析去檢查 bug、漏洞和程式碼異味。', fix: '在建置映像檔前執行 mvn sonar:sonar，並加上 -Dsonar.qualitygate.wait=true。' }
+  },
+  tests: { 'G-14': '卡片在到期當月仍然有效', 'G-15': '到期月的最後一天仍然有效', 'G-18': '平年二月：28 日仍然有效', 'G-19': '閏年二月：29 日仍然有效', 'G-23': '最小的有效金額（1 分）', 'G-25': '金額等於可用餘額時應該核准' },
+  review: [
+    { match: /isDigit accepts non-ASCII/, title: 'Character.isDigit 會接受非 ASCII 的數字', detail: 'allDigits() 使用 Character.isDigit，它對任何 Unicode 數字都回傳 true，例如全形數字（U+FF10 到 U+FF19）或阿拉伯－印度數字。之後 passesLuhn() 用 charAt(i) - \'0\' 計算，對這些字元會得到無意義的值，所以含有這種數字的卡號可能碰巧通過 Luhn 檢查而被核准，但 AC-02 規定只能是數字。AC-01 的到期日也用同樣的檢查，而 Integer.parseInt 同樣接受 Unicode 數字，所以全形的到期日也會被接受。修正方式：只接受 \'0\' 到 \'9\'。' },
+    { match: /Null transactionDate/, title: '交易日期或請求為 null 時會拋出 NullPointerException', detail: 'check() 在第 19 行使用 request、在第 39 行使用 transactionDate，都沒有檢查 null。規格沒有說明這種情況該怎麼處理。建議先釐清規格，例如回傳 30 格式錯誤，而不是在授權流程中拋出例外。' }
+  ],
+  summaries: [
+    { match: /^The AC-03 and AC-05 boundaries/, text: 'AC-03 和 AC-05 的邊界現在符合規格了。還剩一個輸入驗證的缺陷：數字檢查會接受非 ASCII 的 Unicode 數字，所以 AC-01 和 AC-02 可以被繞過。另外有一個規格沒有寫到的穩健性缺口。' },
+    { match: /^The implementation follows AC-01 to AC-06/, text: '實作符合 AC-01 到 AC-06 和非功能需求，數字檢查現在只接受 ASCII 的 0 到 9。還剩一個規格沒有寫到的穩健性缺口。' }
+  ],
+  feedback: [
+    { match: /^Your implementation does not follow two boundary rules/, text: '你的實作沒有遵守規格中的兩條邊界規則。請重讀 AC-03：卡片在到期月的最後一天之前都有效，包含整個到期月。請重讀 AC-05：金額等於可用餘額時必須核准，只有金額大於餘額才算餘額不足。其他行為維持不變。' }
+  ],
+  errors: [
+    { match: /raised (\d+) HIGH finding/, text: m => `AI 審查者提出了 ${m[1]} 個 HIGH 問題，系統拒絕核准。請先勾選「我接受這個 HIGH 問題，並承擔責任」，或改按退回。` },
+    { match: /A rejection needs a reason/, text: () => '退回必須寫明原因，這個原因會成為下一次嘗試的回饋。' },
+    { match: /A named human must decide/, text: () => '必須填寫名字，由具名的人做決定。' }
+  ],
+  audit: [{ match: /Entry (\d+): content does not match its hash/, text: m => `第 ${m[1]} 筆紀錄的內容和它的雜湊值不符（紀錄被修改過）。` }]
+};
+
+/* ================= state ================= */
+const S = { state: null, sel: 'before', gate: null, attempt: null, busy: false, lastError: '', tamper: null, lang: 'en' };
+try { S.lang = localStorage.getItem('gate-lang') === 'zh' ? 'zh' : 'en'; } catch (e) { /* default English */ }
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = x => (Math.round(x * 1000) / 10).toFixed(1) + '%';
+const zh = () => S.lang === 'zh';
+function t(key, ...args) { const v = T[S.lang][key] ?? T.en[key]; return typeof v === 'function' ? v(...args) : v; }
+const st = s => esc(T[S.lang].status[s] || s);
+const word = v => esc(T[S.lang].words[v] || v);
+const vShort = v => esc(T[S.lang].verdictShort[v] || v);
+const gateName = g => esc(zh() && ZH.gates[g.id] ? ZH.gates[g.id] : g.name);
+function pick(list, text) { for (const x of list) { const m = String(text || '').match(x.match); if (m) return { x, m }; } return null; }
+function ruleText(f, field) {
+  if (!zh()) return f[field];
+  const r = ZH.rules[f.rule];
+  if (!r || !r[field]) return f[field];
+  return typeof r[field] === 'function' ? r[field](f) : r[field];
+}
+function trText(list, text) {
+  if (!zh()) return text;
+  const p = pick(list, text);
+  return p ? (typeof p.x.text === 'function' ? p.x.text(p.m) : p.x.text) : text;
+}
 
+function applyStatic() {
+  document.documentElement.lang = zh() ? 'zh-Hant' : 'en';
+  document.title = t('title');
+  document.querySelectorAll('[data-i]').forEach(el => { el.innerHTML = t(el.dataset.i); });
+  document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === S.lang));
+}
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
+  S.lang = b.dataset.lang;
+  try { localStorage.setItem('gate-lang', S.lang); } catch (e) { /* not saved */ }
+  applyStatic(); if (S.state) render();
+});
+
+/* ================= actions ================= */
 async function load() {
   const r = await fetch('/api/state');
   S.state = await r.json();
   render();
 }
-
 async function act(name, params = {}, btn) {
   if (S.busy) return;
   S.busy = true; S.lastError = '';
-  const label = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Running…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${t('running')}`; }
   try {
-    const q = new URLSearchParams({ name, ...params });
-    const r = await fetch('/api/action?' + q, { method: 'POST' });
+    const r = await fetch('/api/action?' + new URLSearchParams({ name, ...params }), { method: 'POST' });
     const res = await r.json();
-    if (res.error) { S.lastError = res.error; }
+    if (res.error) S.lastError = res.error;
     else {
       showCmd(res);
-      if (name !== 'project' && name !== 'audit' && name !== 'reset' && res.exitCode !== 0) S.lastError = res.output.trim();
+      if (!['project', 'audit', 'reset'].includes(name) && res.exitCode !== 0) S.lastError = res.output.trim();
     }
   } finally {
     S.busy = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    if (btn) btn.disabled = false;
+    applyStatic();
   }
   await load();
 }
-
 function showCmd(res) {
   $('#cmdbar').classList.add('on');
   $('#cmd').textContent = res.command;
@@ -286,7 +477,6 @@ function showCmd(res) {
   $('#out').textContent = res.output;
 }
 $('#toggle-out').onclick = () => $('#cmdbar').classList.toggle('open');
-
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + b.dataset.view));
@@ -297,76 +487,64 @@ document.addEventListener('click', e => {
   const a = b.dataset.act;
   if (a === 'project') { S.sel = b.dataset.which; S.gate = null; act('project', { which: b.dataset.which }, b); }
   else if (a === 'audit') { S.tamper = null; act('audit', {}, b); }
-  else if (a === 'reset') { S.attempt = null; act('reset', {}, b); }
+  else if (a === 'reset') { S.attempt = null; S.tamper = null; act('reset', {}, b); }
   else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
   else if (a === 'reject' || a === 'approve') {
-    const by = $('#by').value.trim(), note = $('#note').value.trim();
     const ack = $('#ack') ? $('#ack').checked : false;
-    act(a, { by, note, ackHigh: String(ack) }, b);
+    act(a, { by: $('#by').value.trim(), note: $('#note').value.trim(), ackHigh: String(ack) }, b);
   }
 });
-$('#tamper').onclick = async () => {
-  const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit();
-};
+$('#tamper').onclick = async () => { const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit(); };
 
 function render() { renderProject(); renderAttempts(); renderAudit(); }
 
-/* ---------- 1. project ---------- */
+/* ================= 1. SpecBlast ================= */
 function renderProject() {
   const P = S.state.projects || {};
   const out = $('#project-out');
-  if (!P.before && !P.after) {
-    out.innerHTML = `<div class="empty">Press <b>Check generated project</b> to run the gate on SpecBlast's output.</div>`;
-    return;
-  }
+  if (!P.before && !P.after) { out.innerHTML = `<div class="empty">${t('p.empty')}</div>`; return; }
   if (!P[S.sel]) S.sel = P.before ? 'before' : 'after';
   const r = P[S.sel];
   let html = '';
   if (P.before && P.after) {
-    const c = (k, lab) => `<div class="cmp ${S.sel === k ? 'sel' : ''}" data-sel="${k}">
-        <div><div class="k">${lab}</div><div class="v" style="color:var(${P[k].verdict === 'BLOCKED' ? '--fail' : '--pass'})">${P[k].errors} errors</div></div>
-        <span class="chip s-${P[k].verdict === 'BLOCKED' ? 'BLOCKED' : 'READY'}">${esc(label(P[k].verdict))}</span></div>`;
-    html += `<div class="compare">${c('before', 'As generated')}<div class="arrow">→</div>${c('after', 'After fixes')}</div>`;
+    const c = (k, lab) => { const bad = P[k].verdict === 'BLOCKED'; return `<div class="cmp ${S.sel === k ? 'sel' : ''}" data-sel="${k}">
+        <div><div class="k">${lab}</div><div class="v" style="color:var(${bad ? '--fail' : '--pass'})">${t('p.errors', P[k].errors)}</div></div>
+        <span class="chip s-${bad ? 'BLOCKED' : 'READY'}">${vShort(bad ? 'BLOCKED' : 'READY')}</span></div>`; };
+    html += `<div class="compare">${c('before', t('p.asGen'))}<div class="arrow">→</div>${c('after', t('p.afterFix'))}</div>`;
   }
   const blocked = r.verdict === 'BLOCKED';
   html += `<div class="hero ${blocked ? 'bad' : 'wait'}">
-      <div class="word">${blocked ? 'BLOCKED' : 'READY'}</div>
-      <div class="facts"><b>${r.errors} errors · ${r.warnings} warnings</b> in ${r.filesChecked.total} files
-        (${r.filesChecked.java} Java, ${r.filesChecked.kubernetes} Kubernetes).<br>
-        ${blocked ? 'Deployment is stopped. Every error points to a file and line.' : 'No errors. Waiting for a <b>named human</b> to approve, not deployed automatically.'}</div>
-      <div class="exit">exit code<b>${blocked ? 1 : 0}</b>${blocked ? 'Cloud Build stops' : 'build continues'}</div>
-    </div>`;
+      <div class="word">${word(blocked ? 'BLOCKED' : 'READY')}</div>
+      <div class="facts">${t('p.facts', r.errors, r.warnings, r.filesChecked.total, r.filesChecked.java, r.filesChecked.kubernetes)}<br>${t(blocked ? 'p.blocked' : 'p.ready')}</div>
+      <div class="exit">${t('p.exit')}<b>${blocked ? 1 : 0}</b>${t(blocked ? 'p.stops' : 'p.cont')}</div></div>`;
   html += `<div class="gates">` + r.gates.map(g => `
       <div class="gate st-${g.status} ${S.gate === g.id ? 'sel' : ''}" data-gate="${g.id}">
-        <span class="id">${g.id}</span><span class="nm">${esc(g.name)}</span>
-        <span><span class="chip s-${g.status}">${g.status}</span></span>
-        <span class="ct">${g.errors} err · ${g.warnings} warn</span>
-      </div>`).join('') + `</div>`;
+        <span class="id">${g.id}</span><span class="nm">${gateName(g)}</span>
+        <span><span class="chip s-${g.status}">${st(g.status)}</span></span>
+        <span class="ct">${g.errors} err · ${g.warnings} warn</span></div>`).join('') + `</div>`;
   const all = [];
   r.gates.forEach(g => g.findings.forEach(f => { if (f.severity !== 'PASS' && (!S.gate || S.gate === g.id)) all.push({ ...f, gate: g.id }); }));
   const errs = all.filter(f => f.severity === 'ERROR'), warns = all.filter(f => f.severity !== 'ERROR');
-  if (!all.length) html += `<div class="empty">${S.gate ? 'No findings in ' + S.gate + '.' : 'No findings.'}</div>`;
-  if (errs.length) html += `<div class="sub">Errors · must be fixed before deployment</div><div class="findings">` + errs.map((f, i) => finding(f, 'err', 'e' + i)).join('') + `</div>`;
-  if (warns.length) html += `<details class="more" ${errs.length ? '' : 'open'}><summary>${warns.length} warnings for a human to review</summary><div class="findings">` + warns.map((f, i) => finding(f, 'warn', 'w' + i)).join('') + `</div></details>`;
-  if (S.gate) html += `<p><button class="btn ghost" data-gate="">Show all gates</button></p>`;
+  if (!all.length) html += `<div class="empty">${t('p.noFind', S.gate)}</div>`;
+  if (errs.length) html += `<div class="sub">${t('p.errHead')}</div><div class="findings">` + errs.map((f, i) => finding(f, 'err', 'e' + i)).join('') + `</div>`;
+  if (warns.length) html += `<details class="more" ${errs.length ? '' : 'open'}><summary>${t('p.warns', warns.length)}</summary><div class="findings">` + warns.map((f, i) => finding(f, 'warn', 'w' + i)).join('') + `</div></details>`;
+  if (S.gate) html += `<p><button class="btn ghost" data-gate="">${t('p.all')}</button></p>`;
   out.innerHTML = html;
   out.querySelectorAll('[data-sel]').forEach(el => el.onclick = () => { S.sel = el.dataset.sel; S.gate = null; renderProject(); });
   out.querySelectorAll('[data-gate]').forEach(el => el.onclick = () => { S.gate = el.dataset.gate && S.gate !== el.dataset.gate ? el.dataset.gate : null; renderProject(); });
   errs.forEach((f, i) => { if (f.file && f.line > 0) loadSnippet(S.sel, f.file, f.line, 'snip-e' + i); });
 }
-function label(v) { return v === 'BLOCKED' ? 'Blocked' : v === 'READY_FOR_HUMAN_APPROVAL' ? 'Ready for human' : v; }
 function finding(f, cls, key) {
   return `<div class="f ${cls}">
-    <div class="top"><span class="chip s-${f.severity}">${f.severity}</span><span class="rule">${esc(f.gate)} · ${esc(f.rule)}</span><span class="title">${esc(f.title)}</span></div>
+    <div class="top"><span class="chip s-${f.severity}">${st(f.severity)}</span><span class="rule">${esc(f.gate)} · ${esc(f.rule)}</span><span class="title">${esc(ruleText(f, 'title'))}</span></div>
     ${f.file ? `<div class="where">${esc(f.file)}${f.line > 0 ? ':' + f.line : ''}</div>` : ''}
-    <p class="detail">${esc(f.detail)}</p>
-    ${f.fix ? `<p class="fix"><b>Fix:</b> ${esc(f.fix)}</p>` : ''}
+    <p class="detail">${esc(ruleText(f, 'detail'))}</p>
+    ${f.fix ? `<p class="fix"><b>${t('fix')}</b> ${esc(ruleText(f, 'fix'))}</p>` : ''}
     <div id="snip-${key}"></div></div>`;
 }
 async function loadSnippet(project, file, line, id) {
   try {
-    const r = await fetch('/api/snippet?' + new URLSearchParams({ project, file, line }));
-    const d = await r.json();
+    const d = await (await fetch('/api/snippet?' + new URLSearchParams({ project, file, line }))).json();
     const el = document.getElementById(id);
     if (el && d.lines) el.innerHTML = codeBlock(d.lines);
   } catch (e) { /* the finding still shows without code */ }
@@ -375,146 +553,139 @@ function codeBlock(lines) {
   return `<div class="code">` + lines.map(l => `<div class="${l.hit ? 'hit' : ''}"><span class="ln">${l.n}</span><span>${esc(l.text)}</span></div>`).join('') + `</div>`;
 }
 
-/* ---------- 2. attempts ---------- */
+/* ================= 2. attempts ================= */
+function vClass(v) { return { BLOCKED: 'BLOCKED', READY_FOR_HUMAN_APPROVAL: 'WAITING', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED' }[v] || 'SKIPPED'; }
 function renderAttempts() {
   const runs = S.state.runs || [];
   const byA = {}; runs.forEach(r => byA[r.attempt] = r);
   const a1 = byA[1], a2 = byA[2], a3 = byA[3];
-  // which step are we on?
   let cur = 1;
   if (a1) cur = 2;
   if (a2) cur = a2.verdict === 'READY_FOR_HUMAN_APPROVAL' ? 3 : 4;
   if (a3) cur = a3.verdict === 'READY_FOR_HUMAN_APPROVAL' ? 5 : 6;
-  const names = ['Attempt 1', 'Attempt 2', 'Human decision', 'Attempt 3 with new tests', 'Human approval'];
-  $('#steps').innerHTML = names.map((n, i) => {
+  $('#steps').innerHTML = t('a.steps').map((n, i) => {
     const k = i + 1, cls = k < cur ? 'done' : k === cur ? 'cur' + (k === 3 || k === 5 ? ' h' : '') : '';
     return `<div class="step ${cls}"><span class="n">${k < cur ? '✓' : k}</span><span class="l">${n}</span></div>`;
   }).join('');
   let acts = '';
-  if (cur === 1) acts = `<button class="btn primary" data-act="attempt1">Run attempt 1</button>`;
-  else if (cur === 2) acts = `<button class="btn primary" data-act="attempt2">Run attempt 2</button>`;
-  else if (cur === 4) acts = `<button class="btn primary" data-act="attempt3">Run attempt 3 with golden tests v1.1</button>`;
-  if (runs.length) acts += `<button class="btn ghost" data-act="reset">Start over</button>`;
+  if (cur === 1) acts = `<button class="btn primary" data-act="attempt1">${t('a.run1')}</button>`;
+  else if (cur === 2) acts = `<button class="btn primary" data-act="attempt2">${t('a.run2')}</button>`;
+  else if (cur === 4) acts = `<button class="btn primary" data-act="attempt3">${t('a.run3')}</button>`;
+  if (runs.length) acts += `<button class="btn ghost" data-act="reset">${t('a.reset')}</button>`;
   $('#attempt-actions').innerHTML = acts;
 
   const out = $('#attempt-out');
-  if (!runs.length) {
-    out.innerHTML = `<div class="empty">Press <b>Run attempt 1</b>. The AI writes the component; the gates decide.</div>`;
-    return;
-  }
+  if (!runs.length) { out.innerHTML = `<div class="empty">${t('a.empty')}</div>`; return; }
   if (!S.attempt || !byA[S.attempt]) S.attempt = runs[runs.length - 1].attempt;
-  const r = byA[S.attempt];
-  let html = `<div class="atabs">` + runs.map(x => `<button class="atab ${x.attempt === S.attempt ? 'on' : ''}" data-att="${x.attempt}">Attempt ${x.attempt} <span class="chip s-${vClass(x.verdict)}">${esc(vLabel(x.verdict))}</span></button>`).join('') + `</div>`;
-  html += attemptDetail(r);
+  let html = `<div class="atabs">` + runs.map(x => `<button class="atab ${x.attempt === S.attempt ? 'on' : ''}" data-att="${x.attempt}">${t('a.attempt', x.attempt)} <span class="chip s-${vClass(x.verdict)}">${vShort(x.verdict)}</span></button>`).join('') + `</div>`;
+  html += attemptDetail(byA[S.attempt]);
   out.innerHTML = html;
   out.querySelectorAll('[data-att]').forEach(el => el.onclick = () => { S.attempt = +el.dataset.att; renderAttempts(); });
 }
-function vClass(v) { return { BLOCKED: 'BLOCKED', READY_FOR_HUMAN_APPROVAL: 'WAITING', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED' }[v] || 'SKIPPED'; }
-function vLabel(v) { return { BLOCKED: 'Blocked', READY_FOR_HUMAN_APPROVAL: 'Waiting for human', APPROVED: 'Approved', REJECTED_BY_HUMAN: 'Rejected' }[v] || v; }
-
 function attemptDetail(r) {
   const G = {}; r.gates.forEach(g => G[g.id] = g);
-  const v = r.verdict;
+  const v = r.verdict, by = esc(G.G6?.details?.decidedBy);
   const heroCls = v === 'BLOCKED' || v === 'REJECTED_BY_HUMAN' ? 'bad' : v === 'APPROVED' ? 'good' : 'wait';
-  const heroText = {
-    BLOCKED: 'A deterministic gate failed. The code never reaches a human.',
-    READY_FOR_HUMAN_APPROVAL: 'Every deterministic gate passed. The AI review is advice only; a named human decides.',
-    REJECTED_BY_HUMAN: 'Rejected by ' + esc(G.G6?.details?.decidedBy) + '. The reason becomes spec-level feedback for the next attempt.',
-    APPROVED: 'Approved by ' + esc(G.G6?.details?.decidedBy) + '. The decision is in the audit log.'
-  }[v] || '';
-  let h = `<div class="hero ${heroCls}"><div class="word">${esc(vLabel(v)).toUpperCase()}</div><div class="facts">${heroText}</div><div class="exit">golden tests<b>v${esc(r.goldenVersion)}</b>${esc(r.inputs?.goldenCount)} cases</div></div>`;
-  h += `<div class="pipe">` + r.gates.map(g => `<div class="pg ${g.id === 'G5' ? 'ai' : g.id === 'G6' ? 'hu' : ''}"><span class="id">${g.id}</span><span class="nm">${esc(g.name)}</span><span><span class="chip s-${g.status === 'SKIPPED' && g.id === 'G6' && v === 'READY_FOR_HUMAN_APPROVAL' ? 'WAITING' : g.status}">${g.id === 'G6' && v === 'READY_FOR_HUMAN_APPROVAL' ? 'waiting' : g.status}</span></span></div>`).join('') + `</div>`;
-  h += `<div class="legend"><span><i style="background:var(--accent)"></i>Decides pass or fail</span><span><i style="background:#d99a2b"></i>AI advises only</span><span><i style="background:var(--human)"></i>A named person</span></div>`;
+  let h = `<div class="hero ${heroCls}"><div class="word">${word(v)}</div><div class="facts">${t('a.hero.' + v, by) || ''}</div>
+    <div class="exit">${t('a.golden')}<b>v${esc(r.goldenVersion)}</b>${t('a.cases', esc(r.inputs?.goldenCount))}</div></div>`;
+  const waiting = v === 'READY_FOR_HUMAN_APPROVAL';
+  h += `<div class="pipe">` + r.gates.map(g => {
+    const w = g.id === 'G6' && waiting;
+    return `<div class="pg ${g.id === 'G5' ? 'ai' : g.id === 'G6' ? 'hu' : ''}"><span class="id">${g.id}</span><span class="nm">${gateName(g)}</span><span><span class="chip s-${w ? 'WAITING' : g.status}">${w ? t('a.waiting') : st(g.status)}</span></span></div>`;
+  }).join('') + `</div>`;
+  const lg = t('a.legend');
+  h += `<div class="legend"><span><i style="background:var(--accent)"></i>${lg[0]}</span><span><i style="background:#d99a2b"></i>${lg[1]}</span><span><i style="background:var(--human)"></i>${lg[2]}</span></div>`;
+  if (r.feedbackReceived) h += `<div class="feedback"><b>${t('a.feedback')}</b>${esc(trText(ZH.feedback, r.feedbackReceived))}</div>`;
 
-  if (r.feedbackReceived) h += `<div class="feedback"><b>Feedback the AI author received (rules only, never the hidden tests)</b>${esc(r.feedbackReceived)}</div>`;
-
-  // tests
-  const t = G.G3?.details;
-  if (t && t.aiSuite) {
-    const gFail = t.goldenSuite.total - t.goldenSuite.passed;
-    h += `<div class="sub">G3 · Spec tests</div><div class="grid2">
-      <div class="card big good"><span class="num">${t.aiSuite.passed}/${t.aiSuite.total}</span><span class="cap">The AI's own tests passed</span></div>
-      <div class="card big ${gFail ? 'bad' : 'good'}"><span class="num">${t.goldenSuite.passed}/${t.goldenSuite.total}</span><span class="cap">Human golden tests passed${gFail ? ` · <b>${gFail} failed</b>` : ''}</span></div></div>`;
-    if (t.failures && t.failures.length) {
-      h += `<div class="card" style="margin-top:16px"><table><tr><th>Test</th><th>Rule</th><th>What it checks</th><th>Input</th><th>Expected</th><th>Got</th></tr>` +
-        t.failures.map(f => `<tr><td class="mono">${esc(f.id)}</td><td class="mono">${esc(f.criterion)}</td><td>${esc(f.description)}</td><td class="mono">exp ${esc(f.expiry)} · ${esc(f.transactionDate)}<br>amt ${esc(f.amountMinor)} / bal ${esc(f.availableMinor)}</td><td class="mono">${esc(f.expected)}</td><td class="mono" style="color:var(--fail);font-weight:600">${esc(f.actual)}</td></tr>`).join('') + `</table>
-        <p class="note" style="margin:12px 0 0">Trusting the AI's tests alone, this code would have shipped. Response codes: 00 approved · 51 insufficient funds · 54 expired card.</p></div>`;
+  const tt = G.G3?.details;
+  if (tt && tt.aiSuite) {
+    const gFail = tt.goldenSuite.total - tt.goldenSuite.passed;
+    h += `<div class="sub">${t('a.g3')}</div><div class="grid2">
+      <div class="card big good"><span class="num">${tt.aiSuite.passed}/${tt.aiSuite.total}</span><span class="cap">${t('a.aiTests')}</span></div>
+      <div class="card big ${gFail ? 'bad' : 'good'}"><span class="num">${tt.goldenSuite.passed}/${tt.goldenSuite.total}</span><span class="cap">${t('a.goldTests')}${gFail ? ` · <b>${t('a.failed', gFail)}</b>` : ''}</span></div></div>`;
+    if (tt.failures && tt.failures.length) {
+      const c = t('a.cols');
+      h += `<div class="card" style="margin-top:16px"><table><tr>${c.map(x => `<th>${x}</th>`).join('')}</tr>` +
+        tt.failures.map(f => `<tr><td class="mono">${esc(f.id)}</td><td class="mono">${esc(f.criterion)}</td><td>${esc(zh() && ZH.tests[f.id] ? ZH.tests[f.id] : f.description)}</td><td class="mono">exp ${esc(f.expiry)} · ${esc(f.transactionDate)}<br>amt ${esc(f.amountMinor)} / bal ${esc(f.availableMinor)}</td><td class="mono">${esc(f.expected)}</td><td class="mono" style="color:var(--fail);font-weight:600">${esc(f.actual)}</td></tr>`).join('') + `</table>
+        <p class="note" style="margin:12px 0 0">${t('a.shipped')}</p></div>`;
     }
   }
-  // mutation
   const m = G.G4?.details;
   if (m && m.scoreCombined !== undefined) {
     const bar = (lab, s, col) => `<div style="display:flex;justify-content:space-between"><b>${lab}</b><span class="mono">${pct(s)}</span></div>
-      <div class="bar"><div class="fill" style="width:${s * 100}%;background:${col}"></div><div class="thr" style="left:${m.threshold * 100}%"><span>gate ${Math.round(m.threshold * 100)}%</span></div></div>`;
-    h += `<div class="sub">G4 · Mutation testing: who tests the tests?</div><div class="card">
-      <p class="note" style="margin-top:0">${m.validMutants} small bugs were planted in the code on purpose. A good test suite should notice them.</p>
-      ${bar("AI's tests alone", m.scoreAiOnly, m.scoreAiOnly < m.threshold ? 'var(--fail)' : 'var(--pass)')}
-      ${bar('With human golden tests', m.scoreCombined, 'var(--pass)')}
-      ${m.scoreAiOnly < m.threshold ? `<p class="note" style="margin:0">The AI's tests alone would fail this gate.</p>` : ''}</div>`;
+      <div class="bar"><div class="fill" style="width:${s * 100}%;background:${col}"></div><div class="thr" style="left:${m.threshold * 100}%"><span>${t('a.gate', Math.round(m.threshold * 100))}</span></div></div>`;
+    h += `<div class="sub">${t('a.g4')}</div><div class="card">
+      <p class="note" style="margin-top:0">${t('a.planted', m.validMutants)}</p>
+      ${bar(t('a.aiOnly'), m.scoreAiOnly, m.scoreAiOnly < m.threshold ? 'var(--fail)' : 'var(--pass)')}
+      ${bar(t('a.withGold'), m.scoreCombined, 'var(--pass)')}
+      ${m.scoreAiOnly < m.threshold ? `<p class="note" style="margin:0">${t('a.aiFail')}</p>` : ''}</div>`;
   }
-  // AI review
   const a = G.G5?.details;
   if (a && a.findings) {
     const src = (r.candidateSource || '').split('\n');
-    h += `<div class="sub">G5 · Separate AI review · advice only</div>`;
-    if (a.reviewSummary) h += `<p class="note">${esc(a.reviewSummary)}</p>`;
+    h += `<div class="sub">${t('a.g5')}</div>`;
+    if (a.reviewSummary) h += `<p class="note">${esc(trText(ZH.summaries, a.reviewSummary))}</p>`;
     h += `<div class="findings">` + a.findings.map(f => {
       const ln = f.line || 0;
-      const lines = ln > 0 ? src.slice(Math.max(0, ln - 3), ln + 2).map((t, i) => ({ n: Math.max(1, ln - 2) + i, text: t, hit: Math.max(1, ln - 2) + i === ln })) : [];
+      const lines = ln > 0 ? src.slice(Math.max(0, ln - 3), ln + 2).map((x, i) => ({ n: Math.max(1, ln - 2) + i, text: x, hit: Math.max(1, ln - 2) + i === ln })) : [];
+      const z = zh() ? pick(ZH.review, f.title) : null;
       const unicode = /isDigit/.test(f.title);
-      return `<div class="f ${f.severity === 'HIGH' ? 'err' : 'warn'}"><div class="top"><span class="chip s-${f.severity}">${f.severity}</span><span class="rule">${esc(f.criterion)}${ln ? ' · line ' + ln : ''}</span><span class="title">${esc(f.title)}</span></div>
-        <p class="detail">${esc(f.detail)}</p>
-        ${unicode ? `<div class="callout"><small>Confirmed by running the code, not by trusting the reviewer:</small>411111111111111３ → 00 (approved)</div>` : ''}
+      return `<div class="f ${f.severity === 'HIGH' ? 'err' : 'warn'}"><div class="top"><span class="chip s-${f.severity}">${st(f.severity)}</span><span class="rule">${esc(f.criterion)}${ln ? ' · ' + t('a.line', ln) : ''}</span><span class="title">${esc(z ? z.x.title : f.title)}</span></div>
+        <p class="detail">${esc(z ? z.x.detail : f.detail)}</p>
+        ${unicode ? `<div class="callout"><small>${t('a.confirmed')}</small>${t('a.approved00')}</div>` : ''}
         ${lines.length ? codeBlock(lines) : ''}</div>`;
     }).join('') + `</div>`;
   }
-  // human
   const g6 = G.G6;
-  if (v === 'READY_FOR_HUMAN_APPROVAL') {
+  if (waiting) {
     const high = a?.highFindings || 0;
-    const defNote = high ? 'Full-width digits must be rejected (AC-01, AC-02). Adding regression tests G-32 and G-33.' : 'Accepted. The null-input gap goes to the spec backlog.';
-    h += `<div class="decision"><h3>G6 · A named human decides</h3>
-      <p class="note" style="margin:0">${high ? `The AI reviewer raised <b>${high} HIGH</b> finding. Approving anyway needs an explicit acknowledgement with your name on it.` : 'All gates passed. Approval is recorded with your name.'}</p>
-      <div class="form"><label for="by">Your name</label><input type="text" id="by" value="Rhosyn Wei">
-      <label for="note">Reason</label><textarea id="note">${esc(defNote)}</textarea>
-      ${high ? `<span></span><label class="ack"><input type="checkbox" id="ack"> I accept the HIGH finding and take responsibility</label>` : ''}
-      <span></span><div class="actions">${high ? `<button class="btn danger" data-act="reject">Reject</button><button class="btn" data-act="approve">Approve anyway</button>` : `<button class="btn human" data-act="approve">Approve</button><button class="btn danger" data-act="reject">Reject</button>`}</div></div>
-      ${S.lastError ? `<div class="errbox">${esc(S.lastError)}</div>` : ''}</div>`;
+    const prevBy = $('#by') ? $('#by').value : 'Rhosyn Wei';
+    const defNote = $('#note') ? $('#note').value : (high ? 'Full-width digits must be rejected (AC-01, AC-02). Adding regression tests G-32 and G-33.' : 'Accepted. The null-input gap goes to the spec backlog.');
+    const errMsg = S.lastError ? esc(trText(ZH.errors, S.lastError)) : '';
+    h += `<div class="decision"><h3>${t('a.g6')}</h3>
+      <p class="note" style="margin:0">${high ? t('a.high', high) : t('a.allPass')}</p>
+      <div class="form"><label for="by">${t('a.name')}</label><input type="text" id="by" value="${esc(prevBy)}">
+      <label for="note">${t('a.reason')}</label><textarea id="note">${esc(defNote)}</textarea>
+      ${high ? `<span></span><label class="ack"><input type="checkbox" id="ack"> ${t('a.ack')}</label>` : ''}
+      <span></span><div class="actions">${high ? `<button class="btn danger" data-act="reject">${t('a.reject')}</button><button class="btn" data-act="approve">${t('a.approveAnyway')}</button>` : `<button class="btn human" data-act="approve">${t('a.approve')}</button><button class="btn danger" data-act="reject">${t('a.reject')}</button>`}</div></div>
+      ${errMsg ? `<div class="errbox">${errMsg}</div>` : ''}</div>`;
   } else if (g6 && g6.details && g6.details.decision) {
     const d = g6.details;
-    h += `<div class="decision"><h3>G6 · ${d.decision === 'APPROVED' ? 'Approved' : 'Rejected'} by ${esc(d.decidedBy)}</h3><p class="note" style="margin:0">${esc(d.decidedAt)}${d.note ? ' · ' + esc(d.note) : ''}</p></div>`;
+    h += `<div class="decision"><h3>${t('a.decided', d.decision, esc(d.decidedBy))}</h3><p class="note" style="margin:0">${esc(d.decidedAt)}${d.note ? ' · ' + esc(d.note) : ''}</p></div>`;
   }
   return h;
 }
 
-/* ---------- 3. audit ---------- */
+/* ================= 3. audit ================= */
 function renderAudit() {
   const A = S.state.audit || { entries: [] };
   const out = $('#audit-out');
-  if (!A.entries.length) { out.innerHTML = `<div class="empty">No entries yet. Run the SpecBlast check or an attempt first.</div>`; return; }
+  if (!A.entries.length) { out.innerHTML = `<div class="empty">${t('u.empty')}</div>`; return; }
   const ok = !A.problem;
-  let h = `<div class="hero ${ok ? 'good' : 'bad'}"><div class="word">${ok ? 'INTACT' : 'TAMPERED'}</div>
-    <div class="facts"><b>${A.entries.length} entries</b>, ${ok ? 'hash chain verified from the first entry to the last.' : esc(A.problem)}</div>
-    <div class="exit">algorithm<b>SHA-256</b>append-only</div></div>`;
+  let h = `<div class="hero ${ok ? 'good' : 'bad'}"><div class="word">${word(ok ? 'INTACT' : 'TAMPERED')}</div>
+    <div class="facts">${ok ? t('u.ok', A.entries.length) : t('u.bad', A.entries.length, esc(trText(ZH.audit, A.problem)))}</div>
+    <div class="exit">${t('u.algo')}<b>SHA-256</b>${t('u.append')}</div></div>`;
   if (S.tamper) {
-    const t = S.tamper;
-    h += `<div class="card" style="margin-top:16px;border-left:6px solid var(--fail)">` + (t.message ? esc(t.message) :
-      `<b>Tampering test on a copy of the log</b> (the real log is untouched).<br>Entry ${t.editedEntry}: ${esc(t.change)}.<br>
-       Verification result: <span style="color:var(--fail);font-weight:600">${esc(t.result || 'not detected')}</span>`) + `</div>`;
+    const x = S.tamper;
+    h += `<div class="card" style="margin-top:16px;border-left:6px solid var(--fail)">` + (x.message ? esc(x.message) :
+      `${t('u.tTitle')}<br>${esc(t('u.tEntry', x.editedEntry, t('u.change', x.change)))}<br>
+       ${t('u.tResult')} <span style="color:var(--fail);font-weight:600">${esc(x.result ? trText(ZH.audit, x.result) : t('u.notDetected'))}</span>`) + `</div>`;
   }
-  h += `<div class="sub">The chain</div><div class="chain">` + A.entries.map((e, i) => {
-    const what = e.runId || e.label || e.project || '';
-    const res = e.verdict || (e.event || '').replace('HUMAN_', '');
-    const by = e.decidedBy ? ' · by ' + esc(e.decidedBy) : '';
+  h += `<div class="sub">${t('u.chain')}</div><div class="chain">` + A.entries.map((e, i) => {
+    const what = e.runId || e.project || e.label || '';
+    const res = e.verdict ? vShort(e.verdict) : esc(T[S.lang].events[e.event] || (e.event || '').replace('HUMAN_', ''));
+    const cls = e.verdict ? vClass(e.verdict) : e.event === 'HUMAN_APPROVED' ? 'APPROVED' : e.event === 'HUMAN_REJECTED' ? 'REJECTED' : 'INFO';
+    const evName = zh() ? (T.zh.events[e.event] || e.event) : (e.event || '').replace(/_/g, ' ').toLowerCase();
+    const by = e.decidedBy ? ` · ${t('u.by')} ${esc(e.decidedBy)}` : '';
     const broken = S.tamper && S.tamper.editedEntry === i + 1;
     return (i ? `<div class="joint"></div>` : '') + `<div class="link ${broken ? 'broken' : ''}"><span class="idx">#${i + 1}</span>
-      <div><div class="ev">${esc((e.event || '').replace(/_/g, ' ').toLowerCase())} <span class="chip s-${vClass(e.verdict) !== 'SKIPPED' ? vClass(e.verdict) : (e.event === 'HUMAN_APPROVED' ? 'APPROVED' : e.event === 'HUMAN_REJECTED' ? 'REJECTED' : 'INFO')}">${esc(res)}</span></div>
-      <div class="meta">${esc(what)}${by} · ${esc(e.at)}</div></div>
+      <div><div class="ev">${esc(evName)} <span class="chip s-${cls}">${res}</span></div><div class="meta">${esc(what)}${by} · ${esc(e.at)}</div></div>
       <div class="h">prev ${esc((e.prevHash || '').slice(0, 10))}…<br>hash <b>${esc((e.entryHash || '').slice(0, 10))}…</b></div></div>`;
   }).join('') + `</div>`;
   out.innerHTML = h;
 }
 
+applyStatic();
 load();
 </script>
 </body>
