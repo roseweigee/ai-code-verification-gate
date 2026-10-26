@@ -52,6 +52,6 @@ public final class CompileGate implements Gate {
                     System.currentTimeMillis() - t0);
         }
         return new GateResult(id(), name(), GateResult.Status.PASSED, decidedBy(),
-                "Compiles with Java 21 and implements AuthorizationPrecheck.", details, System.currentTimeMillis() - t0);
+                "Compiles with Java 17 and implements AuthorizationPrecheck.", details, System.currentTimeMillis() - t0);
     }
 }

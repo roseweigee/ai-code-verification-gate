@@ -152,7 +152,7 @@ Claude call.
 
 ## Run it
 
-Requires **JDK 21**. No other dependencies; nothing is downloaded.
+Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 
 ```bash
 ./run.sh selftest                 # 42 checks of the engine itself

@@ -22,7 +22,7 @@ public final class Prompts {
                 Implement the class dev.aiverify.candidate.AuthorizationPrecheckImpl so that it implements
                 dev.aiverify.contract.AuthorizationPrecheck exactly as the specification says.
                 Rules:
-                - Java 21, no external libraries. Only import java.time, java.util and dev.aiverify.contract.
+                - Java 17, no external libraries. Only import java.time, java.util and dev.aiverify.contract.
                 - Never print or log the PAN.
                 - Return exactly one ```java code block containing the whole file, then nothing else.
                 """;

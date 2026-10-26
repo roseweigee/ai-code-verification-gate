@@ -61,7 +61,7 @@ public final class InMemoryCompiler {
         };
 
         List<String> options = List.of("-classpath", System.getProperty("java.class.path"),
-                "--release", "21", "-proc:none", "-Xlint:none");
+                "--release", "17", "-proc:none", "-Xlint:none");
         boolean ok = compiler.getTask(null, fm, diagnostics, options, null, List.of(src)).call();
 
         List<String> errors = new ArrayList<>();

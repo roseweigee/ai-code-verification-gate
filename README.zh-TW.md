@@ -80,7 +80,7 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 
 ## 執行方式
 
-需要 **JDK 21**，沒有其他相依套件，也不需要下載任何東西。
+需要 **JDK 17 以上**，沒有其他相依套件，也不需要下載任何東西。
 
 ```bash
 ./run.sh selftest                 # 驗證引擎本身（42 項檢查）
