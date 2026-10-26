@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root { --ink: #142029; --ink-2: #4B5A65; --bg: #F3F5F6; --surface: #FFFFFF; --line: #D3DBE0; --dark: #142029;
-  --accent: #1F5F8B; --pass: #1D7A4C; --pass-soft: #DCF1E5; --fail: #B3261E; --fail-soft: #FBE2DF; --warn: #9A6200;
+  --accent: #1F5F8B; --pass: #1D7A4C; --pass-soft: #DCF1E5; --fail: #B3261E; --fail-soft: #FBE2DF;
   --mono: 'IBM Plex Mono', 'Courier New', monospace; --body: 'IBM Plex Sans', Arial, sans-serif; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); }
@@ -19,28 +19,28 @@ main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
 h2 { font-size: 30px; margin: 0 0 6px; }
 .lead { color: var(--ink-2); margin: 0 0 24px; line-height: 1.5; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-.versions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.versions label { border: 2px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer; display: flex; gap: 10px; align-items: flex-start; line-height: 1.4; }
-.versions label.sel { border-color: var(--accent); background: #EEF5FA; }
-.versions small { display: block; color: var(--ink-2); }
-.tag { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
-.tag.no { background: var(--fail-soft); color: var(--fail); }
-.tag.yes { background: var(--pass-soft); color: var(--pass); }
 .form { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .form label { font-size: 14px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .form input { width: 100%; min-width: 0; font-family: var(--mono); font-size: 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
 .presets { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
 .presets button, .send { font-family: var(--body); font-size: 15px; border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); }
+.presets button.hot { border-color: var(--fail); color: var(--fail); font-weight: 600; }
 .send { background: var(--accent); color: #fff; border: none; font-weight: 600; font-size: 17px; padding: 12px 22px; }
-.result { border-radius: 12px; padding: 24px; display: none; }
-.result.on { display: block; }
-.result.ok { background: var(--pass-soft); border: 2px solid var(--pass); }
-.result.bad { background: var(--fail-soft); border: 2px solid var(--fail); }
-.big { font-family: var(--mono); font-size: 44px; font-weight: 600; }
-.status { font-family: var(--mono); font-size: 15px; color: var(--ink-2); }
-pre { font-family: var(--mono); font-size: 14px; background: #1E2E3A; color: #F2C6C2; border-radius: 8px; padding: 14px; overflow-x: auto; white-space: pre-wrap; }
-.note { color: var(--ink-2); line-height: 1.5; }
-@media (max-width: 760px) { .versions { grid-template-columns: 1fr; } .form { grid-template-columns: 1fr 1fr; } header { padding: 16px; } }
+.envs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.env { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
+.env h3 { margin: 0 0 4px; font-size: 20px; }
+.env .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 14px; line-height: 1.4; }
+.tag { font-family: var(--mono); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.tag.no { background: var(--fail-soft); color: var(--fail); }
+.tag.yes { background: var(--pass-soft); color: var(--pass); }
+.result { border-radius: 10px; padding: 16px; border: 2px dashed var(--line); color: var(--ink-2); min-height: 120px; }
+.result.ok { background: var(--pass-soft); border: 2px solid var(--pass); color: var(--ink); }
+.result.bad { background: var(--fail-soft); border: 2px solid var(--fail); color: var(--ink); }
+.big { font-family: var(--mono); font-size: 34px; font-weight: 600; }
+.status { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
+pre { font-family: var(--mono); font-size: 13px; background: #1E2E3A; color: #F2C6C2; border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre-wrap; margin: 10px 0 0; }
+.note { color: var(--ink-2); line-height: 1.6; margin-top: 20px; }
+@media (max-width: 760px) { .envs { grid-template-columns: 1fr; } .form { grid-template-columns: 1fr 1fr; } header { padding: 16px; } }
 </style>
 </head>
 <body>
@@ -50,12 +50,8 @@ pre { font-family: var(--mono); font-size: 14px; background: #1E2E3A; color: #F2
 </header>
 <main>
   <h2>正式環境模擬 · Production simulator</h2>
-  <p class="lead">同一個刷卡授權程式，用兩種方式上線：<b>跳過品質關卡直接上線</b>，或<b>通過品質關卡後上線</b>。送一筆交易進去，看客戶會得到什麼。<br>
-  The same card authorization code, deployed two ways: straight from the AI, or after the quality gate. Send a transaction and see what the customer gets.</p>
-
-  <div class="card">
-    <div class="versions" id="versions"></div>
-  </div>
+  <p class="lead">SpecBlast 寫的同一支 ISO 8583 刷卡授權程式，部署成兩個環境：<b>左邊跳過品質關卡</b>，<b>右邊通過品質關卡</b>。送一筆交易，兩邊同時收到，看客戶各得到什麼。<br>
+  The same ISO 8583 code from SpecBlast, deployed twice: left skipped the quality gate, right passed it. One transaction goes to both.</p>
 
   <div class="card">
     <div class="form">
@@ -67,65 +63,62 @@ pre { font-family: var(--mono); font-size: 14px; background: #1E2E3A; color: #F2
     </div>
     <div class="presets">
       <button data-p="normal">一般消費</button>
-      <button data-p="nodate">缺少交易日期</button>
-      <button data-p="fullwidth">卡號含全形數字</button>
+      <button data-p="nodate" class="hot">缺少交易日期 ⚠</button>
       <button data-p="expired">上個月過期的卡</button>
       <button data-p="over">金額超過餘額</button>
     </div>
     <button class="send" id="send">送出授權請求 · Send</button>
   </div>
 
-  <div class="result" id="result"></div>
-  <p class="note" id="explain"></p>
+  <div class="envs">
+    <div class="env">
+      <h3>環境 A <span class="tag no">跳過品質關卡</span></h3>
+      <p class="sub">AI 寫完直接上線：沒有檢查、沒有人核准。<br>Straight from the AI: no checks, no approval.</p>
+      <div class="result" id="r-nogate">等待交易… Waiting</div>
+    </div>
+    <div class="env">
+      <h3>環境 B <span class="tag yes">通過品質關卡</span></h3>
+      <p class="sub">經過六道關卡、自動補上 NF-05 空值檢查、由人核准後上線。<br>After all six gates, the NF-05 fix, and a named approver.</p>
+      <div class="result" id="r-gate">等待交易… Waiting</div>
+    </div>
+  </div>
+  <p class="note" id="explain">示範重點：先按「一般消費」，兩邊都核准；再按「缺少交易日期」，左邊當掉、右邊正常回覆。<br>Demo: send a normal purchase (both approve), then a missing date (left crashes, right declines properly).</p>
 </main>
 <script>
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const VERS = [
-  { id: 'claude-nogate', who: 'Claude 第三次嘗試', gate: false },
-  { id: 'claude-gate', who: 'Claude 第三次嘗試', gate: true },
-  { id: 'specblast-nogate', who: 'SpecBlast', gate: false },
-  { id: 'specblast-gate', who: 'SpecBlast', gate: true },
-];
-let ver = 'claude-nogate';
-function drawVersions() {
-  $('#versions').innerHTML = VERS.map(v => `<label class="${v.id === ver ? 'sel' : ''}"><input type="radio" name="v" value="${v.id}" ${v.id === ver ? 'checked' : ''}>
-    <span><b>${v.who}</b> <span class="tag ${v.gate ? 'yes' : 'no'}">${v.gate ? '通過品質關卡後上線' : '跳過品質關卡直接上線'}</span>
-    <small>${v.gate ? 'Deployed after the gate: NF-05 null check added, all checks passed, approved.' : 'Deployed straight from the AI: no checks, no approval.'}</small></span></label>`).join('');
-  document.querySelectorAll('input[name=v]').forEach(r => r.onchange = () => { ver = r.value; drawVersions(); });
-}
 const PRESETS = {
   normal: { pan: '4111111111111111', expiry: '2812', amount: '1200', available: '50000', date: '2026-10-27' },
   nodate: { pan: '4111111111111111', expiry: '2812', amount: '1200', available: '50000', date: '' },
-  fullwidth: { pan: '411111111111111３', expiry: '2812', amount: '10', available: '50', date: '2026-10-27' },
   expired: { pan: '4111111111111111', expiry: '2609', amount: '10', available: '50', date: '2026-10-27' },
   over: { pan: '4111111111111111', expiry: '2812', amount: '50.01', available: '50', date: '2026-10-27' },
 };
 document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { const p = PRESETS[b.dataset.p]; for (const k in p) $('#' + k).value = p[k]; });
 const MEANING_ZH = { '00': '核准', '13': '金額無效', '14': '卡號無效', '30': '格式錯誤', '51': '餘額不足', '54': '卡片過期' };
 const cents = v => String(Math.round(parseFloat(v || '0') * 100));
-$('#send').onclick = async () => {
-  const q = new URLSearchParams({ version: ver, pan: $('#pan').value, expiry: $('#expiry').value,
+async function call(version, box) {
+  const q = new URLSearchParams({ version, pan: $('#pan').value, expiry: $('#expiry').value,
     amount: cents($('#amount').value), available: cents($('#available').value), date: $('#date').value });
   const r = await fetch('/api/pay?' + q, { method: 'POST' });
   const d = await r.json();
-  const box = $('#result');
   if (r.status === 200) {
-    box.className = 'result on ok';
-    box.innerHTML = `<div class="status">HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(MEANING_ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)}</div>`;
-    $('#explain').innerHTML = $('#date').value === '' ? '缺少交易日期時回傳 30 格式錯誤：這是品質關卡依規則 NF-05 自動補上的檢查。<br>A missing date returns 30, format error: the check the gate added under rule NF-05.' : '';
+    box.className = 'result ok';
+    box.innerHTML = `<div class="status">HTTP 200 OK · field 39</div><div class="big">${esc(d.responseCode)} · ${esc(MEANING_ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)}</div>`;
   } else if (d.exception) {
-    box.className = 'result on bad';
-    box.innerHTML = `<div class="status">HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div>
-      <pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>`;
-    $('#explain').innerHTML = '這段程式沒有經過品質關卡就上線。缺少交易日期時，程式直接拋出 NullPointerException，客戶收到的是系統錯誤，不是正常的拒絕。品質關卡的 G3 會用空值測試抓到它，並依規則 NF-05 自動修正。<br>This code skipped the gate. A missing date crashes it with a NullPointerException, so the customer gets a system error instead of a proper decline. The gate catches this in G3 and fixes it under rule NF-05.';
+    box.className = 'result bad';
+    box.innerHTML = `<div class="status">HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>`;
   } else {
-    box.className = 'result on bad';
+    box.className = 'result bad';
     box.innerHTML = `<div class="status">HTTP ${r.status}</div><div>${esc(d.error || 'Error')}</div>`;
-    $('#explain').innerHTML = '';
   }
+  return r.status;
+}
+$('#send').onclick = async () => {
+  const [a, b] = await Promise.all([call('specblast-nogate', $('#r-nogate')), call('specblast-gate', $('#r-gate'))]);
+  $('#explain').innerHTML = a === 500 && b === 200
+    ? '環境 A 沒經過品質關卡：缺少交易日期時直接拋出 NullPointerException，客戶收到系統錯誤。環境 B 的同一支程式，品質關卡在 G3 用空值測試抓到這個問題，依規則 NF-05 自動補上檢查，所以正常回覆 30 格式錯誤。<br>A skipped the gate and crashes with a NullPointerException. B is the same code after the gate: G3 caught the crash and added the NF-05 check, so it returns 30, format error.'
+    : '兩個環境結果相同：這筆交易沒有觸發空值問題。試試「缺少交易日期」。<br>Both agree on this one. Try "missing date".';
 };
-drawVersions();
 </script>
 </body>
 </html>
