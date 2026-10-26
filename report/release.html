@@ -59,6 +59,8 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
       <button data-p="fullwidth">卡號含全形數字</button>
       <button data-p="expired">過期的卡</button>
       <button data-p="over">金額超過餘額</button>
+      <button data-p="lastday">到期月最後一天</button>
+      <button data-p="equal">金額剛好等於餘額</button>
       <button class="go" id="send">送出授權請求 · Send</button>
     </div>
   </div>
@@ -73,11 +75,30 @@ const P = {
   fullwidth: ['411111111111111３','2812','10','50','2026-10-27'],
   expired: ['4111111111111111','2609','10','50','2026-10-27'],
   over: ['4111111111111111','2812','50.01','50','2026-10-27'],
+  lastday: ['4111111111111111','2610','10','50','2026-10-31'],
+  equal: ['4111111111111111','2812','50','50','2026-10-27'],
 };
 const F = ['pan','expiry','amount','available','date'];
 document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => P[b.dataset.p].forEach((v,i) => $('#'+F[i]).value = v));
 const ZH = { '00':'核准', '13':'金額無效', '14':'卡號無效', '30':'格式錯誤', '51':'餘額不足', '54':'卡片過期' };
 const cents = v => String(Math.round(parseFloat(v || '0') * 100));
+// The spec's acceptance criteria AC-01..AC-06 (spec/authorization-precheck.md), in order. Used only to show the correct answer.
+function specAnswer(pan, expiry, amount, available, date) {
+  if (!date) return { code: '30', why: 'NF-05：缺少交易日期' };
+  if (!pan || !expiry) return { code: '30', why: 'AC-01：卡號或到期日空白' };
+  if (!/^[0-9]{4}$/.test(expiry)) return { code: '30', why: 'AC-01：到期日必須剛好 4 個半形數字' };
+  const mm = +expiry.slice(2, 4);
+  if (mm < 1 || mm > 12) return { code: '30', why: 'AC-01：月份必須 01–12' };
+  if (!/^[0-9]{13,19}$/.test(pan)) return { code: '14', why: 'AC-02：卡號必須是 13–19 個半形數字' };
+  let sum = 0, alt = false;
+  for (let i = pan.length - 1; i >= 0; i--) { let n = pan.charCodeAt(i) - 48; if (alt) { n *= 2; if (n > 9) n -= 9; } sum += n; alt = !alt; }
+  if (sum % 10) return { code: '14', why: 'AC-02：Luhn 檢查不通過' };
+  const y = 2000 + +expiry.slice(0, 2), last = new Date(Date.UTC(y, mm, 0)).toISOString().slice(0, 10);
+  if (date > last) return { code: '54', why: `AC-03：卡片有效到 ${last}` };
+  if (amount <= 0) return { code: '13', why: 'AC-04：金額必須大於 0' };
+  if (amount > available) return { code: '51', why: 'AC-05：金額超過可用餘額' };
+  return { code: '00', why: `AC-06：全部通過${amount === available ? '（金額等於餘額可以核准）' : ''}${date === last ? '（到期月最後一天仍有效）' : ''}` };
+}
 const RUN = new URLSearchParams(location.search).get('run');
 const INFO = RUN ? '/api/try/info?run=' + encodeURIComponent(RUN) : '/api/release';
 const AUTH = RUN ? '/api/try/authorize?run=' + encodeURIComponent(RUN) + '&' : '/api/authorize?';
@@ -119,23 +140,22 @@ $('#send').onclick = async () => {
   const r = await fetch(AUTH + q, { method: 'POST' });
   const d = await r.json();
   const box = $('#res');
-  // spec AC-01 / AC-02: card number and expiry are ASCII digits 0-9 only
-  const nonAscii = /[^0-9]/.test($('#pan').value + $('#expiry').value) && /[\uFF10-\uFF19\u0660-\u0669]/.test($('#pan').value + $('#expiry').value);
-  if (r.status === 200 && d.responseCode === '00' && nonAscii) {
-    const expect = /[\uFF10-\uFF19\u0660-\u0669]/.test($('#pan').value) ? '14 · 卡號無效' : '30 · 格式錯誤';
+  const spec = specAnswer($('#pan').value.trim(), $('#expiry').value.trim(), Math.round(parseFloat($('#amount').value || '0') * 100),
+    Math.round(parseFloat($('#available').value || '0') * 100), $('#date').value.trim());
+  const specLine = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,.12)">規格的正確答案 Spec answer：<b>${spec.code} · ${ZH[spec.code]}</b> <span style="color:var(--ink2)">（${esc(spec.why)}）</span></div>`;
+  if (r.status === 200 && d.responseCode !== spec.code) {
     box.className = 'res bad';
     box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39 · 沒有任何錯誤訊息 No error logged</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div>
-      <div style="font-weight:bold;color:var(--bad);margin-top:8px">❌ 錯誤核准 · Wrongly approved</div>
-      <div style="margin-top:4px">規格 AC-01 / AC-02 規定卡號和到期日只能是半形數字 0–9。這筆有全形數字，應該回 <b>${expect}</b>，程式卻核准了。系統沒有當掉、也沒有報錯，所以只有 G5 的 AI 審查抓得到。</div>
-      <div style="color:var(--ink2);margin-top:4px">The spec allows ASCII digits 0-9 only, so this must be declined. The code approved it silently.</div>`;
+      <div style="font-weight:bold;color:var(--bad);margin-top:8px">❌ ${d.responseCode === '00' ? '錯誤核准 · Wrongly approved' : spec.code === '00' ? '錯誤拒絕 · Wrongly declined' : '回應碼錯誤 · Wrong response code'}</div>
+      <div style="margin-top:4px">系統沒有當掉、也沒有報錯，但答案和規格不一樣。The service answered normally, but not what the spec says.</div>${specLine}`;
     return;
   }
   if (r.status === 200) {
     box.className = 'res ok';
-    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)}</div>`;
+    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)} · ✓ 符合規格 Matches the spec</div>${specLine}`;
   } else if (d.exception) {
     box.className = 'res bad';
-    box.innerHTML = `<div>HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>`;
+    box.innerHTML = `<div>HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>${specLine}`;
   } else {
     box.className = 'res bad';
     box.innerHTML = `<div>HTTP ${r.status}</div><div>${esc(d.error || 'Error')}</div>`;
