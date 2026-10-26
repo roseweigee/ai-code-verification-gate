@@ -119,6 +119,17 @@ $('#send').onclick = async () => {
   const r = await fetch(AUTH + q, { method: 'POST' });
   const d = await r.json();
   const box = $('#res');
+  // spec AC-01 / AC-02: card number and expiry are ASCII digits 0-9 only
+  const nonAscii = /[^0-9]/.test($('#pan').value + $('#expiry').value) && /[\uFF10-\uFF19\u0660-\u0669]/.test($('#pan').value + $('#expiry').value);
+  if (r.status === 200 && d.responseCode === '00' && nonAscii) {
+    const expect = /[\uFF10-\uFF19\u0660-\u0669]/.test($('#pan').value) ? '14 · 卡號無效' : '30 · 格式錯誤';
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39 · 沒有任何錯誤訊息 No error logged</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div>
+      <div style="font-weight:bold;color:var(--bad);margin-top:8px">❌ 錯誤核准 · Wrongly approved</div>
+      <div style="margin-top:4px">規格 AC-01 / AC-02 規定卡號和到期日只能是半形數字 0–9。這筆有全形數字，應該回 <b>${expect}</b>，程式卻核准了。系統沒有當掉、也沒有報錯，所以只有 G5 的 AI 審查抓得到。</div>
+      <div style="color:var(--ink2);margin-top:4px">The spec allows ASCII digits 0-9 only, so this must be declined. The code approved it silently.</div>`;
+    return;
+  }
   if (r.status === 200) {
     box.className = 'res ok';
     box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)}</div>`;
