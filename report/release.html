@@ -11,6 +11,10 @@ body { margin:0; background:var(--bg); color:var(--ink); font-family: Arial, 'Pi
 header { background:#142029; color:#E4EBEF; padding:18px 24px; }
 header h1 { margin:0; font-size:21px; }
 header p { margin:4px 0 0; color:#A9B7C0; font-size:14px; }
+.hdr { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+.lang { display:flex; border:1px solid #3A4A56; border-radius:8px; overflow:hidden; flex:none; }
+.lang button { background:transparent; color:#C9D4DB; border:none; border-radius:0; padding:7px 14px; font-weight:bold; }
+.lang button.on { background:#E4EBEF; color:#142029; }
 main { max-width:980px; margin:0 auto; padding:24px 16px 48px; }
 .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
 .approval { border-left:6px solid var(--ok); }
@@ -40,29 +44,31 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
 </head>
 <body>
 <header>
-  <h1>ISO 8583 授權前檢查服務 · Authorization pre-check service</h1>
-  <p id="sub">正式環境 · Production on Cloud Run · 只跑經過品質關卡、由具名的人核准的程式</p>
+  <div class="hdr">
+    <div><h1 data-i="title"></h1><p id="sub"></p></div>
+    <div class="lang"><button data-lang="en">EN</button><button data-lang="zh">繁中</button></div>
+  </div>
 </header>
 <main>
-  <div class="card approval" id="approval">讀取上線紀錄… Loading release…</div>
+  <div class="card approval" id="approval"></div>
   <div class="card">
     <div class="grid">
-      <label>卡號 PAN<input id="pan" value="4111111111111111"></label>
-      <label>到期 YYMM<input id="expiry" value="2812"></label>
-      <label>金額 Amount (NT$)<input id="amount" value="1200"></label>
-      <label>可用餘額 Available (NT$)<input id="available" value="50000"></label>
-      <label>交易日期 Date<input id="date" value="2026-10-27" placeholder="空白 = 沒有日期"></label>
+      <label><span data-i="f.pan"></span><input id="pan" value="4111111111111111"></label>
+      <label><span data-i="f.expiry"></span><input id="expiry" value="2812"></label>
+      <label><span data-i="f.amount"></span><input id="amount" value="1200"></label>
+      <label><span data-i="f.available"></span><input id="available" value="50000"></label>
+      <label><span data-i="f.date"></span><input id="date" value="2026-10-27"></label>
     </div>
     <div class="row">
-      <button data-p="normal">一般消費</button>
-      <button data-p="nodate">缺少交易日期</button>
-      <button data-p="fullwidth">卡號含全形數字</button>
-      <button data-p="expired">過期的卡</button>
-      <button data-p="over">金額超過餘額</button>
-      <button data-p="thismonth">本月到期的卡</button>
-      <button data-p="lastday">到期月最後一天</button>
-      <button data-p="equal">金額剛好等於餘額</button>
-      <button class="go" id="send">送出授權請求 · Send</button>
+      <button data-p="normal" data-i="p.normal"></button>
+      <button data-p="nodate" data-i="p.nodate"></button>
+      <button data-p="thismonth" data-i="p.thismonth"></button>
+      <button data-p="lastday" data-i="p.lastday"></button>
+      <button data-p="equal" data-i="p.equal"></button>
+      <button data-p="expired" data-i="p.expired"></button>
+      <button data-p="over" data-i="p.over"></button>
+      <button data-p="fullwidth" data-i="p.fullwidth"></button>
+      <button class="go" id="send" data-i="send"></button>
     </div>
   </div>
   <div class="res" id="res"></div>
@@ -70,6 +76,80 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
 <script>
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const T = {
+  en: {
+    title: 'ISO 8583 Authorization pre-check service',
+    subProd: 'Production on Cloud Run · runs only code that passed the quality gate and a named human approved',
+    subRun: (id, sha) => `Live test of one gate run · ${id} · code SHA-256 ${sha}…`,
+    loading: 'Loading…',
+    'f.pan': 'Card number (PAN, DE 2)', 'f.expiry': 'Expiry YYMM (DE 14)', 'f.amount': 'Amount (NT$, DE 4)', 'f.available': 'Available balance (NT$)', 'f.date': 'Transaction date (DE 13)',
+    datePh: 'empty = no date',
+    'p.normal': 'Normal purchase', 'p.nodate': 'Missing transaction date', 'p.thismonth': 'Card expires this month', 'p.lastday': 'Last day of expiry month',
+    'p.equal': 'Amount equals balance', 'p.expired': 'Card expired last month', 'p.over': 'Amount over balance', 'p.fullwidth': 'Full-width digit in PAN',
+    send: 'Send authorization request',
+    run: {
+      BLOCKED: ['bad', '🔴 Attempt {a} · blocked by the quality gate · never deployed', 'This is the AI\'s code exactly as written. Send a transaction to see why it was blocked.'],
+      READY_FOR_HUMAN_APPROVAL: ['', '🟡 Attempt {a} · passed the gates · waiting for a named person', 'The gate added the NF-05 null guard. Try it before you decide.'],
+      APPROVED: ['', '🟢 Attempt {a} · approved · this is the code the CD pipeline deploys', ''],
+      REJECTED_BY_HUMAN: ['bad', '⚫ Attempt {a} · rejected by a person · never deployed', 'Try what the approver refused.'],
+    },
+    autoFixed: 'The gate added the NF-05 null guard (a fixed rule, not AI).',
+    decided: (ok, by, at, note) => `${ok ? 'Approved' : 'Rejected'} by ${by} · ${at}${note ? ' · ' + note : ''}`,
+    high: n => `⚠ The approver accepted ${n} HIGH finding(s) from the AI review`,
+    gone: 'This run no longer exists: the console starts empty each time. Go back to tab 02 and run the attempt again.',
+    live: (a, by) => `🟢 Live version: attempt ${a} · approved by ${by}`,
+    kRun: 'Run', kApproved: 'Approved at', kSha: 'Code SHA-256', kReleased: 'Released at', kNote: 'Approver\'s note',
+    unavailable: 'Release record unavailable.',
+    codes: { '00': 'Approved', '13': 'Invalid amount', '14': 'Invalid card number', '30': 'Format error', '51': 'Insufficient funds', '54': 'Expired card' },
+    specAnswer: 'The spec says', matches: '✓ Matches the spec', noError: 'no error logged',
+    wrongApproved: 'Wrongly approved', wrongDeclined: 'Wrongly declined', wrongCode: 'Wrong response code',
+    wrongNote: 'The service answered normally, with no crash and no error, but not what the spec says.',
+    crash: 'Crash',
+    why: { nodate: 'NF-05: transaction date missing', blank: 'AC-01: card number or expiry missing', exp4: 'AC-01: expiry must be exactly 4 ASCII digits',
+      month: 'AC-01: month must be 01–12', pan: 'AC-02: card number must be 13–19 ASCII digits', luhn: 'AC-02: Luhn check fails',
+      expired: last => `AC-03: the card is valid through ${last}`, amount: 'AC-04: amount must be greater than 0', funds: 'AC-05: amount is over the available balance',
+      ok: (eq, last) => `AC-06: all rules pass${eq ? ' (an amount equal to the balance is allowed)' : ''}${last ? ' (the last day of the expiry month is still valid)' : ''}` },
+  },
+  zh: {
+    title: 'ISO 8583 授權前檢查服務',
+    subProd: '正式環境 · Cloud Run · 只跑經過品質關卡、由具名的人核准的程式',
+    subRun: (id, sha) => `即時測試一次關卡執行 · ${id} · 程式雜湊 ${sha}…`,
+    loading: '讀取中…',
+    'f.pan': '卡號 PAN（DE 2）', 'f.expiry': '到期 YYMM（DE 14）', 'f.amount': '金額 NT$（DE 4）', 'f.available': '可用餘額 NT$', 'f.date': '交易日期（DE 13）',
+    datePh: '空白 = 沒有日期',
+    'p.normal': '一般消費', 'p.nodate': '缺少交易日期', 'p.thismonth': '本月到期的卡', 'p.lastday': '到期月最後一天',
+    'p.equal': '金額剛好等於餘額', 'p.expired': '上個月過期的卡', 'p.over': '金額超過餘額', 'p.fullwidth': '卡號含全形數字',
+    send: '送出授權請求',
+    run: {
+      BLOCKED: ['bad', '🔴 第 {a} 次嘗試 · 被品質關卡擋下，不會上線', '這是 AI 原本寫的程式。送一筆交易，看它為什麼被擋下。'],
+      READY_FOR_HUMAN_APPROVAL: ['', '🟡 第 {a} 次嘗試 · 通過關卡，等待人核准', '關卡已補上 NF-05 空值檢查。核准前可以先實際測一下。'],
+      APPROVED: ['', '🟢 第 {a} 次嘗試 · 已核准，CD 部署的就是這一版', ''],
+      REJECTED_BY_HUMAN: ['bad', '⚫ 第 {a} 次嘗試 · 被人退回，不會上線', '這裡可以測試被退回的程式。'],
+    },
+    autoFixed: '品質關卡已依 NF-05 自動補上空值檢查（固定規則，不是 AI）。',
+    decided: (ok, by, at, note) => `${ok ? '核准' : '退回'}：${by} · ${at}${note ? ' · ' + note : ''}`,
+    high: n => `⚠ 核准者接受了 ${n} 個 AI 審查的 HIGH 風險`,
+    gone: '這次執行已經不存在：console 每次啟動都會清空。請回到第 02 頁重新跑這次嘗試。',
+    live: (a, by) => `🟢 上線版本：第 ${a} 次嘗試 · 由 ${by} 核准`,
+    kRun: 'Run', kApproved: '核准時間', kSha: '程式雜湊 SHA-256', kReleased: '上線時間', kNote: '核准備註',
+    unavailable: '讀不到上線紀錄。',
+    codes: { '00': '核准', '13': '金額無效', '14': '卡號無效', '30': '格式錯誤', '51': '餘額不足', '54': '卡片過期' },
+    specAnswer: '規格的正確答案', matches: '✓ 符合規格', noError: '沒有任何錯誤訊息',
+    wrongApproved: '錯誤核准', wrongDeclined: '錯誤拒絕', wrongCode: '回應碼錯誤',
+    wrongNote: '系統沒有當掉、也沒有報錯，但答案和規格不一樣。',
+    crash: '程式當掉',
+    why: { nodate: 'NF-05：缺少交易日期', blank: 'AC-01：卡號或到期日空白', exp4: 'AC-01：到期日必須剛好 4 個半形數字',
+      month: 'AC-01：月份必須 01–12', pan: 'AC-02：卡號必須是 13–19 個半形數字', luhn: 'AC-02：Luhn 檢查不通過',
+      expired: last => `AC-03：卡片有效到 ${last}`, amount: 'AC-04：金額必須大於 0', funds: 'AC-05：金額超過可用餘額',
+      ok: (eq, last) => `AC-06：全部通過${eq ? '（金額等於餘額可以核准）' : ''}${last ? '（到期月最後一天仍有效）' : ''}` },
+  },
+};
+let LANG = new URLSearchParams(location.search).get('lang');
+if (LANG !== 'en' && LANG !== 'zh') { try { LANG = localStorage.getItem('lang'); } catch (e) { LANG = null; } }
+if (LANG !== 'en' && LANG !== 'zh') LANG = 'en';
+const t = (k, ...a) => { const v = T[LANG][k]; return typeof v === 'function' ? v(...a) : v; };
+const L = () => T[LANG];
+
 const P = {
   normal: ['4111111111111111','2812','1200','50000','2026-10-27'],
   nodate: ['4111111111111111','2812','1200','50000',''],
@@ -82,86 +162,104 @@ const P = {
 };
 const F = ['pan','expiry','amount','available','date'];
 document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => P[b.dataset.p].forEach((v,i) => $('#'+F[i]).value = v));
-const ZH = { '00':'核准', '13':'金額無效', '14':'卡號無效', '30':'格式錯誤', '51':'餘額不足', '54':'卡片過期' };
 const cents = v => String(Math.round(parseFloat(v || '0') * 100));
 // The spec's acceptance criteria AC-01..AC-06 (spec/authorization-precheck.md), in order. Used only to show the correct answer.
 function specAnswer(pan, expiry, amount, available, date) {
-  if (!date) return { code: '30', why: 'NF-05：缺少交易日期' };
-  if (!pan || !expiry) return { code: '30', why: 'AC-01：卡號或到期日空白' };
-  if (!/^[0-9]{4}$/.test(expiry)) return { code: '30', why: 'AC-01：到期日必須剛好 4 個半形數字' };
+  if (!date) return { code: '30', why: 'nodate' };
+  if (!pan || !expiry) return { code: '30', why: 'blank' };
+  if (!/^[0-9]{4}$/.test(expiry)) return { code: '30', why: 'exp4' };
   const mm = +expiry.slice(2, 4);
-  if (mm < 1 || mm > 12) return { code: '30', why: 'AC-01：月份必須 01–12' };
-  if (!/^[0-9]{13,19}$/.test(pan)) return { code: '14', why: 'AC-02：卡號必須是 13–19 個半形數字' };
+  if (mm < 1 || mm > 12) return { code: '30', why: 'month' };
+  if (!/^[0-9]{13,19}$/.test(pan)) return { code: '14', why: 'pan' };
   let sum = 0, alt = false;
   for (let i = pan.length - 1; i >= 0; i--) { let n = pan.charCodeAt(i) - 48; if (alt) { n *= 2; if (n > 9) n -= 9; } sum += n; alt = !alt; }
-  if (sum % 10) return { code: '14', why: 'AC-02：Luhn 檢查不通過' };
+  if (sum % 10) return { code: '14', why: 'luhn' };
   const y = 2000 + +expiry.slice(0, 2), last = new Date(Date.UTC(y, mm, 0)).toISOString().slice(0, 10);
-  if (date > last) return { code: '54', why: `AC-03：卡片有效到 ${last}` };
-  if (amount <= 0) return { code: '13', why: 'AC-04：金額必須大於 0' };
-  if (amount > available) return { code: '51', why: 'AC-05：金額超過可用餘額' };
-  return { code: '00', why: `AC-06：全部通過${amount === available ? '（金額等於餘額可以核准）' : ''}${date === last ? '（到期月最後一天仍有效）' : ''}` };
+  if (date > last) return { code: '54', why: 'expired', arg: [last] };
+  if (amount <= 0) return { code: '13', why: 'amount' };
+  if (amount > available) return { code: '51', why: 'funds' };
+  return { code: '00', why: 'ok', arg: [amount === available, date === last] };
 }
+const whyText = s => { const w = L().why[s.why]; return typeof w === 'function' ? w(...(s.arg || [])) : w; };
+
 const RUN = new URLSearchParams(location.search).get('run');
 const INFO = RUN ? '/api/try/info?run=' + encodeURIComponent(RUN) : '/api/release';
 const AUTH = RUN ? '/api/try/authorize?run=' + encodeURIComponent(RUN) + '&' : '/api/authorize?';
 const gatesHtml = a => `<div class="gates">${(a.gates || []).map(g => `<span class="${g.status === 'PASSED' ? '' : g.status === 'SKIPPED' ? 'skip' : 'no'}">${esc(g.id)} ${esc(g.status)}</span>`).join('')}</div>`;
-const RUNTXT = {
-  BLOCKED: ['bad', '🔴 第 {a} 次嘗試 · 被品質關卡擋下，不會上線', 'Blocked by the quality gate. Never deployed. This is the AI\'s code as written.'],
-  READY_FOR_HUMAN_APPROVAL: ['', '🟡 第 {a} 次嘗試 · 通過關卡，等待人核准', 'Passed the gates (NF-05 fix included). Waiting for a named person.'],
-  APPROVED: ['', '🟢 第 {a} 次嘗試 · 已核准，CD 部署的就是這一版', 'Approved. This is the code the CD pipeline deploys.'],
-  REJECTED_BY_HUMAN: ['bad', '⚫ 第 {a} 次嘗試 · 被人退回，不會上線', 'Rejected by a person. Never deployed.'],
-};
+let INFO_DATA = null, INFO_ERR = false, LAST = null;
+
+function renderStatic() {
+  document.documentElement.lang = LANG === 'zh' ? 'zh-Hant' : 'en';
+  document.querySelectorAll('[data-i]').forEach(el => { el.textContent = t(el.dataset.i); });
+  document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === LANG));
+  $('#date').placeholder = L().datePh;
+  document.title = RUN && INFO_DATA ? (LANG === 'zh' ? '即時測試 · 第 ' + INFO_DATA.attempt + ' 次' : 'Live test · attempt ' + INFO_DATA.attempt) : L().title;
+}
+function renderInfo() {
+  const box = $('#approval'), a = INFO_DATA;
+  $('#sub').textContent = RUN && a && !a.error ? L().subRun(a.runId, String(a.candidateSha256 || '').slice(0, 12)) : L().subProd;
+  if (INFO_ERR || !a) { box.className = 'card approval' + (INFO_ERR ? ' blocked' : ''); box.textContent = INFO_ERR ? (RUN ? L().gone : L().unavailable) : L().loading; return; }
+  const high = Number(a.acceptedHighFindings || 0);
+  if (RUN) {
+    const [cls, head, note] = L().run[a.verdict] || ['', String(a.verdict), ''];
+    box.className = 'card approval' + (cls === 'bad' ? ' blocked' : high > 0 ? ' warn' : '');
+    box.innerHTML = `<div style="font-weight:bold;font-size:17px">${esc(head.replace('{a}', a.attempt))}</div>${note ? `<div style="color:var(--ink2);margin-top:4px">${esc(note)}</div>` : ''}
+      ${a.autoFixed ? `<div style="margin-top:6px">${esc(L().autoFixed)}</div>` : ''}
+      ${a.approvedBy ? `<div style="margin-top:6px">${esc(L().decided(a.decision === 'APPROVED', a.approvedBy, a.approvedAt, a.note))}</div>` : ''}
+      ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">${esc(L().high(high))}</div>` : ''}${gatesHtml(a)}`;
+    return;
+  }
+  box.className = 'card approval' + (high > 0 ? ' warn' : '');
+  box.innerHTML = `<div style="font-weight:bold;font-size:17px">${esc(L().live(a.attempt, a.approvedBy))}</div>
+    ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">${esc(L().high(high))}</div>` : ''}
+    <div class="kv"><div><small>${L().kRun}</small><b>${esc(a.runId)}</b></div><div><small>${L().kApproved}</small><b>${esc(a.approvedAt)}</b></div>
+    <div><small>${L().kSha}</small><b>${esc(String(a.candidateSha256 || '').slice(0, 16))}…</b></div><div><small>${L().kReleased}</small><b>${esc(a.releasedAt)}</b></div></div>
+    ${a.note ? `<div style="margin-top:10px;color:var(--ink2)">${L().kNote}: ${esc(a.note)}</div>` : ''}
+    ${gatesHtml(a)}`;
+}
+function renderResult() {
+  if (!LAST) return;
+  const { status, d, spec } = LAST, box = $('#res'), C = L().codes;
+  const specLine = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,.12)">${L().specAnswer}: <b>${spec.code} · ${C[spec.code]}</b> <span style="color:var(--ink2)">(${esc(whyText(spec))})</span></div>`;
+  if (status === 200 && d.responseCode !== spec.code) {
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39 · ${L().noError}</div><div class="big">${esc(d.responseCode)} · ${esc(C[d.responseCode] || '')}</div>
+      <div style="font-weight:bold;color:var(--bad);margin-top:8px">❌ ${d.responseCode === '00' ? L().wrongApproved : spec.code === '00' ? L().wrongDeclined : L().wrongCode}</div>
+      <div style="margin-top:4px">${L().wrongNote}</div>${specLine}`;
+  } else if (status === 200) {
+    box.className = 'res ok';
+    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(C[d.responseCode] || '')}</div><div>${L().matches}</div>${specLine}`;
+  } else if (d.exception) {
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP 500 Internal Server Error</div><div class="big">${L().crash}</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>${specLine}`;
+  } else {
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP ${status}</div><div>${esc(RUN && /run/.test(d.error || '') ? L().gone : (d.error || 'Error'))}</div>`;
+  }
+}
+function render() { renderStatic(); renderInfo(); renderResult(); }
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
+  LANG = b.dataset.lang; try { localStorage.setItem('lang', LANG); } catch (e) {}
+  render();
+});
 (async () => {
-  const box = $('#approval');
+  render();
   try {
-    const a = await (await fetch(INFO)).json();
-    const high = Number(a.acceptedHighFindings || 0);
-    if (RUN) {
-      const [cls, zh, en] = RUNTXT[a.verdict] || ['', String(a.verdict), ''];
-      document.title = 'Live test · attempt ' + a.attempt;
-      $('#sub').textContent = '即時測試 · Live test of one gate run · ' + a.runId + ' · 程式雜湊 ' + String(a.candidateSha256 || '').slice(0, 12) + '…';
-      box.className = 'card approval' + (cls === 'bad' ? ' blocked' : high > 0 ? ' warn' : '');
-      box.innerHTML = `<div style="font-weight:bold;font-size:17px">${esc(zh.replace('{a}', a.attempt))}</div><div style="color:var(--ink2);margin-top:4px">${esc(en)}</div>
-        ${a.autoFixed ? '<div style="margin-top:6px">品質關卡已依 NF-05 自動補上空值檢查 · The gate added the NF-05 null guard.</div>' : ''}
-        ${a.approvedBy ? `<div style="margin-top:6px">${a.decision === 'APPROVED' ? '核准' : '退回'}：${esc(a.approvedBy)} · ${esc(a.approvedAt)}${a.note ? ' · ' + esc(a.note) : ''}</div>` : ''}
-        ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">⚠ 核准者接受了 ${high} 個 AI 審查的 HIGH 風險</div>` : ''}${gatesHtml(a)}`;
-      return;
-    }
-    box.className = 'card approval' + (high > 0 ? ' warn' : '');
-    box.innerHTML = `<div style="font-weight:bold;font-size:17px">🟢 上線版本：第 ${esc(a.attempt)} 次嘗試 · 由 ${esc(a.approvedBy)} 核准 · Approved by ${esc(a.approvedBy)}</div>
-      ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">⚠ 核准者接受了 ${high} 個 AI 審查的 HIGH 風險 · The approver accepted ${high} HIGH AI finding(s)</div>` : ''}
-      <div class="kv"><div><small>Run</small><b>${esc(a.runId)}</b></div><div><small>核准時間 Approved at</small><b>${esc(a.approvedAt)}</b></div>
-      <div><small>程式雜湊 Code SHA-256</small><b>${esc(String(a.candidateSha256 || '').slice(0, 16))}…</b></div><div><small>上線時間 Released at</small><b>${esc(a.releasedAt)}</b></div></div>
-      ${a.note ? `<div style="margin-top:10px;color:var(--ink2)">核准備註 Note：${esc(a.note)}</div>` : ''}
-      ${gatesHtml(a)}`;
-  } catch (e) { box.textContent = 'Release record unavailable.'; }
+    const r = await fetch(INFO);
+    const a = await r.json();
+    if (!r.ok || a.error) INFO_ERR = true; else INFO_DATA = a;
+  } catch (e) { INFO_ERR = true; }
+  render();
 })();
 $('#send').onclick = async () => {
   const q = new URLSearchParams({ pan: $('#pan').value, expiry: $('#expiry').value, amount: cents($('#amount').value),
     available: cents($('#available').value), date: $('#date').value });
   const r = await fetch(AUTH + q, { method: 'POST' });
-  const d = await r.json();
-  const box = $('#res');
+  let d = {}; try { d = await r.json(); } catch (e) {}
   const spec = specAnswer($('#pan').value.trim(), $('#expiry').value.trim(), Math.round(parseFloat($('#amount').value || '0') * 100),
     Math.round(parseFloat($('#available').value || '0') * 100), $('#date').value.trim());
-  const specLine = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,.12)">規格的正確答案 Spec answer：<b>${spec.code} · ${ZH[spec.code]}</b> <span style="color:var(--ink2)">（${esc(spec.why)}）</span></div>`;
-  if (r.status === 200 && d.responseCode !== spec.code) {
-    box.className = 'res bad';
-    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39 · 沒有任何錯誤訊息 No error logged</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div>
-      <div style="font-weight:bold;color:var(--bad);margin-top:8px">❌ ${d.responseCode === '00' ? '錯誤核准 · Wrongly approved' : spec.code === '00' ? '錯誤拒絕 · Wrongly declined' : '回應碼錯誤 · Wrong response code'}</div>
-      <div style="margin-top:4px">系統沒有當掉、也沒有報錯，但答案和規格不一樣。The service answered normally, but not what the spec says.</div>${specLine}`;
-    return;
-  }
-  if (r.status === 200) {
-    box.className = 'res ok';
-    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)} · ✓ 符合規格 Matches the spec</div>${specLine}`;
-  } else if (d.exception) {
-    box.className = 'res bad';
-    box.innerHTML = `<div>HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>${specLine}`;
-  } else {
-    box.className = 'res bad';
-    box.innerHTML = `<div>HTTP ${r.status}</div><div>${esc(d.error || 'Error')}</div>`;
-  }
+  LAST = { status: r.status, d, spec };
+  renderResult();
 };
 </script>
 </body>

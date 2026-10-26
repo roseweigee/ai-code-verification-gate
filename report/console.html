@@ -751,7 +751,7 @@ function attemptDetail(r, prev) {
   let h = `<div class="hero ${heroCls}"><div class="word">${word(v)}</div><div class="facts">${t('a.hero.' + v, by) || ''}</div>
     <div class="exit">${t('a.golden')}<b>v${esc(r.goldenVersion)}</b>${t('a.cases', esc(r.inputs?.goldenCount))}</div></div>`;
   {
-    const tryUrl = '/try?run=' + encodeURIComponent(r.runId);
+    const tryUrl = '/try?run=' + encodeURIComponent(r.runId) + '&lang=' + (zh() ? 'zh' : 'en');
     const rel = v === 'APPROVED' ? (S.cicd && S.cicd.runs || []).find(x => (x.message || '').includes(r.runId)) : null;
     const prodUrl = S.cicd && S.cicd.production && S.cicd.production.url;
     const prod = rel && rel.status === 'completed' && rel.conclusion === 'success' && prodUrl && rel === S.cicd.runs[0] ? prodUrl : null;
@@ -759,7 +759,7 @@ function attemptDetail(r, prev) {
     h += `<div class="card" style="margin:16px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-left:6px solid ${heroCls === 'bad' ? 'var(--fail)' : heroCls === 'good' ? 'var(--pass)' : 'var(--accent)'}">
       <div style="flex:1;min-width:260px"><b>${t('a.tryH')}</b><div class="note" style="margin:4px 0 0">${t('a.try.' + v) || ''}</div>${relNote ? `<div style="margin-top:6px;font-weight:600">${relNote}${rel ? ` · <a href="${esc(rel.url)}" target="_blank" rel="noopener">GitHub Actions ↗</a>` : ''}</div>` : ''}</div>
       <a class="btn primary" href="${tryUrl}" target="_blank" rel="noopener">${t('a.tryBtn')} ↗</a>
-      ${prod ? `<a class="btn" href="${esc(prod)}" target="_blank" rel="noopener">${t('a.prodBtn')} ↗</a>` : ''}</div>`;
+      ${prod ? `<a class="btn" href="${esc(prod)}?lang=${zh() ? 'zh' : 'en'}" target="_blank" rel="noopener">${t('a.prodBtn')} ↗</a>` : ''}</div>`;
   }
   const waiting = v === 'READY_FOR_HUMAN_APPROVAL';
   h += `<div class="pipe">` + r.gates.map(g => {
