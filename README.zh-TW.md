@@ -84,7 +84,7 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 
 ```bash
 ./run.sh selftest                 # 驗證引擎本身（42 項檢查）
-./run.sh console                  # 網頁版示範 http://localhost:8080：按鈕會執行真正的指令
+./run.sh console                  # 網頁版示範 http://127.0.0.1:8080：按鈕會執行真正的指令
 ./run.sh demo                     # 跑嘗試 1 和 2，停在人工關卡
 ./run.sh reject --by "你的名字" --note "全形數字必須被拒絕"
 ./run.sh run --attempt 3 --golden 1.1

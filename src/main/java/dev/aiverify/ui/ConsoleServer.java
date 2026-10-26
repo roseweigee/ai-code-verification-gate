@@ -41,7 +41,7 @@ public final class ConsoleServer {
         server.createContext("/", app::handle);
         server.setExecutor(Executors.newSingleThreadExecutor());
         server.start();
-        String url = "http://localhost:" + port + "/";
+        String url = "http://127.0.0.1:" + port + "/";
         System.out.println("Console running at " + url);
         System.out.println("Press Ctrl+C to stop.");
         app.openBrowser(url);
