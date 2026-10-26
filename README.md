@@ -171,6 +171,21 @@ On Windows use `run.cmd` with the same arguments.
 email. A rejection email carries the reviewer's reason, which is also the AI author's feedback for the next
 attempt. Copy `notify.properties.example` to `notify.properties` (ignored by git) and fill in the recipient and
 an SMTP account; for Gmail, use an app password. Test it with `./run.sh notify-test`. Each message is also saved
+
+**Deploy the web console (Google Cloud Run).** The `Dockerfile` builds the gate, runs the self-test, and starts
+the console. On a host that sets `PORT`, the console listens publicly and refuses to start without
+`DEMO_PASSWORD`, because the buttons run real commands; the browser then asks for that password.
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+read -s DEMO_PASSWORD             # at least 8 characters; not echoed, not saved in a file
+gcloud run deploy ai-gate --source . --region asia-east1 \
+  --allow-unauthenticated --max-instances 1 --cpu 2 --memory 2Gi \
+  --set-env-vars DEMO_PASSWORD="$DEMO_PASSWORD"
+```
+
+`--max-instances 1` keeps one copy of the runs and the audit log. To send emails from the cloud, add
+`NOTIFY_TO`, `SMTP_USER` and `SMTP_PASSWORD` the same way.
 to `runs/outbox/` first, and a mail failure never changes the gate's decision.
 
 **Live mode** (real Claude calls for author, test writer, reviewer and diagnostician):

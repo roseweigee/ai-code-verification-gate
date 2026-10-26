@@ -97,6 +97,18 @@ Windows 請用 `run.cmd`，參數相同。
 
 **Email 通知。** 執行被擋下、等待人工核准，以及人工核准或退回時，都會寄出通知信。退回的信會附上審核者的理由，這個理由也是 AI 撰寫者下一次嘗試的回饋。把 `notify.properties.example` 複製成 `notify.properties`（不會進 git），填入收件人和 SMTP 帳號；Gmail 請用應用程式密碼。用 `./run.sh notify-test` 測試。每封信都會先存到 `runs/outbox/`，寄信失敗也不會改變閘門的判定。
 
+**部署網頁版到雲端（Google Cloud Run）。** `Dockerfile` 會建置閘門、跑自我測試，再啟動網頁版。在會設定 `PORT` 的雲端主機上，網頁會對外開放，所以沒有設定 `DEMO_PASSWORD` 就拒絕啟動，因為按鈕會執行真正的指令；瀏覽器會先要求輸入這個密碼。
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
+read -s DEMO_PASSWORD             # 至少 8 個字元；輸入時不顯示，也不會存成檔案
+gcloud run deploy ai-gate --source . --region asia-east1 \
+  --allow-unauthenticated --max-instances 1 --cpu 2 --memory 2Gi \
+  --set-env-vars DEMO_PASSWORD="$DEMO_PASSWORD"
+```
+
+`--max-instances 1` 讓執行紀錄和稽核紀錄只有一份。要從雲端寄 email，用同樣方式加上 `NOTIFY_TO`、`SMTP_USER`、`SMTP_PASSWORD`。
+
 **Live 模式**（撰寫者、測試撰寫者、審查者、診斷者都呼叫真正的 Claude）：
 
 ```bash

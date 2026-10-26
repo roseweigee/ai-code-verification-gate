@@ -23,33 +23,81 @@ import java.util.stream.Stream;
 /**
  * A local web console for presenting the gate. Every button runs the real CLI command in a
  * separate process, so what the screen shows is exactly what the command line produces.
- * Binds to 127.0.0.1 only.
+ *
+ * <p>Locally it binds to 127.0.0.1 only. In a container (the PORT environment variable is set, as on Cloud Run
+ * or Render) it listens on all interfaces, and then refuses to start without DEMO_PASSWORD: every page and API
+ * call needs that password (HTTP Basic, any user name), because the buttons run real commands.
  */
 public final class ConsoleServer {
 
     private static final List<String> PROJECTS = List.of("before", "after");
 
     private final Path root;
+    private final byte[] password;
 
-    private ConsoleServer(Path root) {
+    private ConsoleServer(Path root, String password) {
         this.root = root;
+        this.password = password == null ? null : password.getBytes(StandardCharsets.UTF_8);
     }
 
     public static void start(Path root, int port) throws IOException {
-        ConsoleServer app = new ConsoleServer(root);
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        String envPort = System.getenv("PORT");
+        boolean hosted = envPort != null && !envPort.isBlank();
+        String password = System.getenv("DEMO_PASSWORD");
+        if (hosted) {
+            port = Integer.parseInt(envPort.trim());
+            if (password == null || password.length() < 8) {
+                throw new IllegalStateException("Hosted mode (PORT is set) needs DEMO_PASSWORD with at least 8 "
+                        + "characters: the buttons run real commands, so the page must not be open to everyone.");
+            }
+        }
+        ConsoleServer app = new ConsoleServer(root, hosted ? password : null);
+        HttpServer server = HttpServer.create(new InetSocketAddress(hosted ? "0.0.0.0" : "127.0.0.1", port), 0);
         server.createContext("/", app::handle);
         server.setExecutor(Executors.newSingleThreadExecutor());
         server.start();
+        if (hosted) {
+            System.out.println("Console listening on port " + port + " (password required).");
+            return;
+        }
         String url = "http://127.0.0.1:" + port + "/";
         System.out.println("Console running at " + url);
         System.out.println("Press Ctrl+C to stop.");
         app.openBrowser(url);
     }
 
+    /** HTTP Basic check against DEMO_PASSWORD; the user name is ignored. Constant-time comparison. */
+    private boolean authorized(HttpExchange ex) {
+        if (password == null) {
+            return true;
+        }
+        String h = ex.getRequestHeaders().getFirst("Authorization");
+        if (h == null || !h.regionMatches(true, 0, "Basic ", 0, 6)) {
+            return false;
+        }
+        try {
+            String decoded = new String(java.util.Base64.getDecoder().decode(h.substring(6).trim()),
+                    StandardCharsets.UTF_8);
+            int colon = decoded.indexOf(':');
+            byte[] given = (colon < 0 ? decoded : decoded.substring(colon + 1)).getBytes(StandardCharsets.UTF_8);
+            return java.security.MessageDigest.isEqual(given, password);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private void handle(HttpExchange ex) throws IOException {
         try {
             String path = ex.getRequestURI().getPath();
+            if ("/healthz".equals(path)) {
+                send(ex, 200, "text/plain; charset=utf-8", "ok");
+                return;
+            }
+            if (!authorized(ex)) {
+                ex.getResponseHeaders().set("WWW-Authenticate", "Basic realm=\"AI Code Verification Gate demo\", charset=\"UTF-8\"");
+                send(ex, 401, "text/plain; charset=utf-8", "Password required.");
+                return;
+            }
             Map<String, String> q = query(ex.getRequestURI());
             switch (path) {
                 case "/" -> send(ex, 200, "text/html; charset=utf-8",
