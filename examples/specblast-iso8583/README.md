@@ -3,7 +3,7 @@
 `iso8583-precheck.txt` is the spec given to SpecBlast. It has the same rules as
 `spec/authorization-precheck.md` and asks for the rules in one plain Java class,
 `AuthorizationRules`, so the gate can test exactly that code. It contains **no test cases**:
-the 33 golden tests stay held out from SpecBlast.
+the 36 golden tests stay held out from SpecBlast.
 
 `project/` is SpecBlast's output, unchanged. `SOURCE.txt` names the repository and commit it came from.
 

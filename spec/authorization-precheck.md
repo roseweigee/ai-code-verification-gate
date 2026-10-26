@@ -39,6 +39,16 @@ Rules are evaluated **in this order**; the first rule that fails decides the cod
 | AC-05 | `amountMinor` must not exceed `availableMinor`. An amount **equal to** the available balance is allowed. | `51` Insufficient funds |
 | AC-06 | Otherwise approve. | `00` Approved |
 
+### Notes on dates (AC-03)
+
+- `transactionDate` is ISO 8583 DE 13, *Date, local transaction* (`MMDD`, no time part). It is the acquirer's
+  local date. Never re-derive it from the issuer's clock or UTC: near midnight at month end that would turn a valid
+  card into an expired one (or the reverse). There is no "last second" to test; the boundary is the date.
+- DE 13 is a conditional field and may be missing. A missing date is a format error (`30`), never a crash (NF-05).
+- Boundaries the golden set must cover: the first day of the expiry month (G-34), any day in it (G-14), its last
+  day (G-15), the day after (G-16), February in normal and leap years (G-18, G-19), and the year rollover for a
+  December card (G-35, G-36).
+
 ## Non-functional rules (checked by the policy gate)
 
 | ID | Rule |

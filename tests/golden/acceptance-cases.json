@@ -269,6 +269,42 @@
       "since": "1.0"
     },
     {
+      "id": "G-34",
+      "criterion": "AC-03",
+      "description": "Card is valid on the first day of its expiry month",
+      "pan": "4111111111111111",
+      "expiry": "2610",
+      "amountMinor": 1000,
+      "availableMinor": 5000,
+      "transactionDate": "2026-10-01",
+      "expected": "00",
+      "since": "1.0"
+    },
+    {
+      "id": "G-35",
+      "criterion": "AC-03",
+      "description": "Year rollover: a December card is valid on 31 December",
+      "pan": "4111111111111111",
+      "expiry": "2612",
+      "amountMinor": 1000,
+      "availableMinor": 5000,
+      "transactionDate": "2026-12-31",
+      "expected": "00",
+      "since": "1.0"
+    },
+    {
+      "id": "G-36",
+      "criterion": "AC-03",
+      "description": "Year rollover: a December card is expired on 1 January",
+      "pan": "4111111111111111",
+      "expiry": "2612",
+      "amountMinor": 1000,
+      "availableMinor": 5000,
+      "transactionDate": "2027-01-01",
+      "expected": "54",
+      "since": "1.0"
+    },
+    {
       "id": "G-20",
       "criterion": "AC-03",
       "description": "Order: expired card wins over a zero amount",
@@ -402,7 +438,7 @@
     }
   ],
   "versions": {
-    "1.0": "Initial golden set written from spec v1.0",
+    "1.0": "Initial golden set written from spec v1.0 (G-34 to G-36 added for the first day of the expiry month and the year rollover)",
     "1.1": "Adds G-32 and G-33 after the AI review of attempt 2"
   }
 }

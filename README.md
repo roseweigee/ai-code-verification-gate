@@ -134,9 +134,9 @@ codes `30`, `14`, `54`, `13`, `51` or `00`. The spec is in
 
 | Attempt | What happened | Verdict |
 | --- | --- | --- |
-| 1 | AI tests **15/15 passed**. Human golden tests failed **6 of 31**: the card was declined during its own expiry month, and an amount equal to the balance was declined. The diagnostician explained the root cause and sent spec-level feedback, without leaking test data. | Blocked |
-| 2 | Boundaries fixed. All **46** tests passed; a null input still crashed the code, so the gate added a null guard (rule NF-05) and ran every gate again. Mutation testing: **95.9%** combined, but AI tests alone only **78.1%**, below the 80% gate. The independent AI reviewer raised a **HIGH** finding no test caught: `Character.isDigit()` accepts full-width Unicode digits, so the PAN `411111111111111３` was approved with `00`. | Rejected by human |
-| 3 | The human added regression tests G-32 and G-33 (golden set v1.1). The author switched to an ASCII-only check. All **48** tests pass after the same NF-05 auto-fix, mutation **96.1%**, no review findings. In production-like transactions all **7** are correct, including the null date. | Approved |
+| 1 | AI tests **15/15 passed**. Human golden tests failed **8 of 34**: the card was declined for its whole expiry month (from the 1st), across the year end, and an amount equal to the balance was declined. The diagnostician explained the root cause and sent spec-level feedback, without leaking test data. | Blocked |
+| 2 | Boundaries fixed. All **49** tests passed; a null input still crashed the code, so the gate added a null guard (rule NF-05) and ran every gate again. Mutation testing: **95.9%** combined, but AI tests alone only **78.1%**, below the 80% gate. The independent AI reviewer raised a **HIGH** finding no test caught: `Character.isDigit()` accepts full-width Unicode digits, so the PAN `411111111111111３` was approved with `00`. | Rejected by human |
+| 3 | The human added regression tests G-32 and G-33 (golden set v1.1). The author switched to an ASCII-only check. All **51** tests pass after the same NF-05 auto-fix, mutation **96.1%**, no review findings. In production-like transactions all **7** are correct, including the null date. | Approved |
 
 Each attempt shows a different layer catching what the previous layer missed.
 
