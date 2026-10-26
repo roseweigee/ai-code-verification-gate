@@ -135,7 +135,24 @@ public final class ConsoleServer {
                 case "/api/snippet" -> json(ex, snippet(q));
                 case "/api/tamper-test" -> json(ex, tamperTest());
                 case "/api/cicd" -> json(ex, cicd.get("1".equals(q.get("refresh"))));
-                case "/pay" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/live.html")));
+                case "/pay" -> {
+                    ex.getResponseHeaders().set("Location", "/");
+                    ex.sendResponseHeaders(302, -1);
+                }
+                case "/try" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/release.html")));
+                case "/api/try/info" -> json(ex, tryInfo(q.getOrDefault("run", "")));
+                case "/api/try/authorize" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    Map<String, String> tq = new java.util.HashMap<>(q);
+                    tq.put("version", "run:" + q.getOrDefault("run", ""));
+                    Object[] r = live.authorize(tq);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> body = (Map<String, Object>) r[1];
+                    json(ex, (Integer) r[0], body);
+                }
                 case "/api/pay" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {
                         json(ex, 405, Map.of("error", "POST only"));
@@ -237,6 +254,37 @@ public final class ConsoleServer {
         r.put("exitCode", code);
         r.put("output", out.lines().filter(l -> !l.startsWith("Picked up JAVA_TOOL_OPTIONS")).reduce("", (a, b) -> a + b + "\n"));
         return r;
+    }
+
+    /** What the live-test page shows above the form: which run, what the gate and the human decided. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> tryInfo(String run) throws IOException {
+        if (!run.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+            throw new IllegalArgumentException("unknown run");
+        }
+        Map<String, Object> r = (Map<String, Object>) Json.parse(
+                Files.readString(root.resolve("runs").resolve(run).resolve("result.json")));
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("mode", "run");
+        out.put("runId", r.get("runId"));
+        out.put("attempt", r.get("attempt"));
+        out.put("verdict", r.get("verdict"));
+        out.put("candidateSha256", r.get("candidateSha256"));
+        out.put("autoFixed", r.get("autoFix") != null);
+        List<Object> gates = new ArrayList<>();
+        for (Object o : (List<Object>) r.get("gates")) {
+            Map<String, Object> g = (Map<String, Object>) o;
+            gates.add(Map.of("id", String.valueOf(g.get("id")), "status", String.valueOf(g.get("status"))));
+            if ("G6".equals(g.get("id")) && g.get("details") instanceof Map<?, ?> d) {
+                out.put("decision", d.get("decision"));
+                out.put("approvedBy", d.get("decidedBy"));
+                out.put("approvedAt", d.get("decidedAt"));
+                out.put("note", d.get("note"));
+                out.put("acceptedHighFindings", d.get("acceptedHighFindings"));
+            }
+        }
+        out.put("gates", gates);
+        return out;
     }
 
     private void deleteRuns() throws IOException {

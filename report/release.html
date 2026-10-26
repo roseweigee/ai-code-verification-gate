@@ -15,6 +15,7 @@ main { max-width:980px; margin:0 auto; padding:24px 16px 48px; }
 .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
 .approval { border-left:6px solid var(--ok); }
 .approval.warn { border-left-color:var(--warn); background:var(--warnb); }
+.approval.blocked { border-left-color:var(--bad); background:var(--badb); }
 .kv { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:12px; }
 .kv div { min-width:0; }
 .kv small { display:block; color:var(--ink2); font-size:12px; }
@@ -22,6 +23,7 @@ main { max-width:980px; margin:0 auto; padding:24px 16px 48px; }
 .gates { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
 .gates span { font-family:monospace; font-size:13px; padding:3px 8px; border-radius:10px; background:var(--okb); color:var(--ok); }
 .gates span.no { background:var(--badb); color:var(--bad); }
+.gates span.skip { background:#E8ECEF; color:var(--ink2); }
 .grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
 label { font-size:13px; color:var(--ink2); display:flex; flex-direction:column; gap:4px; min-width:0; }
 input { width:100%; font-family:monospace; font-size:15px; padding:9px; border:1px solid var(--line); border-radius:8px; }
@@ -39,7 +41,7 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
 <body>
 <header>
   <h1>ISO 8583 授權前檢查服務 · Authorization pre-check service</h1>
-  <p>正式環境 · Production on Cloud Run · 只跑經過品質關卡、由具名的人核准的程式</p>
+  <p id="sub">正式環境 · Production on Cloud Run · 只跑經過品質關卡、由具名的人核准的程式</p>
 </header>
 <main>
   <div class="card approval" id="approval">讀取上線紀錄… Loading release…</div>
@@ -76,24 +78,45 @@ const F = ['pan','expiry','amount','available','date'];
 document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => P[b.dataset.p].forEach((v,i) => $('#'+F[i]).value = v));
 const ZH = { '00':'核准', '13':'金額無效', '14':'卡號無效', '30':'格式錯誤', '51':'餘額不足', '54':'卡片過期' };
 const cents = v => String(Math.round(parseFloat(v || '0') * 100));
+const RUN = new URLSearchParams(location.search).get('run');
+const INFO = RUN ? '/api/try/info?run=' + encodeURIComponent(RUN) : '/api/release';
+const AUTH = RUN ? '/api/try/authorize?run=' + encodeURIComponent(RUN) + '&' : '/api/authorize?';
+const gatesHtml = a => `<div class="gates">${(a.gates || []).map(g => `<span class="${g.status === 'PASSED' ? '' : g.status === 'SKIPPED' ? 'skip' : 'no'}">${esc(g.id)} ${esc(g.status)}</span>`).join('')}</div>`;
+const RUNTXT = {
+  BLOCKED: ['bad', '🔴 第 {a} 次嘗試 · 被品質關卡擋下，不會上線', 'Blocked by the quality gate. Never deployed. This is the AI\'s code as written.'],
+  READY_FOR_HUMAN_APPROVAL: ['', '🟡 第 {a} 次嘗試 · 通過關卡，等待人核准', 'Passed the gates (NF-05 fix included). Waiting for a named person.'],
+  APPROVED: ['', '🟢 第 {a} 次嘗試 · 已核准，CD 部署的就是這一版', 'Approved. This is the code the CD pipeline deploys.'],
+  REJECTED_BY_HUMAN: ['bad', '⚫ 第 {a} 次嘗試 · 被人退回，不會上線', 'Rejected by a person. Never deployed.'],
+};
 (async () => {
   const box = $('#approval');
   try {
-    const a = await (await fetch('/api/release')).json();
+    const a = await (await fetch(INFO)).json();
     const high = Number(a.acceptedHighFindings || 0);
+    if (RUN) {
+      const [cls, zh, en] = RUNTXT[a.verdict] || ['', String(a.verdict), ''];
+      document.title = 'Live test · attempt ' + a.attempt;
+      $('#sub').textContent = '即時測試 · Live test of one gate run · ' + a.runId + ' · 程式雜湊 ' + String(a.candidateSha256 || '').slice(0, 12) + '…';
+      box.className = 'card approval' + (cls === 'bad' ? ' blocked' : high > 0 ? ' warn' : '');
+      box.innerHTML = `<div style="font-weight:bold;font-size:17px">${esc(zh.replace('{a}', a.attempt))}</div><div style="color:var(--ink2);margin-top:4px">${esc(en)}</div>
+        ${a.autoFixed ? '<div style="margin-top:6px">品質關卡已依 NF-05 自動補上空值檢查 · The gate added the NF-05 null guard.</div>' : ''}
+        ${a.approvedBy ? `<div style="margin-top:6px">${a.decision === 'APPROVED' ? '核准' : '退回'}：${esc(a.approvedBy)} · ${esc(a.approvedAt)}${a.note ? ' · ' + esc(a.note) : ''}</div>` : ''}
+        ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">⚠ 核准者接受了 ${high} 個 AI 審查的 HIGH 風險</div>` : ''}${gatesHtml(a)}`;
+      return;
+    }
     box.className = 'card approval' + (high > 0 ? ' warn' : '');
     box.innerHTML = `<div style="font-weight:bold;font-size:17px">🟢 上線版本：第 ${esc(a.attempt)} 次嘗試 · 由 ${esc(a.approvedBy)} 核准 · Approved by ${esc(a.approvedBy)}</div>
       ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">⚠ 核准者接受了 ${high} 個 AI 審查的 HIGH 風險 · The approver accepted ${high} HIGH AI finding(s)</div>` : ''}
       <div class="kv"><div><small>Run</small><b>${esc(a.runId)}</b></div><div><small>核准時間 Approved at</small><b>${esc(a.approvedAt)}</b></div>
       <div><small>程式雜湊 Code SHA-256</small><b>${esc(String(a.candidateSha256 || '').slice(0, 16))}…</b></div><div><small>上線時間 Released at</small><b>${esc(a.releasedAt)}</b></div></div>
       ${a.note ? `<div style="margin-top:10px;color:var(--ink2)">核准備註 Note：${esc(a.note)}</div>` : ''}
-      <div class="gates">${(a.gates || []).map(g => `<span class="${g.status === 'PASSED' ? '' : 'no'}">${esc(g.id)} ${esc(g.status)}</span>`).join('')}</div>`;
+      ${gatesHtml(a)}`;
   } catch (e) { box.textContent = 'Release record unavailable.'; }
 })();
 $('#send').onclick = async () => {
   const q = new URLSearchParams({ pan: $('#pan').value, expiry: $('#expiry').value, amount: cents($('#amount').value),
     available: cents($('#available').value), date: $('#date').value });
-  const r = await fetch('/api/authorize?' + q, { method: 'POST' });
+  const r = await fetch(AUTH + q, { method: 'POST' });
   const d = await r.json();
   const box = $('#res');
   if (r.status === 200) {

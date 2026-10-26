@@ -77,6 +77,21 @@ final class LiveService {
             versions.put(id, rp);
             return rp;
         }
+        if (id.startsWith("run:")) {
+            // exactly the code of one gate run, as the gate left it (blocked runs: the AI's code as written)
+            String name = id.substring(4);
+            if (!name.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+                throw new IllegalArgumentException("unknown run");
+            }
+            String src = Files.readString(root.resolve("runs").resolve(name).resolve("candidate/AuthorizationPrecheckImpl.java"));
+            InMemoryCompiler.Result rr = new InMemoryCompiler().compile(RunContext.CANDIDATE_CLASS, src);
+            if (!rr.ok()) {
+                throw new IllegalStateException("Does not compile: " + rr.errors());
+            }
+            AuthorizationPrecheck rp = (AuthorizationPrecheck) rr.loadedClass().getDeclaredConstructor().newInstance();
+            versions.put(id, rp);
+            return rp;
+        }
         if (id.startsWith("claude")) {
             raw = Prompts.extractJava(Files.readString(root.resolve("replay/attempt-3/author.txt")));
         } else if (id.startsWith("specblast")) {
