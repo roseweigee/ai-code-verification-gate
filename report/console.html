@@ -299,7 +299,7 @@ const T = {
     'a.hero.APPROVED': by => `Approved by ${by}. The decision is in the audit log.`,
     'a.golden': 'golden tests', 'a.cases': n => `${n} cases`,
     'a.legend': ['Decides pass or fail', 'AI advises only', 'A named person'],
-    'a.feedback': 'Feedback the AI author received (rules only, never the hidden tests)',
+    'a.feedback': 'Feedback the AI author received (rules only, never the hidden tests)', 'w.h': n => `What changed since attempt ${n}`, 'w.prob': n => `Problems in attempt ${n}`, 'w.goldFail': n => `${n} human golden test(s) failed`, 'w.rejected': (by, note) => `Rejected by ${by}: ${note}`, 'w.diff': 'Code change (red removed, green added)', 'w.same': 'No code change.', 'w.newTests': v => `Regression tests the human added (golden set v${v}): these guard the fix from now on`, 'w.rule': 'Rule', 'w.input': 'Input', 'w.expected': 'Expected', 'w.actual': 'This attempt',
     'a.g3': 'G3 · Spec tests', 'a.aiTests': "The AI's own tests passed", 'a.goldTests': 'Human golden tests passed', 'a.failed': n => `${n} failed`,
     'a.cols': ['Test', 'Rule', 'What it checks', 'Input', 'Expected', 'Got'],
     'a.shipped': "Trusting the AI's tests alone, this code would have shipped. Response codes: 00 approved · 51 insufficient funds · 54 expired card.",
@@ -369,7 +369,7 @@ const T = {
     'a.hero.APPROVED': by => `已由 ${by} 核准，這個決定已寫入稽核紀錄。`,
     'a.golden': '黃金測試', 'a.cases': n => `${n} 個案例`,
     'a.legend': ['判定通過或失敗', 'AI 只提供建議', '具名的人'],
-    'a.feedback': 'AI 撰寫者收到的回饋（只講規則，不透露隱藏的測試）',
+    'a.feedback': 'AI 撰寫者收到的回饋（只講規則，不透露隱藏的測試）', 'w.h': n => `這一次怎麼修正第 ${n} 次的問題`, 'w.prob': n => `第 ${n} 次的問題`, 'w.goldFail': n => `${n} 個人工黃金測試沒過`, 'w.rejected': (by, note) => `被 ${by} 退回：${note}`, 'w.diff': '程式改動（紅色刪除、綠色新增）', 'w.same': '程式沒有改動。', 'w.newTests': v => `人新增的回歸測試（黃金測試 v${v}）：從此以後守住這個修正`, 'w.rule': '規則', 'w.input': '輸入', 'w.expected': '應該回', 'w.actual': '這一次回',
     'a.g3': 'G3・規格測試', 'a.aiTests': 'AI 自己寫的測試通過', 'a.goldTests': '人寫的黃金測試通過', 'a.failed': n => `${n} 個失敗`,
     'a.cols': ['測試', '規則', '檢查內容', '輸入', '應該回傳', '實際回傳'],
     'a.shipped': '如果只相信 AI 自己的測試，這段程式就上線了。回應碼：00 核准・51 餘額不足・54 卡片過期。',
@@ -640,6 +640,43 @@ function codeBlock(lines) {
 }
 
 /* ================= 2. attempts ================= */
+function lineDiff(a, b) {
+  const A = (a || '').split('\n'), B = (b || '').split('\n'), n = A.length, m = B.length;
+  const L = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const ops = []; let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && A[i] === B[j]) { ops.push({ k: ' ', t: A[i], o: i + 1, nn: j + 1 }); i++; j++; }
+    else if (j < m && (i >= n || L[i][j + 1] > L[i + 1][j])) { ops.push({ k: '+', t: B[j], nn: j + 1 }); j++; }
+    else { ops.push({ k: '-', t: A[i], o: i + 1 }); i++; }
+  }
+  const keep = new Set();
+  ops.forEach((op, x) => { if (op.k !== ' ') for (let y = Math.max(0, x - 2); y <= Math.min(ops.length - 1, x + 2); y++) keep.add(y); });
+  const out = []; let last = -1;
+  [...keep].sort((p, q) => p - q).forEach(x => { if (last >= 0 && x > last + 1) out.push({ k: '…' }); out.push(ops[x]); last = x; });
+  return out;
+}
+function whatChanged(r, prev) {
+  if (!prev || !prev.candidateSource || !r.candidateSource) return '';
+  const G = {}; prev.gates.forEach(g => G[g.id] = g);
+  const problems = [];
+  ((G.G5?.details?.findings) || []).forEach(f => problems.push(`<li><span class="chip s-FAILED">${esc(f.severity)}</span> G5 · ${esc(f.criterion || '')} · line ${esc(f.line)} · ${esc(f.title)}</li>`));
+  const gf = ((G.G3?.details?.failures) || []).filter(f => f.origin === 'golden');
+  if (gf.length) problems.push(`<li><span class="chip s-FAILED">G3</span> ${t('w.goldFail', gf.length)}: ${gf.map(f => esc(f.id)).join(', ')}</li>`);
+  if (prev.verdict === 'REJECTED_BY_HUMAN') { const d = G.G6?.details || {}; problems.push(`<li><span class="chip s-FAILED">G6</span> ${t('w.rejected', esc(d.decidedBy), esc(d.note))}</li>`); }
+  const diff = lineDiff(prev.candidateSource, r.candidateSource);
+  const changed = diff.some(d => d.k === '+' || d.k === '-');
+  const diffHtml = changed ? `<div class="code">` + diff.map(d => d.k === '…' ? `<div style="color:var(--ink-2)"><span class="ln"></span><span>…</span></div>`
+    : `<div style="${d.k === '+' ? 'background:#DCF1E5' : d.k === '-' ? 'background:#FBE2DF;text-decoration:line-through;color:#8a2a22' : ''}"><span class="ln">${d.k === '-' ? d.o : d.nn}</span><span>${d.k === ' ' ? ' ' : d.k} ${esc(d.t)}</span></div>`).join('') + `</div>` : `<p class="note">${t('w.same')}</p>`;
+  const G3 = r.gates.find(g => g.id === 'G3');
+  const newTests = (r.goldenVersion !== prev.goldenVersion) ? ((G3?.details?.cases) || []).filter(c => c.origin === 'golden' && c.since === r.goldenVersion) : [];
+  const testsHtml = newTests.length ? `<div class="sub">${t('w.newTests', r.goldenVersion)}</div><div class="card"><table><tr><th>ID</th><th>${t('w.rule')}</th><th>${t('w.input')}</th><th>${t('w.expected')}</th><th>${t('w.actual')}</th></tr>` +
+    newTests.map(c => `<tr><td class="mono">${esc(c.id)}</td><td>${esc(c.criterion)} · ${esc(c.description)}</td><td class="mono">PAN ${esc(c.pan)}<br>expiry ${esc(c.expiry)}</td><td class="mono">${esc(c.expected)}</td><td><span class="chip s-${c.status === 'PASS' ? 'PASSED' : 'FAILED'}">${esc(c.actual)} ${c.status === 'PASS' ? '✓' : '✗'}</span></td></tr>`).join('') + `</table></div>` : '';
+  return `<div class="sub">${t('w.h', prev.attempt)}</div><div class="card" style="border-left:6px solid var(--pass)">
+    ${problems.length ? `<b>${t('w.prob', prev.attempt)}</b><ul style="margin:6px 0 14px;padding-left:20px;line-height:1.8">${problems.join('')}</ul>` : ''}
+    <b>${t('w.diff')}</b><div style="margin-top:8px">${diffHtml}</div></div>${testsHtml}`;
+}
+
 function vClass(v) { return { BLOCKED: 'BLOCKED', READY_FOR_HUMAN_APPROVAL: 'WAITING', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED' }[v] || 'SKIPPED'; }
 function setASub(sub) {
   S.asub = sub;
@@ -680,11 +717,11 @@ function renderAttempts() {
   if (!runs.length) { out.innerHTML = `<div class="empty">${t('a.empty')}</div>`; return; }
   if (!S.attempt || !byA[S.attempt]) S.attempt = runs[runs.length - 1].attempt;
   let html = `<div class="atabs">` + runs.map(x => `<button class="atab ${x.attempt === S.attempt ? 'on' : ''}" data-att="${x.attempt}">${t('a.attempt', x.attempt)} <span class="chip s-${vClass(x.verdict)}">${vShort(x.verdict)}</span></button>`).join('') + `</div>`;
-  html += attemptDetail(byA[S.attempt]);
+  html += attemptDetail(byA[S.attempt], byA[S.attempt - 1]);
   out.innerHTML = html;
   out.querySelectorAll('[data-att]').forEach(el => el.onclick = () => { S.attempt = +el.dataset.att; renderAttempts(); });
 }
-function attemptDetail(r) {
+function attemptDetail(r, prev) {
   const G = {}; r.gates.forEach(g => G[g.id] = g);
   const v = r.verdict, by = esc(G.G6?.details?.decidedBy);
   const heroCls = v === 'BLOCKED' || v === 'REJECTED_BY_HUMAN' ? 'bad' : v === 'APPROVED' ? 'good' : 'wait';
@@ -706,6 +743,7 @@ function attemptDetail(r) {
   const lg = t('a.legend');
   h += `<div class="legend"><span><i style="background:var(--accent)"></i>${lg[0]}</span><span><i style="background:#d99a2b"></i>${lg[1]}</span><span><i style="background:var(--human)"></i>${lg[2]}</span></div>`;
   if (r.feedbackReceived) h += `<div class="feedback"><b>${t('a.feedback')}</b>${esc(trText(ZH.feedback, r.feedbackReceived))}</div>`;
+  h += whatChanged(r, prev);
 
   if (r.autoFix) {
     const fx = r.autoFix;
