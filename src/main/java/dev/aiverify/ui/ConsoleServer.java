@@ -157,6 +157,13 @@ public final class ConsoleServer {
                 }
                 args.addAll(List.of("verify-project", "examples/specblast-product/" + which));
             }
+            case "production" -> {
+                String run = q.getOrDefault("run", "");
+                if (!run.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+                    throw new IllegalArgumentException("unknown run");
+                }
+                args.addAll(List.of("production", "--run", run));
+            }
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
         }
@@ -208,7 +215,13 @@ public final class ConsoleServer {
                 for (Path d : st.filter(p -> p.getFileName().toString().startsWith("run-")).sorted().toList()) {
                     Path r = d.resolve("result.json");
                     if (Files.exists(r)) {
-                        runs.add(Json.parse(Files.readString(r)));
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> m = (Map<String, Object>) Json.parse(Files.readString(r));
+                        Path pc = d.resolve("production-check.json");
+                        if (Files.exists(pc)) {
+                            m.put("productionCheck", Json.parse(Files.readString(pc)));
+                        }
+                        runs.add(m);
                     }
                 }
             }

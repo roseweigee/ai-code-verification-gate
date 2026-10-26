@@ -95,6 +95,8 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 
 Windows 請用 `run.cmd`，參數相同。
 
+**核准之後：核准的程式真的能用嗎？** `./run.sh production` 會先確認程式的雜湊值和核准時一樣，再把七筆模擬真實的交易（`tests/production/transactions.json`）送進具名的人核准的程式。如果硬是核准第二次嘗試，含全形數字的卡在正式環境會被核准（6 筆錯 1 筆）；核准第三次嘗試，規格涵蓋的 6 筆全部正確。第七筆是規格沒有定義的空日期，只顯示不計分，因為由核准者決定怎麼處理。
+
 **Email 通知。** 執行被擋下、等待人工核准，以及人工核准或退回時，都會寄出通知信。退回的信會附上審核者的理由，這個理由也是 AI 撰寫者下一次嘗試的回饋。把 `notify.properties.example` 複製成 `notify.properties`（不會進 git），填入收件人和 SMTP 帳號；Gmail 請用應用程式密碼。用 `./run.sh notify-test` 測試。每封信都會先存到 `runs/outbox/`，寄信失敗也不會改變閘門的判定。
 
 **部署網頁版到雲端（Google Cloud Run）。** `Dockerfile` 會建置閘門、跑自我測試，再啟動網頁版。在會設定 `PORT` 的雲端主機上，網頁會對外開放，所以沒有設定 `DEMO_PASSWORD` 就拒絕啟動，因為按鈕會執行真正的指令；瀏覽器會先要求輸入這個密碼。

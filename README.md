@@ -167,6 +167,12 @@ Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 
 On Windows use `run.cmd` with the same arguments.
 
+**After approval: does the approved code really work?** `./run.sh production` sends seven real-looking
+transactions (`tests/production/transactions.json`) to the code a named human approved, after checking its hash
+is still the one they saw. Approve attempt 2 anyway and the full-width-digit card is approved in production
+(1 of 6 wrong); approve attempt 3 and all 6 transactions the spec covers are correct. The seventh case is the
+null date the spec never defined: it is shown, not scored, because the approver decided how to handle it.
+
 **Email notifications.** Every blocked run, every run waiting for approval, and every human decision sends an
 email. A rejection email carries the reviewer's reason, which is also the AI author's feedback for the next
 attempt. Copy `notify.properties.example` to `notify.properties` (ignored by git) and fill in the recipient and

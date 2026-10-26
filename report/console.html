@@ -194,6 +194,11 @@ html[lang="zh-Hant"] .chip { letter-spacing: 0; }
 .toast.ok { background: var(--pass-soft); color: var(--pass); border: 1px solid var(--pass); }
 .toast.warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
 .toast.info { background: var(--skip-soft); color: var(--ink); border: 1px solid var(--line); }
+.prodsum { margin: 16px 0 8px; padding: 14px 18px; border-radius: 8px; font-size: 18px; }
+.prodsum.good { background: var(--pass-soft); color: var(--pass); }
+.prodsum.bad { background: var(--fail-soft); color: var(--fail); }
+table.prod tr.wrong td { background: var(--fail-soft); }
+table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -299,6 +304,15 @@ const T = {
     'a.allPass': 'All gates passed. Approval is recorded with your name.',
     'a.name': 'Your name', 'a.reason': 'Reason', 'a.ack': 'I accept the HIGH finding and take responsibility',
     'a.reject': 'Reject', 'a.approve': 'Approve', 'a.approveAnyway': 'Approve anyway',
+    'a.prod': 'After approval · run real transactions on the approved code',
+    'a.prodLead': 'This is the code that goes live. The same transactions are sent to it, and each answer is compared with the spec.',
+    'a.prodRun': 'Run transactions', 'a.prodAgain': 'Run again',
+    'a.prodOk': (c, n) => `<b>${c}/${n} correct.</b> Every transaction the spec covers behaves as the spec says.`,
+    'a.prodBad': (w, n) => `<b>${w} of ${n} wrong.</b> The gate had flagged this, a person approved it anyway, and the defect is now live.`,
+    'a.prodCols': ['', 'Transaction', 'Input', 'Spec', 'Answer', 'Result'],
+    'a.prodRes': { CORRECT: 'Correct', WRONG: 'Wrong', NOT_IN_SPEC: 'Not in spec' },
+    'a.prodNa': 'Not in the spec: the AI reviewer flagged this gap as MEDIUM, and the approver chose how to handle it.',
+    'a.crash': e => `crash (${e})`,
     'a.decided': (d, by) => `G6 · ${d === 'APPROVED' ? 'Approved' : 'Rejected'} by ${by}`,
     'a.waiting': 'waiting',
     'u.h': 'Every run and decision, hash-chained',
@@ -358,6 +372,15 @@ const T = {
     'a.allPass': '所有關卡都通過了。核准會連同你的名字一起記錄。',
     'a.name': '你的名字', 'a.reason': '原因', 'a.ack': '我接受這個 HIGH 問題，並承擔責任',
     'a.reject': '退回', 'a.approve': '核准', 'a.approveAnyway': '仍要核准',
+    'a.prod': '核准之後・用真實交易實際執行核准的程式',
+    'a.prodLead': '這就是上線的程式。把同一組交易送進去，逐筆和規格比對。',
+    'a.prodRun': '執行交易', 'a.prodAgain': '再執行一次',
+    'a.prodOk': (c, n) => `<b>${c}/${n} 筆正確。</b>規格涵蓋的每一筆交易，結果都和規格一致。`,
+    'a.prodBad': (w, n) => `<b>${n} 筆中有 ${w} 筆錯誤。</b>閘門已經提出警告，但有人仍然核准，這個缺陷現在已經上線。`,
+    'a.prodCols': ['', '交易', '輸入', '規格', '實際回應', '結果'],
+    'a.prodRes': { CORRECT: '正確', WRONG: '錯誤', NOT_IN_SPEC: '規格未定義' },
+    'a.prodNa': '規格沒有定義這種情況：獨立 AI 審查標示為「中」等級的缺口，由核准者決定怎麼處理。',
+    'a.crash': e => `程式中斷（${e}）`,
     'a.decided': (d, by) => `G6・已由 ${by} ${d === 'APPROVED' ? '核准' : '退回'}`,
     'a.waiting': '等待中',
     'u.h': '每次執行和決定，都寫入雜湊鏈',
@@ -469,7 +492,7 @@ async function act(name, params = {}, btn) {
     if (res.error) S.lastError = res.error;
     else {
       showCmd(res);
-      if (!['project', 'audit', 'reset'].includes(name) && res.exitCode !== 0) S.lastError = res.output.trim();
+      if (!['project', 'audit', 'reset', 'production'].includes(name) && res.exitCode !== 0) S.lastError = res.output.trim();
     }
   } finally {
     S.busy = false;
@@ -506,9 +529,12 @@ document.addEventListener('click', e => {
   else if (a === 'audit') { S.tamper = null; act('audit', {}, b); }
   else if (a === 'reset') { S.attempt = null; S.tamper = null; act('reset', {}, b); }
   else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
+  else if (a === 'production') act('production', { run: b.dataset.run }, b);
   else if (a === 'reject' || a === 'approve') {
     const ack = $('#ack') ? $('#ack').checked : false;
-    act(a, { by: $('#by').value.trim(), note: $('#note').value.trim(), ackHigh: String(ack) }, b);
+    let note = $('#note').value.trim();
+    if (a === 'approve' && ack && note.startsWith('Full-width digits must be rejected')) note = 'Approved anyway to meet the deadline. I accept the risk of the HIGH finding.';
+    act(a, { by: $('#by').value.trim(), note, ackHigh: String(ack) }, b);
   }
 });
 $('#tamper').onclick = async () => { const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit(); };
@@ -670,7 +696,33 @@ function attemptDetail(r) {
     const d = g6.details;
     h += `<div class="decision"><h3>${t('a.decided', d.decision, esc(d.decidedBy))}</h3><p class="note" style="margin:0">${esc(d.decidedAt)}${d.note ? ' · ' + esc(d.note) : ''}</p></div>`;
   }
+  if (v === 'APPROVED') h += productionPanel(r);
   return h;
+}
+function productionPanel(r) {
+  const pc = r.productionCheck;
+  let h = `<div class="sub">${t('a.prod')}</div><div class="card">
+    <div style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <p class="note" style="margin:0;max-width:70ch">${t('a.prodLead')}</p>
+      <button class="btn primary" data-act="production" data-run="${esc(r.runId)}">${pc ? t('a.prodAgain') : t('a.prodRun')}</button></div>`;
+  if (pc) {
+    const ok = pc.verdict === 'ALL_CORRECT';
+    h += `<div class="prodsum ${ok ? 'good' : 'bad'}">${ok ? t('a.prodOk', pc.correct, pc.scored) : t('a.prodBad', pc.scored - pc.correct, pc.scored)}</div>`;
+    const c = t('a.prodCols'), R = t('a.prodRes');
+    const money = v => (Number(v) / 100).toFixed(2);
+    h += `<table class="prod"><tr>${c.map(x => `<th>${x}</th>`).join('')}</tr>` + pc.transactions.map(x => {
+      const cls = x.outcome === 'CORRECT' ? 'PASSED' : x.outcome === 'WRONG' ? 'FAILED' : 'SKIPPED';
+      const ans = x.error ? t('a.crash', esc(x.error)) : esc(x.actual);
+      return `<tr class="${x.outcome === 'WRONG' ? 'wrong' : ''}"><td class="mono">${esc(x.id)}</td>
+        <td><b>${esc(zh() && x.titleZh ? x.titleZh : x.title)}</b><br><span class="mono muted">${esc(x.rule)}</span></td>
+        <td class="mono">${esc(x.pan)}<br>exp ${esc(x.expiry)} · ${esc(x.transactionDate ?? 'null')}<br>${money(x.amountMinor)} / ${money(x.availableMinor)}</td>
+        <td class="mono">${esc(x.expected ?? '–')}</td>
+        <td class="mono" style="${x.outcome === 'WRONG' ? 'color:var(--fail);font-weight:700' : ''}">${ans}</td>
+        <td><span class="chip s-${cls}">${esc(R[x.outcome])}</span></td></tr>` +
+        (x.outcome === 'NOT_IN_SPEC' ? `<tr><td></td><td colspan="5" class="note" style="padding-top:0">${t('a.prodNa')}</td></tr>` : '');
+    }).join('') + `</table>`;
+  }
+  return h + `</div>`;
 }
 
 /* ================= 3. audit ================= */

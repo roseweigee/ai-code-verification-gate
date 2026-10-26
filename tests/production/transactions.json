@@ -1,0 +1,27 @@
+{
+  "_about": "Production check: real-looking transactions sent to the code a human APPROVED, after the gate. It shows what the approved code actually does once it is live. Expected codes come from spec v1.0. Card numbers are public test PANs. A case with expected null is not covered by the spec: it is shown, not scored.",
+  "transactions": [
+    { "id": "P-01", "rule": "AC-06", "title": "Normal purchase", "titleZh": "一般消費",
+      "pan": "4111111111111111", "expiry": "2812", "amountMinor": 120000, "availableMinor": 5000000,
+      "transactionDate": "2026-10-27", "expected": "00" },
+    { "id": "P-02", "rule": "AC-02", "title": "Card number with a full-width digit", "titleZh": "卡號含全形數字",
+      "pan": "411111111111111３", "expiry": "2812", "amountMinor": 1000, "availableMinor": 5000,
+      "transactionDate": "2026-10-27", "expected": "14" },
+    { "id": "P-03", "rule": "AC-03", "title": "Card expired last month", "titleZh": "上個月已過期的卡",
+      "pan": "4111111111111111", "expiry": "2609", "amountMinor": 1000, "availableMinor": 5000,
+      "transactionDate": "2026-10-27", "expected": "54" },
+    { "id": "P-04", "rule": "AC-03", "title": "Last day of the expiry month", "titleZh": "到期月份的最後一天",
+      "pan": "4111111111111111", "expiry": "2610", "amountMinor": 1000, "availableMinor": 5000,
+      "transactionDate": "2026-10-31", "expected": "00" },
+    { "id": "P-05", "rule": "AC-05", "title": "Amount equals the balance", "titleZh": "金額剛好等於餘額",
+      "pan": "4111111111111111", "expiry": "2812", "amountMinor": 5000, "availableMinor": 5000,
+      "transactionDate": "2026-10-27", "expected": "00" },
+    { "id": "P-06", "rule": "AC-05", "title": "Amount over the balance", "titleZh": "金額超過餘額",
+      "pan": "4111111111111111", "expiry": "2812", "amountMinor": 5001, "availableMinor": 5000,
+      "transactionDate": "2026-10-27", "expected": "51" },
+    { "id": "P-07", "rule": "not in spec", "title": "Transaction date missing", "titleZh": "缺少交易日期",
+      "pan": "4111111111111111", "expiry": "2812", "amountMinor": 1000, "availableMinor": 5000,
+      "transactionDate": null, "expected": null,
+      "note": "The spec does not say what to return. This is the MEDIUM gap the AI reviewer raised; the approver decided whether to accept it." }
+  ]
+}

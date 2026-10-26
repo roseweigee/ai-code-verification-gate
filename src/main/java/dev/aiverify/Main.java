@@ -50,6 +50,7 @@ public final class Main {
             case "approve" -> decide(opts, true);
             case "reject" -> decide(opts, false);
             case "verify-project" -> verifyProject(opts);
+            case "production" -> production(opts);
             case "audit" -> audit();
             case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
             case "notify-test" -> new Notifier(ROOT).send(new Notifier.Message("[AI Gate] Test email",
@@ -76,6 +77,9 @@ public final class Main {
                                         Verify a whole generated project (e.g. SpecBlast output):
                                         Java policy, CodingStyle.md, Kubernetes, pipeline, Maven build.
                                         Exit code 1 when blocked, so a CI step can stop the deploy.
+                  production [--run ID] After approval: send real-looking transactions to the APPROVED code
+                                        (latest approved run by default) and show what it actually does.
+                                        Exit code 1 if any transaction covered by the spec is wrong.
                   notify-test           Send a test email using notify.properties (see notify.properties.example)
                   audit                 Verify the hash-chained audit log
                   report                Rebuild runs/report.html
@@ -145,6 +149,35 @@ public final class Main {
         Map<String, Object> result = new Pipeline().run(ctx, feedback);
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
         new Notifier(ROOT).send(GateMail.runFinished(result));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void production(Map<String, String> opts) throws IOException {
+        Path runs = ROOT.resolve("runs");
+        Path runDir = null;
+        if (opts.containsKey("run")) {
+            runDir = runs.resolve(opts.get("run"));
+        } else if (Files.isDirectory(runs)) {
+            try (Stream<Path> s = Files.list(runs)) {
+                for (Path d : s.filter(p -> p.getFileName().toString().startsWith("run-"))
+                        .sorted(Comparator.reverseOrder()).toList()) {
+                    Path r = d.resolve("result.json");
+                    if (Files.exists(r) && Pipeline.VERDICT_APPROVED.equals(
+                            ((Map<String, Object>) Json.parse(Files.readString(r))).get("verdict"))) {
+                        runDir = d;
+                        break;
+                    }
+                }
+            }
+        }
+        if (runDir == null || !Files.exists(runDir.resolve("result.json"))) {
+            fail("No approved run yet. Only code a named human approved can go to production.");
+        }
+        Map<String, Object> r = dev.aiverify.pipeline.ProductionCheck.run(ROOT, runDir);
+        System.out.print(dev.aiverify.pipeline.ProductionCheck.format(r));
+        if (!"ALL_CORRECT".equals(r.get("verdict"))) {
+            System.exit(1);
+        }
     }
 
     private static Path previousRun(Path current) throws IOException {
