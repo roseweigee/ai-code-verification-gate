@@ -69,24 +69,43 @@ public final class Pipeline {
         ctx.write("ai-tests.json", Json.write(Map.of("cases", aiTestMaps)));
 
         // ---- Gates
-        List<GateResult> results = new ArrayList<>();
-        boolean blocked = false;
-        GateResult failedTests = null;
-        for (Gate g : gates) {
-            if (blocked) {
-                results.add(GateResult.skipped(g.id(), g.name(), g.decidedBy(), "Skipped: an earlier gate failed."));
-                continue;
-            }
-            GateResult r = g.run(ctx);
-            results.add(r);
-            log(String.format("  %s %-22s %-8s %s", r.id(), r.name(), r.status(), r.summary()));
-            if (r.status() == GateResult.Status.FAILED) {
-                blocked = true;
-                if (g instanceof SpecTestGate) {
-                    failedTests = r;
+        Pass pass = runGates(ctx);
+
+        // ---- NF-05: a crash on null input is fixed by a fixed rule, then every gate runs again
+        if (pass.failedTests != null && Boolean.TRUE.equals(pass.failedTests.details().get("baselineOnly"))) {
+            String before = ctx.candidateSource;
+            java.util.Set<String> types = new java.util.HashSet<>();
+            for (Object o : (List<?>) pass.failedTests.details().get("failures")) {
+                Object id = ((Map<?, ?>) o).get("id");
+                if ("R-01".equals(id)) {
+                    types.add("LocalDate");
+                } else if ("R-02".equals(id)) {
+                    types.add("AuthRequest");
                 }
             }
+            String fixed = NullGuardFixer.fix(before, types);
+            if (fixed != null) {
+                Map<String, Object> fix = new LinkedHashMap<>();
+                fix.put("rule", "NF-05");
+                fix.put("found", pass.failedTests.details().get("failures"));
+                fix.put("added", NullGuardFixer.addedLines(before, fixed));
+                fix.put("beforeSha256", Hashing.sha256(before));
+                fix.put("afterSha256", Hashing.sha256(fixed));
+                fix.put("firstPass", pass.summaries());
+                ctx.autoFix = fix;
+                ctx.write("candidate/before-auto-fix.java", before);
+                ctx.candidateSource = fixed;
+                ctx.write("candidate/AuthorizationPrecheckImpl.java", fixed);
+                provenance.put("autoFix", "NF-05 null guard added by the gate (deterministic rule, not AI)");
+                provenance.put("sha256", Hashing.sha256(fixed));
+                ctx.write("candidate/PROVENANCE.json", Json.write(provenance));
+                log("  auto-fix      NF-05: a null input crashed the code; the gate added a null guard. All gates run again:");
+                pass = runGates(ctx);
+            }
         }
+        List<GateResult> results = pass.results;
+        boolean blocked = pass.blocked;
+        GateResult failedTests = pass.failedTests;
 
         // ---- On test failure, a separate AI diagnoses the root cause for the human
         if (failedTests != null) {
@@ -133,6 +152,9 @@ public final class Pipeline {
         if (ctx.diagnosis != null) {
             result.put("diagnosis", ctx.diagnosis);
         }
+        if (ctx.autoFix != null) {
+            result.put("autoFix", ctx.autoFix);
+        }
         ctx.write("result.json", Json.write(result));
 
         Map<String, Object> event = new LinkedHashMap<>();
@@ -144,6 +166,9 @@ public final class Pipeline {
         event.put("candidateSha256", Hashing.sha256(ctx.candidateSource));
         event.put("specSha256", Hashing.sha256(ctx.spec));
         event.put("gates", gateSummary(results));
+        if (ctx.autoFix != null) {
+            event.put("autoFix", "NF-05 null guard");
+        }
         new AuditLog(ctx.projectRoot.resolve("runs/audit-log.jsonl")).append(event);
         return result;
     }
@@ -180,6 +205,39 @@ public final class Pipeline {
                 + "answer is saved and hashed. Correctness is checked by deterministic gates G1-G4; "
                 + "an independent AI review (G5) is shown to the human.");
         return m;
+    }
+
+    /** One pass through the gates. */
+    private record Pass(List<GateResult> results, boolean blocked, GateResult failedTests) {
+        List<Object> summaries() {
+            List<Object> out = new ArrayList<>();
+            for (GateResult r : results) {
+                out.add(Map.of("id", r.id(), "status", r.status().name(), "summary", r.summary()));
+            }
+            return out;
+        }
+    }
+
+    private Pass runGates(RunContext ctx) {
+        List<GateResult> results = new ArrayList<>();
+        boolean blocked = false;
+        GateResult failedTests = null;
+        for (Gate g : gates) {
+            if (blocked) {
+                results.add(GateResult.skipped(g.id(), g.name(), g.decidedBy(), "Skipped: an earlier gate failed."));
+                continue;
+            }
+            GateResult r = g.run(ctx);
+            results.add(r);
+            log(String.format("  %s %-22s %-8s %s", r.id(), r.name(), r.status(), r.summary()));
+            if (r.status() == GateResult.Status.FAILED) {
+                blocked = true;
+                if (g instanceof SpecTestGate) {
+                    failedTests = r;
+                }
+            }
+        }
+        return new Pass(results, blocked, failedTests);
     }
 
     private static Map<String, Object> inputHashes(RunContext ctx) {

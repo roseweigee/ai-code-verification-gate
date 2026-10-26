@@ -216,7 +216,6 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
     <button data-view="project" class="on"><span class="num">01</span><span data-i="tab1"></span></button>
     <button data-view="attempts"><span class="num">02</span><span data-i="tab2"></span></button>
     <button data-view="audit"><span class="num">03</span><span data-i="tab3"></span></button>
-    <button data-view="specblast"><span class="num">04</span><span data-i="tab4"></span></button>
   </nav>
 </header>
 
@@ -225,9 +224,16 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
     <div class="lead">
       <div><h2 data-i="p.h"></h2><p data-i="p.lead"></p></div>
       <div class="actions">
-        <button class="btn primary" data-act="project" data-which="before" data-i="p.before"></button>
-        <button class="btn" data-act="project" data-which="after" data-i="p.after"></button>
+        <span id="acts-product" style="display:flex;gap:12px">
+          <button class="btn primary" data-act="project" data-which="before" data-i="p.before"></button>
+          <button class="btn" data-act="project" data-which="after" data-i="p.after"></button>
+        </span>
+        <span id="acts-iso" style="display:none"><button class="btn primary" data-act="specblast" data-i="s.run"></button></span>
       </div>
+    </div>
+    <div class="atabs" id="p-sub">
+      <button class="atab on" data-sub="product" data-i="p.subProduct"></button>
+      <button class="atab" data-sub="iso" data-i="p.subIso"></button>
     </div>
     <div id="project-out"></div>
   </section>
@@ -251,14 +257,6 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
     </div>
     <div id="audit-out"></div>
   </section>
-
-  <section class="view" id="v-specblast">
-    <div class="lead">
-      <div><h2 data-i="s.h"></h2><p data-i="s.lead"></p></div>
-      <div class="actions"><button class="btn primary" data-act="specblast" data-i="s.run"></button></div>
-    </div>
-    <div id="sb-out"></div>
-  </section>
 </main>
 
 <div class="toast" id="toast" role="status"></div>
@@ -273,7 +271,7 @@ const T = {
   en: {
     title: 'AI Code Verification Gate',
     tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
-    tab1: 'SpecBlast output', tab2: 'Three attempts', tab3: 'Audit trail', output: 'Output', running: 'Running…', tab4: 'SpecBlast × ISO 8583',
+    tab1: 'SpecBlast output', tab2: 'Three attempts', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment component · project + code', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
     's.h': 'SpecBlast writes the payment component', 's.lead': 'SpecBlast generated a whole Spring Boot project from the ISO 8583 spec. It never saw the tests. The gate checks the project, then runs the same gates and the same 33 held-out golden tests on its rules class.', 's.run': 'Verify SpecBlast project', 's.empty': 'Press <b>Verify SpecBlast project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
@@ -342,7 +340,7 @@ const T = {
   zh: {
     title: 'AI 程式碼驗證閘門',
     tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
-    tab1: 'SpecBlast 產出', tab2: '三次嘗試', tab3: '稽核紀錄', output: '輸出', running: '執行中…', tab4: 'SpecBlast × ISO 8583',
+    tab1: 'SpecBlast 產出', tab2: '三次嘗試', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付元件・專案＋程式', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
     's.h': '由 SpecBlast 撰寫支付元件', 's.lead': 'SpecBlast 依照 ISO 8583 規格書產生完整的 Spring Boot 專案，它從來沒看過測試。閘門先檢查整個專案，再用同樣的關卡、同樣 33 個藏起來的人工黃金測試，驗證它的規則類別。', 's.run': '驗證 SpecBlast 專案', 's.empty': '按下<b>「驗證 SpecBlast 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
@@ -430,14 +428,14 @@ const ZH = {
     'Q-01': { title: '沒有測試覆蓋率門檻', detail: '沒有 JaCoCo 的 check 目標，即使測試幾乎沒覆蓋到程式，mvn verify 也會通過。', fix: '加入 jacoco-maven-plugin，設定 prepare-agent、report 和最低行覆蓋率的 check 目標。' },
     'Q-02': { title: '沒有 SonarQube 品質閘門', detail: '部署前沒有任何靜態分析去檢查 bug、漏洞和程式碼異味。', fix: '在建置映像檔前執行 mvn sonar:sonar，並加上 -Dsonar.qualitygate.wait=true。' }
   },
-  tests: { 'G-14': '卡片在到期當月仍然有效', 'G-15': '到期月的最後一天仍然有效', 'G-18': '平年二月：28 日仍然有效', 'G-19': '閏年二月：29 日仍然有效', 'G-23': '最小的有效金額（1 分）', 'G-25': '金額等於可用餘額時應該核准' },
+  tests: { 'G-14': '卡片在到期當月仍然有效', 'G-15': '到期月的最後一天仍然有效', 'G-18': '平年二月：28 日仍然有效', 'G-19': '閏年二月：29 日仍然有效', 'G-23': '最小的有效金額（1 分）', 'G-25': '金額等於可用餘額時應該核准', 'R-01': '交易日期是 null', 'R-02': '請求是 null' },
   review: [
     { match: /isDigit accepts non-ASCII/, title: 'Character.isDigit 會接受非 ASCII 的數字', detail: 'allDigits() 使用 Character.isDigit，它對任何 Unicode 數字都回傳 true，例如全形數字（U+FF10 到 U+FF19）或阿拉伯－印度數字。之後 passesLuhn() 用 charAt(i) - \'0\' 計算，對這些字元會得到無意義的值，所以含有這種數字的卡號可能碰巧通過 Luhn 檢查而被核准，但 AC-02 規定只能是數字。AC-01 的到期日也用同樣的檢查，而 Integer.parseInt 同樣接受 Unicode 數字，所以全形的到期日也會被接受。修正方式：只接受 \'0\' 到 \'9\'。' },
     { match: /Null transactionDate/, title: '交易日期或請求為 null 時會拋出 NullPointerException', detail: 'check() 在第 19 行使用 request、在第 39 行使用 transactionDate，都沒有檢查 null。規格沒有說明這種情況該怎麼處理。建議先釐清規格，例如回傳 30 格式錯誤，而不是在授權流程中拋出例外。' }
   ],
   summaries: [
-    { match: /^The AC-03 and AC-05 boundaries/, text: 'AC-03 和 AC-05 的邊界現在符合規格了。還剩一個輸入驗證的缺陷：數字檢查會接受非 ASCII 的 Unicode 數字，所以 AC-01 和 AC-02 可以被繞過。另外有一個規格沒有寫到的穩健性缺口。' },
-    { match: /^The implementation follows AC-01 to AC-06/, text: '實作符合 AC-01 到 AC-06 和非功能需求，數字檢查現在只接受 ASCII 的 0 到 9。還剩一個規格沒有寫到的穩健性缺口。' },
+    { match: /^The AC-03 and AC-05 boundaries/, text: 'AC-03 和 AC-05 的邊界現在符合規格了，null 輸入也透過閘門的 NF-05 防護回傳 30。還剩一個輸入驗證的缺陷：數字檢查會接受非 ASCII 的 Unicode 數字，所以 AC-01 和 AC-02 可以被繞過。' },
+    { match: /^The implementation follows AC-01 to AC-06/, text: '實作符合 AC-01 到 AC-06 和非功能需求，數字檢查只接受 ASCII 的 0 到 9，null 輸入也透過閘門的 NF-05 防護回傳 30。沒有發現問題。' },
     { match: /^Not run: no reviewer model in offline mode/, text: '沒有執行：離線模式沒有審查模型。設定 ANTHROPIC_API_KEY 就會由另一個 AI 做獨立審查。' }
   ],
   feedback: [
@@ -542,7 +540,7 @@ document.addEventListener('click', e => {
   else if (a === 'reset') { S.attempt = null; S.tamper = null; act('reset', {}, b); }
   else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
   else if (a === 'production') act('production', { run: b.dataset.run }, b);
-  else if (a === 'specblast') act('specblast', {}, b);
+  else if (a === 'specblast') { setSub('iso'); act('specblast', {}, b); }
   else if (a === 'reject' || a === 'approve') {
     const box = b.closest('.decision') || document;
     const ackEl = box.querySelector('#ack');
@@ -556,10 +554,21 @@ document.addEventListener('click', e => {
 });
 $('#tamper').onclick = async () => { const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit(); };
 
-function render() { renderProject(); renderAttempts(); renderAudit(); renderSpecblast(); }
+function render() { renderProject(); renderAttempts(); renderAudit(); }
 
 /* ================= 1. SpecBlast ================= */
+function setSub(sub) {
+  S.sub = sub;
+  document.querySelectorAll('#p-sub [data-sub]').forEach(b => b.classList.toggle('on', b.dataset.sub === sub));
+  $('#acts-product').style.display = sub === 'product' ? 'flex' : 'none';
+  $('#acts-iso').style.display = sub === 'iso' ? 'flex' : 'none';
+  const h = document.querySelector('#v-project .lead h2'), p = document.querySelector('#v-project .lead p');
+  h.dataset.i = sub === 'iso' ? 's.h' : 'p.h'; p.dataset.i = sub === 'iso' ? 's.lead' : 'p.lead';
+  h.innerHTML = t(h.dataset.i); p.innerHTML = t(p.dataset.i);
+}
+document.querySelectorAll('#p-sub [data-sub]').forEach(b => b.onclick = () => { setSub(b.dataset.sub); renderProject(); });
 function renderProject() {
+  if (S.sub === 'iso') { renderSpecblast(); return; }
   const P = S.state.projects || {};
   const out = $('#project-out');
   if (!P.before && !P.after) { out.innerHTML = `<div class="empty">${t('p.empty')}</div>`; return; }
@@ -657,12 +666,21 @@ function attemptDetail(r) {
   h += `<div class="legend"><span><i style="background:var(--accent)"></i>${lg[0]}</span><span><i style="background:#d99a2b"></i>${lg[1]}</span><span><i style="background:var(--human)"></i>${lg[2]}</span></div>`;
   if (r.feedbackReceived) h += `<div class="feedback"><b>${t('a.feedback')}</b>${esc(trText(ZH.feedback, r.feedbackReceived))}</div>`;
 
+  if (r.autoFix) {
+    const fx = r.autoFix;
+    const found = (fx.found || []).map(f => `<li class="mono">${esc(t('a.fixFound', f.id, zh() && ZH.tests[f.id] ? ZH.tests[f.id] : f.description, f.actual || f.detail, f.line))}</li>`).join('');
+    h += `<div class="sub">${t('a.fixH')}</div><div class="card" style="border-left:6px solid var(--accent)">
+      <ul style="margin:0 0 12px;padding-left:20px">${found}</ul>
+      ${codeBlock((fx.added || []).map(x => ({ n: x.n, text: x.text, hit: true })))}
+      <p class="note" style="margin:12px 0 0">${t('a.fixNote')}</p></div>`;
+  }
   const tt = G.G3?.details;
   if (tt && tt.aiSuite) {
     const gFail = tt.goldenSuite.total - tt.goldenSuite.passed;
     h += `<div class="sub">${t('a.g3')}</div><div class="grid2">
       <div class="card big good"><span class="num">${tt.aiSuite.passed}/${tt.aiSuite.total}</span><span class="cap">${t('a.aiTests')}</span></div>
       <div class="card big ${gFail ? 'bad' : 'good'}"><span class="num">${tt.goldenSuite.passed}/${tt.goldenSuite.total}</span><span class="cap">${t('a.goldTests')}${gFail ? ` · <b>${t('a.failed', gFail)}</b>` : ''}</span></div></div>`;
+    if (tt.baselineSuite) { const bs = tt.baselineSuite; h += `<p class="note" style="margin:8px 0 0;${bs.passed < bs.total ? 'color:var(--fail);font-weight:600' : ''}">${t('a.nullChecks', bs.passed, bs.total)}</p>`; }
     if (tt.failures && tt.failures.length) {
       const c = t('a.cols');
       h += `<div class="card" style="margin-top:16px"><table><tr>${c.map(x => `<th>${x}</th>`).join('')}</tr>` +
@@ -701,7 +719,7 @@ function attemptDetail(r) {
   if (waiting) {
     const high = a?.highFindings || 0;
     const prevBy = $('#by') ? $('#by').value : 'Rhosyn Wei';
-    const defNote = $('#note') ? $('#note').value : (high ? 'Full-width digits must be rejected (AC-01, AC-02). Adding regression tests G-32 and G-33.' : 'Accepted. The null-input gap goes to the spec backlog.');
+    const defNote = $('#note') ? $('#note').value : (high ? 'Full-width digits must be rejected (AC-01, AC-02). Adding regression tests G-32 and G-33.' : 'Accepted. All gates passed, including the NF-05 null guard the gate added.');
     const errMsg = S.lastError ? esc(trText(ZH.errors, S.lastError)) : '';
     h += `<div class="decision"><h3>${t('a.g6')}</h3>
       <p class="note" style="margin:0">${high ? t('a.high', high) : t('a.allPass')}</p>
@@ -745,7 +763,7 @@ function productionPanel(r) {
 
 /* ================= 4. SpecBlast x ISO 8583 ================= */
 function renderSpecblast() {
-  const out = $('#sb-out');
+  const out = $('#project-out');
   if (!S.state.specblastAvailable) { out.innerHTML = `<div class="empty">${t('s.missing')}</div>`; return; }
   const P = (S.state.projects || {})['specblast-iso8583'], R = S.state.specblastRun;
   if (!P && !R) { out.innerHTML = `<div class="empty">${t('s.empty')}</div>`; return; }
@@ -802,6 +820,7 @@ function renderAudit() {
 }
 
 applyStatic();
+S.sub = 'product';
 load();
 </script>
 </body>

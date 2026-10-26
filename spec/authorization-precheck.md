@@ -47,3 +47,4 @@ Rules are evaluated **in this order**; the first rule that fails decides the cod
 | NF-02 | No file, network, process, reflection, or `System.exit` access. |
 | NF-03 | Only `java.time`, `java.util` and the contract package may be imported. |
 | NF-04 | No hard-coded secrets or credentials. |
+| NF-05 | No input may make `check` throw. A null `request` or null `transactionDate` returns `30` Format error. (Gate baseline rule; the gate adds a null guard automatically when this is the only failure.) |

@@ -31,6 +31,7 @@ public final class RunContext {
     public List<TestCase> aiTests = new ArrayList<>();
     public Class<?> compiledClass;
     public Map<String, Object> diagnosis;
+    public Map<String, Object> autoFix;
 
     /** role -> {file, sha256} for every AI exchange in this run. */
     public final Map<String, Object> aiExchanges = new LinkedHashMap<>();

@@ -167,7 +167,11 @@ public final class ProductionCheck {
             b.append("WRONG: ").append(scored - correct).append(" of ").append(scored)
                     .append(" transactions. This defect is now in production.\n");
         }
-        b.append("Cases marked n/a are not covered by the spec; the approver's note says how they are handled.\n");
+        boolean anyNa = ((List<Object>) r.get("transactions")).stream()
+                .anyMatch(o -> "NOT_IN_SPEC".equals(((Map<String, Object>) o).get("outcome")));
+        if (anyNa) {
+            b.append("Cases marked n/a are not covered by the spec; the approver's note says how they are handled.\n");
+        }
         return b.toString();
     }
 }

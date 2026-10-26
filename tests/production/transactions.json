@@ -1,5 +1,5 @@
 {
-  "_about": "Production check: real-looking transactions sent to the code a human APPROVED, after the gate. It shows what the approved code actually does once it is live. Expected codes come from spec v1.0. Card numbers are public test PANs. A case with expected null is not covered by the spec: it is shown, not scored.",
+  "_about": "Production check: real-looking transactions sent to the code a human APPROVED, after the gate. It shows what the approved code actually does once it is live. Expected codes come from spec v1.0. Card numbers are public test PANs. Rule NF-05 (gate baseline): a null input is a format error (30), never a crash.",
   "transactions": [
     { "id": "P-01", "rule": "AC-06", "title": "Normal purchase", "titleZh": "一般消費",
       "pan": "4111111111111111", "expiry": "2812", "amountMinor": 120000, "availableMinor": 5000000,
@@ -19,9 +19,8 @@
     { "id": "P-06", "rule": "AC-05", "title": "Amount over the balance", "titleZh": "金額超過餘額",
       "pan": "4111111111111111", "expiry": "2812", "amountMinor": 5001, "availableMinor": 5000,
       "transactionDate": "2026-10-27", "expected": "51" },
-    { "id": "P-07", "rule": "not in spec", "title": "Transaction date missing", "titleZh": "缺少交易日期",
+    { "id": "P-07", "rule": "NF-05", "title": "Transaction date missing", "titleZh": "缺少交易日期",
       "pan": "4111111111111111", "expiry": "2812", "amountMinor": 1000, "availableMinor": 5000,
-      "transactionDate": null, "expected": null,
-      "note": "The spec does not say what to return. This is the MEDIUM gap the AI reviewer raised; the approver decided whether to accept it." }
+      "transactionDate": null, "expected": "30" }
   ]
 }

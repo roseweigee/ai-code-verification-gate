@@ -1,12 +1,4 @@
 {
-  "summary": "The implementation follows AC-01 to AC-06 and the non-functional rules. The digit check now accepts ASCII 0-9 only. One robustness gap remains where the specification is silent.",
-  "findings": [
-    {
-      "severity": "MEDIUM",
-      "criterion": "GENERAL",
-      "line": 39,
-      "title": "Null transactionDate or null request throws NullPointerException",
-      "detail": "check() dereferences request at line 19 and transactionDate at line 39 without a null check. The specification does not define this case. Recommend adding it to the specification, for example return 30 Format error."
-    }
-  ]
+  "summary": "The implementation follows AC-01 to AC-06 and the non-functional rules. The digit check accepts ASCII 0-9 only, and null inputs return 30 through the gate's NF-05 guard. No findings.",
+  "findings": []
 }

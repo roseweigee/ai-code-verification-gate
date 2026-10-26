@@ -123,8 +123,7 @@ public final class Main {
         System.out.println();
         Map<String, String> approve = new LinkedHashMap<>();
         approve.put("by", SCRIPTED_HUMAN);
-        approve.put("note", "Accepted. transactionDate is always set by the switch; the MEDIUM null-input finding "
-                + "goes to the spec v1.1 backlog.");
+        approve.put("note", "Accepted. All gates passed, including the NF-05 null guard the gate added.");
         decide(approve, true);
     }
 
@@ -189,7 +188,7 @@ public final class Main {
         Files.createDirectories(runDir);
         Files.writeString(runDir.resolve("source.txt"), project.relativize(rulesFile) + "\n" + origin + "\n");
         RunContext ctx = new RunContext(ROOT, runDir, runId, 1, ai);
-        ctx.goldenVersion = "latest";
+        ctx.goldenVersion = "1.1";
         Map<String, Object> result = new Pipeline().run(ctx, null);
         new Notifier(ROOT).send(GateMail.runFinished(result));
         System.out.println();

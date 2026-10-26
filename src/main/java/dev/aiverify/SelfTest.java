@@ -36,8 +36,17 @@ final class SelfTest {
         projectRules();
         supplyChainAndInjection();
         email();
+        nullGuard();
         System.out.printf("%nSelf-test: %d passed, %d failed%n", passed, failed);
         return failed == 0;
+    }
+
+    private static void nullGuard() {
+        String src = "class A {\n    public String check(AuthRequest r, LocalDate d, long x) {\n        return d.toString();\n    }\n}\n";
+        String fixed = dev.aiverify.pipeline.NullGuardFixer.fix(src);
+        check("Null guard: object parameters checked, primitives ignored",
+                fixed != null && fixed.contains("if (r == null || d == null) {") && !fixed.contains("x == null"));
+        check("Null guard: applied only once", dev.aiverify.pipeline.NullGuardFixer.fix(fixed) == null);
     }
 
     private static void email() {

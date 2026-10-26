@@ -1,19 +1,12 @@
 {
-  "summary": "The AC-03 and AC-05 boundaries now match the specification. One input-validation defect remains: the digit check accepts non-ASCII Unicode digits, so AC-01 and AC-02 can be bypassed. One robustness gap where the specification is silent.",
+  "summary": "The AC-03 and AC-05 boundaries now match the specification, and null inputs return 30 through the gate's NF-05 guard. One input-validation defect remains: the digit check accepts non-ASCII Unicode digits, so AC-01 and AC-02 can be bypassed.",
   "findings": [
     {
       "severity": "HIGH",
       "criterion": "AC-02",
-      "line": 58,
+      "line": 62,
       "title": "Character.isDigit accepts non-ASCII digits",
       "detail": "allDigits() uses Character.isDigit, which returns true for any Unicode decimal digit, such as full-width digits (U+FF10 to U+FF19) or Arabic-Indic digits. passesLuhn() then computes charAt(i) - '0', which gives a meaningless value for those characters, so a PAN containing such a digit can pass or fail Luhn by chance. A PAN like this may be approved even though AC-02 requires digits only. The same check guards the expiry in AC-01, and Integer.parseInt also accepts Unicode digits, so a full-width expiry is accepted. Fix: accept only characters '0' to '9'."
-    },
-    {
-      "severity": "MEDIUM",
-      "criterion": "GENERAL",
-      "line": 39,
-      "title": "Null transactionDate or null request throws NullPointerException",
-      "detail": "check() dereferences request at line 19 and transactionDate at line 39 without a null check. The specification does not say what should happen in this case. Recommend clarifying the spec, for example return 30 Format error, rather than throwing in the authorization path."
     }
   ]
 }

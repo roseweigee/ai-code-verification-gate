@@ -135,8 +135,8 @@ codes `30`, `14`, `54`, `13`, `51` or `00`. The spec is in
 | Attempt | What happened | Verdict |
 | --- | --- | --- |
 | 1 | AI tests **15/15 passed**. Human golden tests failed **6 of 31**: the card was declined during its own expiry month, and an amount equal to the balance was declined. The diagnostician explained the root cause and sent spec-level feedback, without leaking test data. | Blocked |
-| 2 | Boundaries fixed. All **46** tests passed. Mutation testing: **98.6%** combined, but AI tests alone only **79.7%**, below the 80% gate. The independent AI reviewer raised a **HIGH** finding no test caught: `Character.isDigit()` accepts full-width Unicode digits, so the PAN `411111111111111３` was approved with `00`. | Rejected by human |
-| 3 | The human added regression tests G-32 and G-33 (golden set v1.1). The author switched to an ASCII-only check. All **48** tests pass, mutation **98.6%**. One MEDIUM finding (null inputs, a gap in the spec) was accepted and logged. | Approved |
+| 2 | Boundaries fixed. All **46** tests passed; a null input still crashed the code, so the gate added a null guard (rule NF-05) and ran every gate again. Mutation testing: **95.9%** combined, but AI tests alone only **78.1%**, below the 80% gate. The independent AI reviewer raised a **HIGH** finding no test caught: `Character.isDigit()` accepts full-width Unicode digits, so the PAN `411111111111111３` was approved with `00`. | Rejected by human |
+| 3 | The human added regression tests G-32 and G-33 (golden set v1.1). The author switched to an ASCII-only check. All **48** tests pass after the same NF-05 auto-fix, mutation **96.1%**, no review findings. In production-like transactions all **7** are correct, including the null date. | Approved |
 
 Each attempt shows a different layer catching what the previous layer missed.
 
@@ -155,7 +155,7 @@ Claude call.
 Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 
 ```bash
-./run.sh selftest                 # 45 checks of the engine itself
+./run.sh selftest                 # 47 checks of the engine itself
 ./run.sh console                  # web console at http://127.0.0.1:8080: buttons run the real commands
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
