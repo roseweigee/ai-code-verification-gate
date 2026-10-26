@@ -228,7 +228,7 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
           <button class="btn primary" data-act="project" data-which="before" data-i="p.before"></button>
           <button class="btn" data-act="project" data-which="after" data-i="p.after"></button>
         </span>
-        <span id="acts-iso" style="display:none"><button class="btn primary" data-act="specblast" data-i="s.run"></button></span>
+        <span id="acts-iso" style="display:none"><button class="btn primary" data-act="project" data-which="iso" data-i="s.run"></button></span>
       </div>
     </div>
     <div class="atabs" id="p-sub">
@@ -242,6 +242,10 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
     <div class="lead">
       <div><h2 data-i="a.h"></h2><p data-i="a.lead"></p></div>
       <div class="actions" id="attempt-actions"></div>
+    </div>
+    <div class="atabs" id="a-sub">
+      <button class="atab on" data-asub="claude" data-i="a.subClaude"></button>
+      <button class="atab" data-asub="sb" data-i="a.subSb"></button>
     </div>
     <div class="steps" id="steps"></div>
     <div id="attempt-out"></div>
@@ -271,8 +275,9 @@ const T = {
   en: {
     title: 'AI Code Verification Gate',
     tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
-    tab1: 'SpecBlast output', tab2: 'Three attempts', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment component · project + code', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
-    's.h': 'SpecBlast writes the payment component', 's.lead': 'SpecBlast generated a whole Spring Boot project from the ISO 8583 spec. It never saw the tests. The gate checks the project, then runs the same gates and the same 33 held-out golden tests on its rules class.', 's.run': 'Verify SpecBlast project', 's.empty': 'Press <b>Verify SpecBlast project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
+    tab1: 'SpecBlast output', tab2: 'Code checks', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment component · project + code', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
+    'a.subClaude': 'Claude · three attempts', 'a.subSb': 'SpecBlast\'s version', 'sb.h': 'The same check, written by SpecBlast', 'sb.lead': 'SpecBlast wrote the payment rules from the same spec and never saw the tests. The same six gates and the same 33 hidden human tests check its code.', 'sb.run': 'Check SpecBlast\'s code', 'sb.empty': 'Press <b>Check SpecBlast\'s code</b>. The whole project is checked on tab 01.', 'sb.src': src => `Code under test: <span class="mono">${src}</span> · the whole project is checked on tab 01`, 's.codeNote': 'This tab checks the whole project. SpecBlast\'s payment rules are checked line by line on tab 02, under “SpecBlast\'s version”.',
+    's.h': 'Checking the ISO 8583 project SpecBlast generated', 's.lead': 'SpecBlast generated a whole Spring Boot service from the card payment spec. The gate checks the whole project: security, the style contract, Kubernetes, the pipeline and tests.', 's.run': 'Check the ISO 8583 project', 's.empty': 'Press <b>Check the ISO 8583 project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
     'p.lead': 'Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed.',
@@ -340,8 +345,9 @@ const T = {
   zh: {
     title: 'AI 程式碼驗證閘門',
     tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
-    tab1: 'SpecBlast 產出', tab2: '三次嘗試', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付元件・專案＋程式', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
-    's.h': '由 SpecBlast 撰寫支付元件', 's.lead': 'SpecBlast 依照 ISO 8583 規格書產生完整的 Spring Boot 專案，它從來沒看過測試。閘門先檢查整個專案，再用同樣的關卡、同樣 33 個藏起來的人工黃金測試，驗證它的規則類別。', 's.run': '驗證 SpecBlast 專案', 's.empty': '按下<b>「驗證 SpecBlast 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
+    tab1: 'SpecBlast 產出', tab2: '程式碼檢查', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付元件・專案＋程式', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
+    'a.subClaude': 'Claude・三次嘗試', 'a.subSb': 'SpecBlast 寫的版本', 'sb.h': '同一個刷卡檢查，由 SpecBlast 撰寫', 'sb.lead': 'SpecBlast 依照同一份規格寫出付款規則，從來沒看過測試。用同樣的六道關卡、同樣 33 個藏起來的人工測試檢查它的程式。', 'sb.run': '檢查 SpecBlast 的程式', 'sb.empty': '按下<b>「檢查 SpecBlast 的程式」</b>。整個專案的檢查在第 01 頁。', 'sb.src': src => `受檢程式：<span class="mono">${src}</span>・整個專案的檢查在第 01 頁`, 's.codeNote': '這一頁檢查整個專案。SpecBlast 寫的付款規則程式，在第 02 頁的「SpecBlast 寫的版本」逐行檢查。',
+    's.h': '檢查 SpecBlast 產生的 ISO 8583 專案', 's.lead': 'SpecBlast 依照刷卡規格產生完整的 Spring Boot 服務。這裡檢查整個專案：資安、程式規範、Kubernetes、交付流程和測試。', 's.run': '檢查 ISO 8583 專案', 's.empty': '按下<b>「檢查 ISO 8583 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
     'p.lead': '這是 SpecBlast 真實產生的專案（<span class="mono">roseweigee/product @ 25bb253</span>）。部署前，閘門會檢查每個 Java 檔、Kubernetes 設定和 Cloud Build 流程。',
@@ -535,12 +541,12 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || b.disabled) return;
   const a = b.dataset.act;
-  if (a === 'project') { S.sel = b.dataset.which; S.gate = null; act('project', { which: b.dataset.which }, b); }
+  if (a === 'project') { if (b.dataset.which !== 'iso') S.sel = b.dataset.which; S.gate = null; act('project', { which: b.dataset.which }, b); }
   else if (a === 'audit') { S.tamper = null; act('audit', {}, b); }
   else if (a === 'reset') { S.attempt = null; S.tamper = null; act('reset', {}, b); }
   else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
   else if (a === 'production') act('production', { run: b.dataset.run }, b);
-  else if (a === 'specblast') { setSub('iso'); act('specblast', {}, b); }
+  else if (a === 'specblast') { setASub('sb'); act('specblast', {}, b); }
   else if (a === 'reject' || a === 'approve') {
     const box = b.closest('.decision') || document;
     const ackEl = box.querySelector('#ack');
@@ -624,7 +630,24 @@ function codeBlock(lines) {
 
 /* ================= 2. attempts ================= */
 function vClass(v) { return { BLOCKED: 'BLOCKED', READY_FOR_HUMAN_APPROVAL: 'WAITING', APPROVED: 'APPROVED', REJECTED_BY_HUMAN: 'REJECTED' }[v] || 'SKIPPED'; }
+function setASub(sub) {
+  S.asub = sub;
+  document.querySelectorAll('#a-sub [data-asub]').forEach(b => b.classList.toggle('on', b.dataset.asub === sub));
+  $('#steps').style.display = sub === 'sb' ? 'none' : '';
+  const h = document.querySelector('#v-attempts .lead h2'), p = document.querySelector('#v-attempts .lead p');
+  h.dataset.i = sub === 'sb' ? 'sb.h' : 'a.h'; p.dataset.i = sub === 'sb' ? 'sb.lead' : 'a.lead';
+  h.innerHTML = t(h.dataset.i); p.innerHTML = t(p.dataset.i);
+}
+document.querySelectorAll('#a-sub [data-asub]').forEach(b => b.onclick = () => { setASub(b.dataset.asub); renderAttempts(); });
+function renderSbCode() {
+  const R = S.state.specblastRun;
+  $('#attempt-actions').innerHTML = S.state.specblastAvailable ? `<button class="btn primary" data-act="specblast">${t('sb.run')}</button>` : '';
+  const out = $('#attempt-out');
+  if (!R) { out.innerHTML = `<div class="empty">${t('sb.empty')}</div>`; return; }
+  out.innerHTML = `<p class="note" style="margin:0 0 16px">${t('sb.src', esc((R.source || '').split('\n')[0]))}</p>` + attemptDetail(R);
+}
 function renderAttempts() {
+  if (S.asub === 'sb') { renderSbCode(); return; }
   const runs = S.state.runs || [];
   const byA = {}; runs.forEach(r => byA[r.attempt] = r);
   const a1 = byA[1], a2 = byA[2], a3 = byA[3];
@@ -765,29 +788,23 @@ function productionPanel(r) {
 function renderSpecblast() {
   const out = $('#project-out');
   if (!S.state.specblastAvailable) { out.innerHTML = `<div class="empty">${t('s.missing')}</div>`; return; }
-  const P = (S.state.projects || {})['specblast-iso8583'], R = S.state.specblastRun;
-  if (!P && !R) { out.innerHTML = `<div class="empty">${t('s.empty')}</div>`; return; }
-  let h = '';
-  if (P) {
-    const blocked = P.verdict === 'BLOCKED';
-    h += `<div class="sub">${t('s.step1')}</div><div class="hero ${blocked ? 'bad' : 'wait'}">
-      <div class="word">${word(blocked ? 'BLOCKED' : 'READY')}</div>
-      <div class="facts">${t('p.facts', P.errors, P.warnings, P.filesChecked.total, P.filesChecked.java, P.filesChecked.kubernetes)}<br>${t(blocked ? 'p.blocked' : 'p.ready')}</div>
-      <div class="exit">${t('p.exit')}<b>${blocked ? 1 : 0}</b>${t(blocked ? 'p.stops' : 'p.cont')}</div></div>`;
-    h += `<div class="gates">` + P.gates.map(g => `<div class="gate st-${g.status}"><span class="id">${g.id}</span><span class="nm">${gateName(g)}</span>
-      <span><span class="chip s-${g.status}">${st(g.status)}</span></span><span class="ct">${g.errors} err · ${g.warnings} warn</span></div>`).join('') + `</div>`;
-    const all = [];
-    P.gates.forEach(g => g.findings.forEach(f => { if (f.severity !== 'PASS') all.push({ ...f, gate: g.id }); }));
-    const errs = all.filter(f => f.severity === 'ERROR'), warns = all.filter(f => f.severity !== 'ERROR');
-    if (errs.length) h += `<div class="findings">` + errs.map((f, i) => finding(f, 'err', 'sbe' + i)).join('') + `</div>`;
-    if (warns.length) h += `<details class="more"><summary>${t('p.warns', warns.length)}</summary><div class="findings">` + warns.map((f, i) => finding(f, 'warn', 'sbw' + i)).join('') + `</div></details>`;
-    setTimeout(() => errs.forEach((f, i) => { if (f.file && f.line > 0) loadSnippet('specblast', f.file, f.line, 'snip-sbe' + i); }), 0);
-  }
-  if (R) {
-    const src = esc((R.source || '').split('\n')[0]);
-    h += `<div class="sub" style="margin-top:32px">${t('s.step2', src)}</div>` + attemptDetail(R);
-  }
+  const P = (S.state.projects || {})['specblast-iso8583'];
+  if (!P) { out.innerHTML = `<div class="empty">${t('s.empty')}</div>`; return; }
+  const blocked = P.verdict === 'BLOCKED';
+  let h = `<div class="hero ${blocked ? 'bad' : 'wait'}">
+    <div class="word">${word(blocked ? 'BLOCKED' : 'READY')}</div>
+    <div class="facts">${t('p.facts', P.errors, P.warnings, P.filesChecked.total, P.filesChecked.java, P.filesChecked.kubernetes)}<br>${t(blocked ? 'p.blocked' : 'p.ready')}</div>
+    <div class="exit">${t('p.exit')}<b>${blocked ? 1 : 0}</b>${t(blocked ? 'p.stops' : 'p.cont')}</div></div>`;
+  h += `<div class="gates">` + P.gates.map(g => `<div class="gate st-${g.status}"><span class="id">${g.id}</span><span class="nm">${gateName(g)}</span>
+    <span><span class="chip s-${g.status}">${st(g.status)}</span></span><span class="ct">${g.errors} err · ${g.warnings} warn</span></div>`).join('') + `</div>`;
+  const all = [];
+  P.gates.forEach(g => g.findings.forEach(f => { if (f.severity !== 'PASS') all.push({ ...f, gate: g.id }); }));
+  const errs = all.filter(f => f.severity === 'ERROR'), warns = all.filter(f => f.severity !== 'ERROR');
+  if (errs.length) h += `<div class="sub">${t('p.errHead')}</div><div class="findings">` + errs.map((f, i) => finding(f, 'err', 'sbe' + i)).join('') + `</div>`;
+  if (warns.length) h += `<details class="more"><summary>${t('p.warns', warns.length)}</summary><div class="findings">` + warns.map((f, i) => finding(f, 'warn', 'sbw' + i)).join('') + `</div></details>`;
+  h += `<p class="note" style="margin-top:20px">${t('s.codeNote')}</p>`;
   out.innerHTML = h;
+  errs.forEach((f, i) => { if (f.file && f.line > 0) loadSnippet('specblast', f.file, f.line, 'snip-sbe' + i); });
 }
 
 /* ================= 3. audit ================= */
@@ -821,6 +838,7 @@ function renderAudit() {
 
 applyStatic();
 S.sub = 'product';
+S.asub = 'claude';
 load();
 </script>
 </body>

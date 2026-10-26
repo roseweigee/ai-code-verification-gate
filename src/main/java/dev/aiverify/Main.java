@@ -78,7 +78,7 @@ public final class Main {
                                         Verify a whole generated project (e.g. SpecBlast output):
                                         Java policy, CodingStyle.md, Kubernetes, pipeline, Maven build.
                                         Exit code 1 when blocked, so a CI step can stop the deploy.
-                  verify-specblast PATH
+                  verify-specblast PATH [--code-only]
                                         A SpecBlast project generated from examples/specblast-iso8583/iso8583-precheck.txt:
                                         P1-P7 on the whole project, then G1-G6 on its AuthorizationRules class
                                         (golden tests held out from SpecBlast). Approve with --run specblast/RUN_ID.
@@ -161,10 +161,13 @@ public final class Main {
             fail("Usage: verify-specblast PATH   (the SpecBlast project folder)");
         }
         Path project = Path.of(path).toAbsolutePath().normalize();
-        System.out.println("== Step 1: the whole project (P1-P7)");
-        Map<String, Object> pr = verifyAndSaveProject(project, "specblast-iso8583", false);
-        System.out.println();
-        System.out.println("== Step 2: SpecBlast's AuthorizationRules through gates G1-G6");
+        Map<String, Object> pr = Map.of();
+        if (!opts.containsKey("code-only")) {
+            System.out.println("== Step 1: the whole project (P1-P7)");
+            pr = verifyAndSaveProject(project, "specblast-iso8583", false);
+            System.out.println();
+        }
+        System.out.println("== SpecBlast's AuthorizationRules through gates G1-G6");
         Path rulesFile = dev.aiverify.ai.SpecBlastClient.findRules(project);
         System.out.println("  code under test: " + project.relativize(rulesFile));
         String candidate = dev.aiverify.ai.SpecBlastClient.wrap(Files.readString(rulesFile));

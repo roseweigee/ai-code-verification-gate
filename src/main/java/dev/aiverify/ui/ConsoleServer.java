@@ -170,10 +170,13 @@ public final class ConsoleServer {
             }
             case "project" -> {
                 String which = q.getOrDefault("which", "");
-                if (!PROJECTS.contains(which)) {
+                if ("iso".equals(which)) {
+                    args.addAll(List.of("verify-project", SPECBLAST_PROJECT, "--label", "specblast-iso8583"));
+                } else if (PROJECTS.contains(which)) {
+                    args.addAll(List.of("verify-project", "examples/specblast-product/" + which));
+                } else {
                     throw new IllegalArgumentException("unknown project");
                 }
-                args.addAll(List.of("verify-project", "examples/specblast-product/" + which));
             }
             case "production" -> {
                 args.add("production");
@@ -181,7 +184,7 @@ public final class ConsoleServer {
                     throw new IllegalArgumentException("unknown run");
                 }
             }
-            case "specblast" -> args.addAll(List.of("verify-specblast", SPECBLAST_PROJECT));
+            case "specblast" -> args.addAll(List.of("verify-specblast", SPECBLAST_PROJECT, "--code-only"));
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
         }
