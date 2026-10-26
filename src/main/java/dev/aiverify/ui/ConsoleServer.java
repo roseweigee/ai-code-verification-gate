@@ -49,6 +49,7 @@ public final class ConsoleServer {
     private final Path root;
     private final byte[] password;
     private final LiveService live;
+    private final CicdStatus cicd = new CicdStatus();
 
     private ConsoleServer(Path root, String password) {
         this.root = root;
@@ -128,6 +129,7 @@ public final class ConsoleServer {
                 }
                 case "/api/snippet" -> json(ex, snippet(q));
                 case "/api/tamper-test" -> json(ex, tamperTest());
+                case "/api/cicd" -> json(ex, cicd.get("1".equals(q.get("refresh"))));
                 case "/pay" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/live.html")));
                 case "/api/pay" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {

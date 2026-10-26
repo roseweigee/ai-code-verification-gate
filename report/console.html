@@ -237,6 +237,7 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
       <button class="atab" data-sub="iso" data-i="p.subIso"></button>
     </div>
     <div id="project-out"></div>
+    <div id="cicd-out" style="display:none"></div>
   </section>
 
   <section class="view" id="v-attempts">
@@ -274,7 +275,7 @@ const T = {
     tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
     tab1: 'SpecBlast output', tab2: 'Code checks', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment service · whole project', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
     'a.subClaude': 'Claude · three attempts', 'a.subSb': 'SpecBlast\'s version', 'sb.h': 'The same check, written by SpecBlast', 'sb.lead': 'SpecBlast wrote the payment rules from the same spec and never saw the tests. The same six gates and the same 33 hidden human tests check its code.', 'sb.run': 'Check SpecBlast\'s code', 'sb.empty': 'Press <b>Check SpecBlast\'s code</b>. The whole project is checked on tab 01.', 'sb.src': src => `Code under test: <span class="mono">${src}</span> · the whole project is checked on tab 01`, 's.codeNote': 'This tab checks the whole project. To see what its payment code does in production with and without the gate, open <a href="/pay">Live service</a>.',
-    's.h': 'Checking the ISO 8583 project SpecBlast generated', 's.lead': 'SpecBlast generated a whole Spring Boot service from the card payment spec. The gate checks the whole project: security, the style contract, Kubernetes, the pipeline and tests. <b>No AI here</b>: fixed rules, same answer every time, so the result can be audited.', 's.run': 'Check the ISO 8583 project', 's.runFixed': 'Check again after the fix', 's.fixed': 'After the fix: the author added <span class="mono">AuthorizationControllerTest</span> (MockMvc: normal path, and a missing date returns 400). The gate does not write project fixes itself; it sends them back to the author, then checks again.', 's.toFix': 'How it gets fixed: the gate does not change the project. The finding goes back to SpecBlast or an engineer, who adds the missing test. Then press <b>Check again after the fix</b>.', 's.empty': 'Press <b>Check the ISO 8583 project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
+    's.h': 'Checking the ISO 8583 project SpecBlast generated', 's.lead': 'SpecBlast generated a whole Spring Boot service from the card payment spec. The gate checks the whole project: security, the style contract, Kubernetes, the pipeline and tests. <b>No AI here</b>: fixed rules, same answer every time, so the result can be audited.', 'c.h': 'CI/CD · GitHub Actions → Cloud Run', 'c.lead': 'Every push to main runs this pipeline by itself: quality gate, unit tests, then deployment. What the gate blocks never reaches production.', 'c.refresh': 'Refresh', 'c.live': 'Live in production', 'c.none': 'Nothing deployed yet.', 'c.open': 'Open the service', 'c.all': 'All runs on GitHub', 'c.loading': 'Reading GitHub Actions…', 'c.err': e => `Could not read GitHub Actions: ${e}`, 'c.runs': 'Latest pipeline runs', 's.run': 'Check the ISO 8583 project', 's.runFixed': 'Check again after the fix', 's.fixed': 'After the fix: the author added <span class="mono">AuthorizationControllerTest</span> (MockMvc: normal path, and a missing date returns 400). The gate does not write project fixes itself; it sends them back to the author, then checks again.', 's.toFix': 'How it gets fixed: the gate does not change the project. The finding goes back to SpecBlast or an engineer, who adds the missing test. Then press <b>Check again after the fix</b>.', 's.empty': 'Press <b>Check the ISO 8583 project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
     'p.lead': 'Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed. <b>No AI here</b>: fixed rules, same answer every time, so the result can be audited.',
@@ -344,7 +345,7 @@ const T = {
     tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
     tab1: 'SpecBlast 產出', tab2: '程式碼檢查', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付服務・整個專案', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
     'a.subClaude': 'Claude・三次嘗試', 'a.subSb': 'SpecBlast 寫的版本', 'sb.h': '同一個刷卡檢查，由 SpecBlast 撰寫', 'sb.lead': 'SpecBlast 依照同一份規格寫出付款規則，從來沒看過測試。用同樣的六道關卡、同樣 33 個藏起來的人工測試檢查它的程式。', 'sb.run': '檢查 SpecBlast 的程式', 'sb.empty': '按下<b>「檢查 SpecBlast 的程式」</b>。整個專案的檢查在第 01 頁。', 'sb.src': src => `受檢程式：<span class="mono">${src}</span>・整個專案的檢查在第 01 頁`, 's.codeNote': '這一頁檢查整個專案。想看它的付款程式在正式環境中，跳過與通過品質關卡的差別，請開<a href="/pay">上線服務</a>。',
-    's.h': '檢查 SpecBlast 產生的 ISO 8583 專案', 's.lead': 'SpecBlast 依照刷卡規格產生完整的 Spring Boot 服務。這裡檢查整個專案：資安、程式規範、Kubernetes、交付流程和測試。<b>這頁不用 AI</b>：全部是固定規則，每次結果都一樣，可以稽核。', 's.run': '檢查 ISO 8583 專案', 's.runFixed': '修正後再檢查', 's.fixed': '修正後：作者補上了 <span class="mono">AuthorizationControllerTest</span>（MockMvc：正常交易，以及缺少日期時回 400）。品質關卡不會自己改專案，它把問題退回給作者，作者修好後再檢查一次。', 's.toFix': '怎麼修：品質關卡不會自己改專案。錯誤會退回給 SpecBlast 或工程師，由他們補上缺少的測試，再按<b>「修正後再檢查」</b>。', 's.empty': '按下<b>「檢查 ISO 8583 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
+    's.h': '檢查 SpecBlast 產生的 ISO 8583 專案', 's.lead': 'SpecBlast 依照刷卡規格產生完整的 Spring Boot 服務。這裡檢查整個專案：資安、程式規範、Kubernetes、交付流程和測試。<b>這頁不用 AI</b>：全部是固定規則，每次結果都一樣，可以稽核。', 'c.h': 'CI/CD・GitHub Actions → Cloud Run', 'c.lead': '每次 push 到 main，流水線自動執行：品質關卡 → 單元測試 → 部署。被關卡擋下的版本到不了正式環境。', 'c.refresh': '重新整理', 'c.live': '正式環境上線中', 'c.none': '還沒有部署紀錄。', 'c.open': '打開服務', 'c.all': '在 GitHub 看全部紀錄', 'c.loading': '正在讀取 GitHub Actions…', 'c.err': e => `讀不到 GitHub Actions：${e}`, 'c.runs': '最近幾次流水線', 's.run': '檢查 ISO 8583 專案', 's.runFixed': '修正後再檢查', 's.fixed': '修正後：作者補上了 <span class="mono">AuthorizationControllerTest</span>（MockMvc：正常交易，以及缺少日期時回 400）。品質關卡不會自己改專案，它把問題退回給作者，作者修好後再檢查一次。', 's.toFix': '怎麼修：品質關卡不會自己改專案。錯誤會退回給 SpecBlast 或工程師，由他們補上缺少的測試，再按<b>「修正後再檢查」</b>。', 's.empty': '按下<b>「檢查 ISO 8583 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
     'p.lead': '這是 SpecBlast 真實產生的專案（<span class="mono">roseweigee/product @ 25bb253</span>）。部署前，閘門會檢查每個 Java 檔、Kubernetes 設定和 Cloud Build 流程。<b>這頁不用 AI</b>：全部是固定規則，每次結果都一樣，可以稽核。',
@@ -565,6 +566,8 @@ function setSub(sub) {
   document.querySelectorAll('#p-sub [data-sub]').forEach(b => b.classList.toggle('on', b.dataset.sub === sub));
   $('#acts-product').style.display = sub === 'product' ? 'flex' : 'none';
   $('#acts-iso').style.display = sub === 'iso' ? 'flex' : 'none';
+  $('#cicd-out').style.display = sub === 'iso' ? 'block' : 'none';
+  if (sub === 'iso' && !S.cicd) loadCicd(false);
   const h = document.querySelector('#v-project .lead h2'), p = document.querySelector('#v-project .lead p');
   h.dataset.i = sub === 'iso' ? 's.h' : 'p.h'; p.dataset.i = sub === 'iso' ? 's.lead' : 'p.lead';
   h.innerHTML = t(h.dataset.i); p.innerHTML = t(p.dataset.i);
@@ -778,6 +781,38 @@ function productionPanel(r) {
     }).join('') + `</table>`;
   }
   return h + `</div>`;
+}
+
+/* ================= CI/CD status ================= */
+async function loadCicd(refresh) {
+  const box = $('#cicd-out');
+  if (!S.cicd) box.innerHTML = `<div class="card cicd"><div class="sub">${t('c.loading')}</div></div>`;
+  try { S.cicd = await (await fetch('/api/cicd' + (refresh ? '?refresh=1' : ''))).json(); } catch (e) { S.cicd = { error: String(e) }; }
+  renderCicd();
+}
+function renderCicd() {
+  const C = S.cicd || {}, box = $('#cicd-out');
+  const ok = c => c === 'success', icon = j => j.status !== 'completed' ? '⏳' : ok(j.conclusion) ? '✅' : j.conclusion === 'skipped' ? '⏭' : '❌';
+  let h = `<div class="card cicd" style="margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px">
+    <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      <div><h3 style="margin:0 0 6px;font-size:22px">${t('c.h')}</h3><p class="note" style="margin:0">${t('c.lead')}</p></div>
+      <div style="display:flex;gap:8px"><button class="btn" id="cicd-refresh">${t('c.refresh')}</button>${C.actionsUrl ? `<a class="btn" href="${esc(C.actionsUrl)}" target="_blank" rel="noopener">${t('c.all')} ↗</a>` : ''}</div></div>`;
+  if (C.error) h += `<p class="note" style="color:var(--fail)">${esc(t('c.err', C.error))}</p>`;
+  const P = C.production;
+  h += `<div style="margin:18px 0;padding:16px;border-radius:10px;${P && (P.url || P.state === 'success') ? 'background:#DCF1E5;border:2px solid #1D7A4C' : 'background:#F3F5F6;border:1px dashed var(--line)'}">`;
+  h += P && P.url ? `<div style="font-weight:600">🟢 ${t('c.live')} · commit <span class="mono">${esc(P.sha)}</span> · ${esc((P.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</div>
+    <a href="${esc(P.url)}" target="_blank" rel="noopener" class="mono" style="font-size:18px">${esc(P.url)}</a> <a class="btn primary" style="margin-left:8px" href="${esc(P.url)}" target="_blank" rel="noopener">${t('c.open')} ↗</a>`
+    : P && P.state === 'success' ? `<div style="font-weight:600">🟢 ${t('c.live')} · commit <span class="mono">${esc(P.sha)}</span> · ${esc((P.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</div>`
+    : `<div class="note" style="margin:0">${t('c.none')}</div>`;
+  h += `</div>`;
+  const runs = C.runs || [];
+  if (runs.length) {
+    h += `<div class="sub">${t('c.runs')}</div>` + runs.map(r => `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-left:6px solid ${r.status !== 'completed' ? '#9A6200' : ok(r.conclusion) ? '#1D7A4C' : '#B3261E'};border-radius:8px;padding:10px 14px;margin:8px 0">
+      <div><b>${r.status !== 'completed' ? '⏳' : ok(r.conclusion) ? '✅' : '❌'} ${esc(r.message)}</b> <span class="mono" style="color:var(--ink-2)">${esc(r.sha)} · ${esc(r.event)} · ${esc((r.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</span></div>
+      ${(r.jobs || []).length ? `<div class="mono" style="font-size:14px;margin-top:4px">${r.jobs.map(j => `${icon(j)} ${esc(j.name)}`).join(' → ')}</div>` : ''}</a>`).join('');
+  }
+  box.innerHTML = h + `</div>`;
+  $('#cicd-refresh').onclick = () => loadCicd(true);
 }
 
 /* ================= 4. SpecBlast x ISO 8583 ================= */

@@ -77,7 +77,9 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -105,10 +107,12 @@ jobs:
           docker build -f deploy/iso8583/Dockerfile.run -t "$IMAGE:$GITHUB_SHA" "$APP_DIR"
           docker push "$IMAGE:$GITHUB_SHA"
       - name: Deploy
+        id: deploy
         run: |
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
             --allow-unauthenticated --max-instances 1 --memory 1Gi \
             --set-env-vars SPRING_PROFILES_ACTIVE=dev --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "## Deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit \`$GITHUB_SHA\` is live: $URL" >> "$GITHUB_STEP_SUMMARY"
