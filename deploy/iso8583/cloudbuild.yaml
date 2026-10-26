@@ -1,0 +1,56 @@
+# CI/CD for the ISO 8583 authorization service that SpecBlast generated.
+#
+#   gcloud builds submit --config deploy/iso8583/cloudbuild.yaml --substitutions _APP=project .
+#       -> stops at step 1: the quality gate blocks it (no controller test, T-01). Nothing is deployed.
+#   gcloud builds submit --config deploy/iso8583/cloudbuild.yaml --substitutions _APP=project-fixed .
+#       -> passes the gate, runs the unit tests, builds the image and deploys it to Cloud Run.
+#
+# Order matters: the gate runs first, so code that fails it never reaches the image or production.
+steps:
+  - id: 1-quality-gate
+    name: eclipse-temurin:17-jdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        echo "== Quality gate: checking examples/specblast-iso8583/${_APP} =="
+        ./run.sh verify-project examples/specblast-iso8583/${_APP} --label iso8583-${_APP}
+
+  - id: 2-unit-tests-and-package
+    name: maven:3.9-eclipse-temurin-17
+    dir: examples/specblast-iso8583/${_APP}
+    entrypoint: mvn
+    args: ['-B', 'package']
+
+  - id: 3-build-image
+    name: gcr.io/cloud-builders/docker
+    dir: examples/specblast-iso8583/${_APP}
+    args: ['build', '-f', '/workspace/deploy/iso8583/Dockerfile.run', '-t', '${_IMAGE}:${BUILD_ID}', '.']
+
+  - id: 4-push-image
+    name: gcr.io/cloud-builders/docker
+    args: ['push', '${_IMAGE}:${BUILD_ID}']
+
+  - id: 5-deploy-cloud-run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - iso8583-precheck
+      - --image=${_IMAGE}:${BUILD_ID}
+      - --region=asia-east1
+      - --allow-unauthenticated
+      - --max-instances=1
+      - --memory=1Gi
+      - --set-env-vars=SPRING_PROFILES_ACTIVE=dev
+
+substitutions:
+  _APP: project
+  _IMAGE: asia-east1-docker.pkg.dev/${PROJECT_ID}/specblast/iso8583-precheck
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+
+timeout: 1800s

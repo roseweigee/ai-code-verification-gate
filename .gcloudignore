@@ -1,0 +1,4 @@
+.git
+#!include:.gitignore
+build/
+**/target/

@@ -1,0 +1,7 @@
+# Runtime image for the ISO 8583 service. The jar is built and tested in the pipeline step before this.
+FROM eclipse-temurin:17-jre
+WORKDIR /app
+COPY target/*.jar app.jar
+USER 10001
+EXPOSE 8080
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]
