@@ -524,8 +524,8 @@ function watchRelease() {
   watchRelease.timer = setInterval(() => {
     loadCicd(true);
     const r = (S.cicd && S.cicd.runs || [])[0];
-    if (++n > 24 || (n > 2 && r && r.status === 'completed')) clearInterval(watchRelease.timer);
-  }, 15000);
+    if (++n > 15 || (n > 2 && r && r.status === 'completed')) clearInterval(watchRelease.timer);
+  }, 20000);
 }
 function showCmd(res) {
   lastRes = res;
@@ -810,6 +810,7 @@ function renderCicd() {
       <div><h3 style="margin:0 0 6px;font-size:22px">${t('c.h')}</h3><p class="note" style="margin:0">${t('c.lead')}</p></div>
       <div style="display:flex;gap:8px"><button class="btn" id="cicd-refresh">${t('c.refresh')}</button>${C.actionsUrl ? `<a class="btn" href="${esc(C.actionsUrl)}" target="_blank" rel="noopener">${t('c.all')} ↗</a>` : ''}</div></div>`;
   if (C.error) h += `<p class="note" style="color:var(--fail)">${esc(t('c.err', C.error))}</p>`;
+  if (C.warning) h += `<p class="note" style="color:var(--warn)">${esc(t('c.err', C.warning))}</p>`;
   const P = (C.runs || []).length ? C.production : null;
   h += `<div style="margin:18px 0;padding:16px;border-radius:10px;${P && (P.url || P.state === 'success') ? 'background:#DCF1E5;border:2px solid #1D7A4C' : 'background:#F3F5F6;border:1px dashed var(--line)'}">`;
   h += P && P.url ? `<div style="font-weight:600">🟢 ${t('c.live')} · commit <span class="mono">${esc(P.sha)}</span> · ${esc((P.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</div>

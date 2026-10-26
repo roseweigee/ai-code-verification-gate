@@ -28,7 +28,8 @@ public final class CicdStatus {
 
     synchronized Map<String, Object> get(boolean refresh) {
         long now = System.currentTimeMillis();
-        if (!refresh && cached != null && now - cachedAt < 60_000) {
+        // even "refresh" is limited: at most one GitHub read per 15 s (60/hour without a token)
+        if (cached != null && now - cachedAt < (refresh ? 15_000 : 60_000)) {
             return cached;
         }
         Map<String, Object> out = new LinkedHashMap<>();
@@ -53,8 +54,8 @@ public final class CicdStatus {
                 row.put("message", msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg);
                 list.add(row);
             }
-            // jobs for the latest 3 runs only, to stay within the public rate limit
-            for (int i = 0; i < Math.min(3, list.size()); i++) {
+            // jobs for the latest 2 runs only, to stay within the public rate limit
+            for (int i = 0; i < Math.min(2, list.size()); i++) {
                 Map<String, Object> jobs = obj(fetch(API + "/actions/runs/" + list.get(i).get("id") + "/jobs"));
                 List<Map<String, Object>> js = new ArrayList<>();
                 for (Object o : arr(jobs.get("jobs"))) {
@@ -81,7 +82,15 @@ public final class CicdStatus {
                 out.put("production", live);
             }
         } catch (Exception e) {
-            out.put("error", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+            String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            if (cached != null && cached.get("error") == null) {
+                // keep showing the last good data; just say it is not fresh
+                Map<String, Object> stale = new LinkedHashMap<>(cached);
+                stale.put("warning", msg);
+                cachedAt = now;
+                return stale;
+            }
+            out.put("error", msg);
         }
         cached = out;
         cachedAt = now;
@@ -91,15 +100,39 @@ public final class CicdStatus {
     private String fetch(String url) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10))
                 .header("Accept", "application/vnd.github+json").header("User-Agent", "ai-code-verification-gate");
-        String token = System.getenv("GITHUB_TOKEN");
+        String token = token();
         if (token != null && !token.isBlank()) {
             b.header("Authorization", "Bearer " + token);
         }
         HttpResponse<String> r = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
         if (r.statusCode() != 200) {
-            throw new IllegalStateException("GitHub API " + r.statusCode() + (r.statusCode() == 403 ? " (rate limit: set GITHUB_TOKEN)" : ""));
+            throw new IllegalStateException("GitHub API " + r.statusCode() + (r.statusCode() == 403 || r.statusCode() == 429 ? " (hourly limit reached; run `gh auth login` or set GITHUB_TOKEN, then restart the console)" : ""));
         }
         return r.body();
+    }
+
+    private String token;
+    private boolean tokenLooked;
+
+    /** GITHUB_TOKEN, or the token of the GitHub CLI if it is installed and logged in. Read-only use. */
+    private String token() {
+        if (tokenLooked) {
+            return token;
+        }
+        tokenLooked = true;
+        token = System.getenv("GITHUB_TOKEN");
+        if (token == null || token.isBlank()) {
+            try {
+                Process p = new ProcessBuilder("gh", "auth", "token").redirectErrorStream(false).start();
+                String t = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (p.waitFor() == 0 && !t.isEmpty() && !t.contains(" ")) {
+                    token = t;
+                }
+            } catch (Exception ignored) {
+                // no gh CLI: public, unauthenticated reads
+            }
+        }
+        return token;
     }
 
     @SuppressWarnings("unchecked")
