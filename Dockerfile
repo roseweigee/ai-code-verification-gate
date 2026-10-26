@@ -12,8 +12,8 @@ RUN mkdir -p build/classes \
  && rm -rf runs
 
 # Run as a non-root user; it only needs to write runs/ under /app.
-RUN useradd --system --home /app gate && chown -R gate /app
-USER gate
+RUN useradd --system --uid 10001 --home /app gate && chown -R 10001 /app
+USER 10001
 
 # Cloud Run sets PORT. With PORT set, the console listens on all interfaces and requires DEMO_PASSWORD.
 ENV PORT=8080

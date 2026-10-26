@@ -1,0 +1,51 @@
+# Web console of the AI Code Verification Gate on GKE.
+# Replace IMAGE with the image you pushed, e.g. asia-east1-docker.pkg.dev/PROJECT/gate/ai-gate:v1
+# The password comes from a Secret:  kubectl create secret generic gate-console --from-literal=DEMO_PASSWORD=...
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gate-console
+  labels: { app: gate-console }
+spec:
+  replicas: 1                      # one copy of the runs and the audit log
+  selector:
+    matchLabels: { app: gate-console }
+  template:
+    metadata:
+      labels: { app: gate-console }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: console
+          image: IMAGE
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: DEMO_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: gate-console, key: DEMO_PASSWORD }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 20
+          resources:
+            requests: { cpu: "500m", memory: "1Gi" }
+            limits: { cpu: "2", memory: "2Gi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gate-console
+spec:
+  type: LoadBalancer
+  selector: { app: gate-console }
+  ports:
+    - port: 80
+      targetPort: 8080
