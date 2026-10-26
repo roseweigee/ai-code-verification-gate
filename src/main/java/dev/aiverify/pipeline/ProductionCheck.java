@@ -45,7 +45,19 @@ public final class ProductionCheck {
                     + ". Only code a named human approved can go to production.");
         }
         String source = Files.readString(runDir.resolve("candidate/AuthorizationPrecheckImpl.java"));
-        if (!Hashing.sha256(source).equals(result.get("candidateSha256"))) {
+        Map<String, Object> out = check(root, runId, source, String.valueOf(result.get("candidateSha256")));
+        Files.writeString(runDir.resolve("production-check.json"), Json.write(out));
+        return out;
+    }
+
+    /**
+     * Sends the production transactions to {@code source}, which must still have the hash a human approved.
+     * Used by the console after approval and by the release pipeline before deployment.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> check(Path root, String runId, String source, String approvedSha256)
+            throws IOException {
+        if (!Hashing.sha256(source).equals(approvedSha256)) {
             throw new IllegalStateException("The code changed after it was approved. It must not be deployed.");
         }
         InMemoryCompiler.Result compiled = new InMemoryCompiler().compile(RunContext.CANDIDATE_CLASS, source);
@@ -131,12 +143,11 @@ public final class ProductionCheck {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("runId", runId);
         out.put("checkedAt", OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString());
-        out.put("candidateSha256", result.get("candidateSha256"));
+        out.put("candidateSha256", approvedSha256);
         out.put("scored", scored);
         out.put("correct", correct);
         out.put("verdict", correct == scored ? "ALL_CORRECT" : "DEFECT_IN_PRODUCTION");
         out.put("transactions", rows);
-        Files.writeString(runDir.resolve("production-check.json"), Json.write(out));
         return out;
     }
 

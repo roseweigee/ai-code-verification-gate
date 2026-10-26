@@ -182,6 +182,10 @@ public final class ConsoleServer {
                 if ("true".equals(q.get("ackHigh"))) {
                     args.add("--ack-high");
                 }
+                if (password == null) {
+                    // local console: approval hands the code to the CD pipeline (git push -> GitHub Actions)
+                    args.add("--release");
+                }
             }
             case "project" -> {
                 String which = q.getOrDefault("which", "");

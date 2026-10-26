@@ -39,8 +39,16 @@ final class LiveService {
     private final Path root;
     private final Map<String, Object> versions = new LinkedHashMap<>();
 
+    private final Path releaseSource;
+
     LiveService(Path root) {
+        this(root, null);
+    }
+
+    /** For the released service: version "release" is the approved code in {@code releaseSource}. */
+    LiveService(Path root, Path releaseSource) {
         this.root = root;
+        this.releaseSource = releaseSource;
     }
 
     /** Version id → description, for the page. */
@@ -59,6 +67,16 @@ final class LiveService {
             return p;
         }
         String raw;
+        if ("release".equals(id) && releaseSource != null) {
+            String src = Files.readString(releaseSource);
+            InMemoryCompiler.Result rr = new InMemoryCompiler().compile(RunContext.CANDIDATE_CLASS, src);
+            if (!rr.ok()) {
+                throw new IllegalStateException("Does not compile: " + rr.errors());
+            }
+            AuthorizationPrecheck rp = (AuthorizationPrecheck) rr.loadedClass().getDeclaredConstructor().newInstance();
+            versions.put(id, rp);
+            return rp;
+        }
         if (id.startsWith("claude")) {
             raw = Prompts.extractJava(Files.readString(root.resolve("replay/attempt-3/author.txt")));
         } else if (id.startsWith("specblast")) {

@@ -4,26 +4,17 @@
 #   2. unit tests     -> mvn package
 #   3. deploy         -> image to Artifact Registry, then Cloud Run
 #                        (optional: a named approver, via the "production" environment)
-name: ISO 8583 CI/CD
+name: SpecBlast project CI/CD (manual)
 
+# Manual only: the real CD is release.yml, which deploys only code a human approved in the gate.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'examples/specblast-iso8583/project-fixed/**'
-      - 'src/**'
-      - 'deploy/iso8583/**'
-      - '.github/workflows/iso8583-cicd.yml'
-  pull_request:
-    paths:
-      - 'examples/specblast-iso8583/project-fixed/**'
   workflow_dispatch:
 
 env:
   APP_DIR: examples/specblast-iso8583/project-fixed
   REGION: asia-east1
-  IMAGE: asia-east1-docker.pkg.dev/specblast/specblast/iso8583-precheck
-  SERVICE: iso8583-precheck
+  IMAGE: asia-east1-docker.pkg.dev/specblast/specblast/specblast-iso8583
+  SERVICE: specblast-iso8583
 
 jobs:
   quality-gate:
@@ -78,7 +69,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: specblast-demo
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4

@@ -16,10 +16,10 @@ import java.util.Map;
  * and the URL of what is live in production. Read-only, public GitHub REST API.
  * Set GITHUB_TOKEN for a higher rate limit. Results are cached for 60 seconds.
  */
-final class CicdStatus {
+public final class CicdStatus {
 
-    static final String REPO = "roseweigee/ai-code-verification-gate";
-    static final String WORKFLOW = "iso8583-cicd.yml";
+    public static final String REPO = "roseweigee/ai-code-verification-gate";
+    static final String WORKFLOW = "release.yml";
     private static final String API = "https://api.github.com/repos/" + REPO;
 
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISO 8583 Authorization Service</title>
+<style>
+:root { --ink:#142029; --ink2:#4B5A65; --bg:#F3F5F6; --line:#D3DBE0; --accent:#1F5F8B; --ok:#1D7A4C; --okb:#DCF1E5; --bad:#B3261E; --badb:#FBE2DF; --warn:#9A6200; --warnb:#FBF0DC; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-family: Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+header { background:#142029; color:#E4EBEF; padding:18px 24px; }
+header h1 { margin:0; font-size:21px; }
+header p { margin:4px 0 0; color:#A9B7C0; font-size:14px; }
+main { max-width:980px; margin:0 auto; padding:24px 16px 48px; }
+.card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:16px; }
+.approval { border-left:6px solid var(--ok); }
+.approval.warn { border-left-color:var(--warn); background:var(--warnb); }
+.kv { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.kv div { min-width:0; }
+.kv small { display:block; color:var(--ink2); font-size:12px; }
+.kv b { font-family:monospace; font-size:15px; overflow-wrap:anywhere; }
+.gates { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+.gates span { font-family:monospace; font-size:13px; padding:3px 8px; border-radius:10px; background:var(--okb); color:var(--ok); }
+.gates span.no { background:var(--badb); color:var(--bad); }
+.grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+label { font-size:13px; color:var(--ink2); display:flex; flex-direction:column; gap:4px; min-width:0; }
+input { width:100%; font-family:monospace; font-size:15px; padding:9px; border:1px solid var(--line); border-radius:8px; }
+.row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+button { font-size:14px; padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+button.go { background:var(--accent); color:#fff; border:none; font-weight:bold; }
+.res { border-radius:10px; padding:16px; display:none; }
+.res.ok { display:block; background:var(--okb); border:2px solid var(--ok); }
+.res.bad { display:block; background:var(--badb); border:2px solid var(--bad); }
+.big { font-family:monospace; font-size:30px; font-weight:bold; }
+pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; color:#F2C6C2; padding:10px; border-radius:8px; }
+@media (max-width:700px) { .grid, .kv { grid-template-columns:1fr 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>ISO 8583 授權前檢查服務 · Authorization pre-check service</h1>
+  <p>正式環境 · Production on Cloud Run · 只跑經過品質關卡、由具名的人核准的程式</p>
+</header>
+<main>
+  <div class="card approval" id="approval">讀取上線紀錄… Loading release…</div>
+  <div class="card">
+    <div class="grid">
+      <label>卡號 PAN<input id="pan" value="4111111111111111"></label>
+      <label>到期 YYMM<input id="expiry" value="2812"></label>
+      <label>金額 Amount (NT$)<input id="amount" value="1200"></label>
+      <label>可用餘額 Available (NT$)<input id="available" value="50000"></label>
+      <label>交易日期 Date<input id="date" value="2026-10-27" placeholder="空白 = 沒有日期"></label>
+    </div>
+    <div class="row">
+      <button data-p="normal">一般消費</button>
+      <button data-p="nodate">缺少交易日期</button>
+      <button data-p="fullwidth">卡號含全形數字</button>
+      <button data-p="expired">過期的卡</button>
+      <button data-p="over">金額超過餘額</button>
+      <button class="go" id="send">送出授權請求 · Send</button>
+    </div>
+  </div>
+  <div class="res" id="res"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const P = {
+  normal: ['4111111111111111','2812','1200','50000','2026-10-27'],
+  nodate: ['4111111111111111','2812','1200','50000',''],
+  fullwidth: ['411111111111111３','2812','10','50','2026-10-27'],
+  expired: ['4111111111111111','2609','10','50','2026-10-27'],
+  over: ['4111111111111111','2812','50.01','50','2026-10-27'],
+};
+const F = ['pan','expiry','amount','available','date'];
+document.querySelectorAll('[data-p]').forEach(b => b.onclick = () => P[b.dataset.p].forEach((v,i) => $('#'+F[i]).value = v));
+const ZH = { '00':'核准', '13':'金額無效', '14':'卡號無效', '30':'格式錯誤', '51':'餘額不足', '54':'卡片過期' };
+const cents = v => String(Math.round(parseFloat(v || '0') * 100));
+(async () => {
+  const box = $('#approval');
+  try {
+    const a = await (await fetch('/api/release')).json();
+    const high = Number(a.acceptedHighFindings || 0);
+    box.className = 'card approval' + (high > 0 ? ' warn' : '');
+    box.innerHTML = `<div style="font-weight:bold;font-size:17px">🟢 上線版本：第 ${esc(a.attempt)} 次嘗試 · 由 ${esc(a.approvedBy)} 核准 · Approved by ${esc(a.approvedBy)}</div>
+      ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">⚠ 核准者接受了 ${high} 個 AI 審查的 HIGH 風險 · The approver accepted ${high} HIGH AI finding(s)</div>` : ''}
+      <div class="kv"><div><small>Run</small><b>${esc(a.runId)}</b></div><div><small>核准時間 Approved at</small><b>${esc(a.approvedAt)}</b></div>
+      <div><small>程式雜湊 Code SHA-256</small><b>${esc(String(a.candidateSha256 || '').slice(0, 16))}…</b></div><div><small>上線時間 Released at</small><b>${esc(a.releasedAt)}</b></div></div>
+      ${a.note ? `<div style="margin-top:10px;color:var(--ink2)">核准備註 Note：${esc(a.note)}</div>` : ''}
+      <div class="gates">${(a.gates || []).map(g => `<span class="${g.status === 'PASSED' ? '' : 'no'}">${esc(g.id)} ${esc(g.status)}</span>`).join('')}</div>`;
+  } catch (e) { box.textContent = 'Release record unavailable.'; }
+})();
+$('#send').onclick = async () => {
+  const q = new URLSearchParams({ pan: $('#pan').value, expiry: $('#expiry').value, amount: cents($('#amount').value),
+    available: cents($('#available').value), date: $('#date').value });
+  const r = await fetch('/api/authorize?' + q, { method: 'POST' });
+  const d = await r.json();
+  const box = $('#res');
+  if (r.status === 200) {
+    box.className = 'res ok';
+    box.innerHTML = `<div>HTTP 200 OK · ISO 8583 field 39</div><div class="big">${esc(d.responseCode)} · ${esc(ZH[d.responseCode] || '')}</div><div>${esc(d.meaning)}</div>`;
+  } else if (d.exception) {
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP 500 Internal Server Error</div><div class="big">程式當掉 · Crash</div><pre>${esc(d.exception)}\n${(d.trace || []).map(esc).join('\n')}</pre>`;
+  } else {
+    box.className = 'res bad';
+    box.innerHTML = `<div>HTTP ${r.status}</div><div>${esc(d.error || 'Error')}</div>`;
+  }
+};
+</script>
+</body>
+</html>

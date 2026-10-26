@@ -58,6 +58,11 @@ public final class Main {
                     "這是測試信。如果你收到了，閘門的 email 通知就設定好了。\nThis is a test. If you got it, gate email notifications work.\n"));
             case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
             case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
+            case "release" -> releaseCommand(opts);
+            case "release-check" -> releaseCheck(opts);
+            case "serve-release" -> dev.aiverify.ui.ReleaseServer.start(ROOT,
+                    Path.of(opts.getOrDefault("path", "release/iso8583")),
+                    Integer.parseInt(opts.getOrDefault("port", System.getenv().getOrDefault("PORT", "8080"))));
             default -> help();
         }
     }
@@ -72,6 +77,11 @@ public final class Main {
                                         One run. --live calls Claude (needs ANTHROPIC_API_KEY, optional AI_MODEL)
                   approve --by NAME [--run ID] [--note TEXT] [--ack-high]
                   reject  --by NAME [--run ID] --note TEXT
+                  release --run ID [--no-push]
+                                        Write an approved run to release/iso8583/ and push it: this starts the CD pipeline
+                  release-check [PATH]  CD step: approval and code hash must match, then a smoke test
+                  serve-release [PATH] [--port N]
+                                        The released service (Cloud Run runs this)
                                         The human gate for the latest (or given) run. A rejection note
                                         becomes spec-level feedback for the next attempt.
                   verify-project PATH [--label TEXT] [--build]
@@ -307,6 +317,119 @@ public final class Main {
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
         new Notifier(ROOT).send(GateMail.decision(String.valueOf(result.get("runId")), approve, by, note,
                 approve ? high : 0));
+        if (approve && opts.containsKey("release")) {
+            release(runDir, true);
+        }
+    }
+
+    /** {@code release --run ID [--no-push]}: hand an approved run to the CD pipeline. */
+    private static void releaseCommand(Map<String, String> opts) throws IOException {
+        if (!opts.containsKey("run")) {
+            fail("Usage: release --run RUN_ID [--no-push]");
+        }
+        release(ROOT.resolve("runs").resolve(opts.get("run")), !opts.containsKey("no-push"));
+    }
+
+    /**
+     * Writes the approved code and its approval record to release/iso8583/ and pushes it to main.
+     * The push is the only thing that starts the CD pipeline (.github/workflows/release.yml),
+     * so only code that went through the gate and a named human can be deployed.
+     */
+    @SuppressWarnings("unchecked")
+    private static void release(Path runDir, boolean push) throws IOException {
+        Map<String, Object> result = Json.parseObject(Files.readString(runDir.resolve("result.json")));
+        if (!Pipeline.VERDICT_APPROVED.equals(result.get("verdict"))) {
+            fail("Run " + result.get("runId") + " is " + result.get("verdict") + ". Only approved code can be released.");
+        }
+        String source = Files.readString(runDir.resolve("candidate/AuthorizationPrecheckImpl.java"));
+        if (!Hashing.sha256(source).equals(result.get("candidateSha256"))) {
+            fail("The code changed after it was approved. It must not be released.");
+        }
+        Map<String, Object> decision = Map.of();
+        for (Map<String, Object> g : (List<Map<String, Object>>) result.get("gates")) {
+            if ("G6".equals(g.get("id"))) {
+                decision = (Map<String, Object>) g.get("details");
+            }
+        }
+        List<Map<String, Object>> gateSummary = new java.util.ArrayList<>();
+        for (Map<String, Object> g : (List<Map<String, Object>>) result.get("gates")) {
+            gateSummary.add(Map.of("id", String.valueOf(g.get("id")), "status", String.valueOf(g.get("status"))));
+        }
+        Map<String, Object> approval = new LinkedHashMap<>();
+        approval.put("runId", result.get("runId"));
+        approval.put("attempt", result.get("attempt"));
+        approval.put("candidateSha256", result.get("candidateSha256"));
+        approval.put("decision", decision.get("decision"));
+        approval.put("approvedBy", decision.get("decidedBy"));
+        approval.put("approvedAt", decision.get("decidedAt"));
+        approval.put("note", decision.get("note"));
+        approval.put("acceptedHighFindings", decision.get("acceptedHighFindings"));
+        approval.put("gates", gateSummary);
+        approval.put("releasedAt", OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString());
+        Path dir = ROOT.resolve("release/iso8583");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("AuthorizationPrecheckImpl.java"), source);
+        Files.writeString(dir.resolve("approval.json"), Json.write(approval));
+        System.out.println("Release written: release/iso8583/ (run " + result.get("runId") + ", approved by "
+                + decision.get("decidedBy") + ", sha256 " + String.valueOf(result.get("candidateSha256")).substring(0, 12) + "...)");
+        if (!push) {
+            System.out.println("Not pushed (--no-push). Push release/iso8583/ to main to deploy.");
+            return;
+        }
+        String msg = "Release " + result.get("runId") + " (attempt " + result.get("attempt") + "), approved by "
+                + decision.get("decidedBy");
+        boolean ok = git("add", "release/iso8583")
+                && git("commit", "-m", msg, "--", "release/iso8583")
+                && (git("pull", "--rebase", "--autostash", "origin", "main") || true)
+                && git("push", "origin", "HEAD:main");
+        System.out.println(ok
+                ? "Pushed to main. GitHub Actions now verifies the approval and deploys it: https://github.com/"
+                        + dev.aiverify.ui.CicdStatus.REPO + "/actions/workflows/release.yml"
+                : "The git push did not succeed (see above). The release is saved locally; push it by hand: git push origin HEAD:main");
+    }
+
+    private static boolean git(String... args) {
+        try {
+            List<String> cmd = new java.util.ArrayList<>(List.of("git"));
+            cmd.addAll(List.of(args));
+            Process p = new ProcessBuilder(cmd).directory(ROOT.toFile()).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+            int code = p.waitFor();
+            System.out.println("$ " + String.join(" ", cmd) + (out.isEmpty() ? "" : "\n" + out.replaceAll("(?m)^", "  ")));
+            return code == 0;
+        } catch (IOException | InterruptedException e) {
+            System.out.println("git failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** {@code release-check [PATH]}: run by the CD pipeline before it deploys anything. */
+    @SuppressWarnings("unchecked")
+    private static void releaseCheck(Map<String, String> opts) throws IOException {
+        Path dir = ROOT.resolve(opts.getOrDefault("path", "release/iso8583"));
+        Path approvalFile = dir.resolve("approval.json");
+        if (!Files.exists(approvalFile)) {
+            fail("No approval record in " + ROOT.relativize(dir) + ". Nothing a human approved, nothing to deploy.");
+        }
+        Map<String, Object> a = Json.parseObject(Files.readString(approvalFile));
+        System.out.println("Release of run " + a.get("runId") + " (attempt " + a.get("attempt") + ")");
+        if (!"APPROVED".equals(a.get("decision")) || a.get("approvedBy") == null) {
+            fail("The release has no named human approval. It must not be deployed.");
+        }
+        System.out.println("  Approved by " + a.get("approvedBy") + " at " + a.get("approvedAt")
+                + (a.get("note") == null || String.valueOf(a.get("note")).isBlank() ? "" : ": " + a.get("note")));
+        Object high = a.get("acceptedHighFindings");
+        if (high instanceof Number n && n.longValue() > 0) {
+            System.out.println("  WARNING: the approver accepted " + n + " HIGH AI finding(s).");
+        }
+        String source = Files.readString(dir.resolve("AuthorizationPrecheckImpl.java"));
+        Map<String, Object> r = dev.aiverify.pipeline.ProductionCheck.check(ROOT, String.valueOf(a.get("runId")),
+                source, String.valueOf(a.get("candidateSha256")));
+        System.out.print(dev.aiverify.pipeline.ProductionCheck.format(r));
+        if (!"ALL_CORRECT".equals(r.get("verdict"))) {
+            System.out.println("Smoke test: " + r.get("correct") + "/" + r.get("scored")
+                    + " correct. Deploying what the human approved; the wrong answers above will happen in production.");
+        }
     }
 
     @SuppressWarnings("unchecked")
