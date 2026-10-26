@@ -4,6 +4,8 @@ import dev.aiverify.ai.ClaudeClient;
 import dev.aiverify.ai.LlmClient;
 import dev.aiverify.ai.ReplayClient;
 import dev.aiverify.json.Json;
+import dev.aiverify.notify.GateMail;
+import dev.aiverify.notify.Notifier;
 import dev.aiverify.pipeline.AuditLog;
 import dev.aiverify.pipeline.Hashing;
 import dev.aiverify.pipeline.Pipeline;
@@ -50,6 +52,8 @@ public final class Main {
             case "verify-project" -> verifyProject(opts);
             case "audit" -> audit();
             case "report" -> System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+            case "notify-test" -> new Notifier(ROOT).send(new Notifier.Message("[AI Gate] Test email",
+                    "這是測試信。如果你收到了，閘門的 email 通知就設定好了。\nThis is a test. If you got it, gate email notifications work.\n"));
             case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
             case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
             default -> help();
@@ -72,10 +76,11 @@ public final class Main {
                                         Verify a whole generated project (e.g. SpecBlast output):
                                         Java policy, CodingStyle.md, Kubernetes, pipeline, Maven build.
                                         Exit code 1 when blocked, so a CI step can stop the deploy.
+                  notify-test           Send a test email using notify.properties (see notify.properties.example)
                   audit                 Verify the hash-chained audit log
                   report                Rebuild runs/report.html
                   selftest              Check the engine itself
-                  console [--port N]    Open the web console (http://localhost:8080) for presenting the demo
+                  console [--port N]    Open the web console (http://127.0.0.1:8080) for presenting the demo
                 """);
     }
 
@@ -137,8 +142,9 @@ public final class Main {
         }
         RunContext ctx = new RunContext(ROOT, runDir, runId, attempt, ai);
         ctx.goldenVersion = goldenVersion;
-        new Pipeline().run(ctx, feedback);
+        Map<String, Object> result = new Pipeline().run(ctx, feedback);
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+        new Notifier(ROOT).send(GateMail.runFinished(result));
     }
 
     private static Path previousRun(Path current) throws IOException {
@@ -218,6 +224,8 @@ public final class Main {
         new AuditLog(ROOT.resolve("runs/audit-log.jsonl")).append(event);
         System.out.println(verb + " " + result.get("runId") + " by " + by + ". Recorded in runs/audit-log.jsonl.");
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
+        new Notifier(ROOT).send(GateMail.decision(String.valueOf(result.get("runId")), approve, by, note,
+                approve ? high : 0));
     }
 
     @SuppressWarnings("unchecked")

@@ -1,0 +1,17 @@
+# Copy this file to notify.properties and fill it in. notify.properties is in .gitignore,
+# so your address and password never go to GitHub.
+#
+# Gmail: turn on 2-Step Verification, then create an app password at
+# https://myaccount.google.com/apppasswords and paste the 16 characters below (no spaces).
+
+notify.to=you@example.com
+smtp.user=you@gmail.com
+smtp.password=xxxxxxxxxxxxxxxx
+
+# Defaults, change only for a different mail server:
+# smtp.host=smtp.gmail.com
+# smtp.port=465
+# smtp.security=ssl
+
+# Set to false to stop sending (messages are still saved in runs/outbox/):
+# notify.enabled=true

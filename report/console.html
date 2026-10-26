@@ -189,6 +189,11 @@ html[lang="zh-Hant"] body { font-family: var(--body), "PingFang TC", "Noto Sans 
 html[lang="zh-Hant"] .lead h2, html[lang="zh-Hant"] .hero .word, html[lang="zh-Hant"] .brand h1, html[lang="zh-Hant"] .decision h3 { font-family: var(--body), "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-weight: 700; }
 html[lang="zh-Hant"] .chip { letter-spacing: 0; }
 .orig { font-size: 13px; color: var(--ink-3); margin: 6px 0 0; }
+.toast { position: fixed; right: 24px; bottom: 72px; max-width: 520px; padding: 14px 18px; border-radius: 10px; font-weight: 600; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 6; display: none; }
+.toast.on { display: block; }
+.toast.ok { background: var(--pass-soft); color: var(--pass); border: 1px solid var(--pass); }
+.toast.warn { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
+.toast.info { background: var(--skip-soft); color: var(--ink); border: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -242,6 +247,7 @@ html[lang="zh-Hant"] .chip { letter-spacing: 0; }
   </section>
 </main>
 
+<div class="toast" id="toast" role="status"></div>
 <div class="cmdbar" id="cmdbar">
   <div class="row"><span class="cmd" id="cmd"></span><span id="code"></span><button id="toggle-out" data-i="output"></button></div>
   <pre id="out"></pre>
@@ -254,6 +260,7 @@ const T = {
     title: 'AI Code Verification Gate',
     tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
     tab1: 'SpecBlast output', tab2: 'Three attempts', tab3: 'Audit trail', output: 'Output', running: 'Running…',
+    mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
     'p.lead': 'Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed.',
     'p.before': 'Check generated project', 'p.after': 'Check fixed project',
@@ -312,6 +319,7 @@ const T = {
     title: 'AI 程式碼驗證閘門',
     tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
     tab1: 'SpecBlast 產出', tab2: '三次嘗試', tab3: '稽核紀錄', output: '輸出', running: '執行中…',
+    mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
     'p.lead': '這是 SpecBlast 真實產生的專案（<span class="mono">roseweigee/product @ 25bb253</span>）。部署前，閘門會檢查每個 Java 檔、Kubernetes 設定和 Cloud Build 流程。',
     'p.before': '檢查產生的專案', 'p.after': '檢查修正後的專案',
@@ -475,6 +483,15 @@ function showCmd(res) {
   $('#cmd').textContent = res.command;
   $('#code').innerHTML = `<span class="code${res.exitCode === 0 ? 0 : 1}">exit ${res.exitCode}</span>`;
   $('#out').textContent = res.output;
+  const mail = (res.output || '').split('\n').find(l => l.startsWith('Email'));
+  if (mail) {
+    const sent = mail.startsWith('Email sent to ');
+    const kind = sent ? 'ok' : mail.startsWith('Email not sent') ? 'warn' : 'info';
+    const msg = sent ? t('mailSent', mail.slice(14).split(':')[0]) : kind === 'warn' ? t('mailFailed') : t('mailSaved');
+    const el = $('#toast');
+    el.className = 'toast on ' + kind; el.textContent = '✉ ' + msg;
+    clearTimeout(showCmd.timer); showCmd.timer = setTimeout(() => el.classList.remove('on'), 7000);
+  }
 }
 $('#toggle-out').onclick = () => $('#cmdbar').classList.toggle('open');
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {

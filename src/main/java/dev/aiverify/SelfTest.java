@@ -35,8 +35,22 @@ final class SelfTest {
         outbound();
         projectRules();
         supplyChainAndInjection();
+        email();
         System.out.printf("%nSelf-test: %d passed, %d failed%n", passed, failed);
         return failed == 0;
+    }
+
+    private static void email() {
+        check("Email: Chinese subject is encoded", dev.aiverify.notify.Notifier.encodeHeader("退回").startsWith("=?UTF-8?B?"));
+        check("Email: a newline cannot inject a header", !dev.aiverify.notify.Notifier.encodeHeader("a\r\nBcc: x@y").contains("\n"));
+        boolean refused;
+        try {
+            dev.aiverify.notify.Notifier.recipients("a@b.com\r\nRCPT TO:<evil@x.com>");
+            refused = false;
+        } catch (IllegalArgumentException e) {
+            refused = true;
+        }
+        check("Email: a recipient with a line break is refused", refused);
     }
 
     private static void json() {

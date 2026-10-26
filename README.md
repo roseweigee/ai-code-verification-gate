@@ -155,7 +155,7 @@ Claude call.
 Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 
 ```bash
-./run.sh selftest                 # 42 checks of the engine itself
+./run.sh selftest                 # 45 checks of the engine itself
 ./run.sh console                  # web console at http://127.0.0.1:8080: buttons run the real commands
 ./run.sh demo                     # attempts 1 and 2, then stops at the human gate
 ./run.sh reject --by "Your Name" --note "Full-width digits must be rejected"
@@ -166,6 +166,12 @@ Requires **JDK 17 or later**. No other dependencies; nothing is downloaded.
 ```
 
 On Windows use `run.cmd` with the same arguments.
+
+**Email notifications.** Every blocked run, every run waiting for approval, and every human decision sends an
+email. A rejection email carries the reviewer's reason, which is also the AI author's feedback for the next
+attempt. Copy `notify.properties.example` to `notify.properties` (ignored by git) and fill in the recipient and
+an SMTP account; for Gmail, use an app password. Test it with `./run.sh notify-test`. Each message is also saved
+to `runs/outbox/` first, and a mail failure never changes the gate's decision.
 
 **Live mode** (real Claude calls for author, test writer, reviewer and diagnostician):
 

@@ -83,7 +83,7 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 需要 **JDK 17 以上**，沒有其他相依套件，也不需要下載任何東西。
 
 ```bash
-./run.sh selftest                 # 驗證引擎本身（42 項檢查）
+./run.sh selftest                 # 驗證引擎本身（45 項檢查）
 ./run.sh console                  # 網頁版示範 http://127.0.0.1:8080：按鈕會執行真正的指令
 ./run.sh demo                     # 跑嘗試 1 和 2，停在人工關卡
 ./run.sh reject --by "你的名字" --note "全形數字必須被拒絕"
@@ -94,6 +94,8 @@ SpecBlast 會把 API 規格轉成 Spring Boot 服務，並產生 Kubernetes 設�
 ```
 
 Windows 請用 `run.cmd`，參數相同。
+
+**Email 通知。** 執行被擋下、等待人工核准，以及人工核准或退回時，都會寄出通知信。退回的信會附上審核者的理由，這個理由也是 AI 撰寫者下一次嘗試的回饋。把 `notify.properties.example` 複製成 `notify.properties`（不會進 git），填入收件人和 SMTP 帳號；Gmail 請用應用程式密碼。用 `./run.sh notify-test` 測試。每封信都會先存到 `runs/outbox/`，寄信失敗也不會改變閘門的判定。
 
 **Live 模式**（撰寫者、測試撰寫者、審查者、診斷者都呼叫真正的 Claude）：
 
