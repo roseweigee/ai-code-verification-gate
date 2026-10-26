@@ -185,6 +185,8 @@ public final class ConsoleServer {
                 String which = q.getOrDefault("which", "");
                 if ("iso".equals(which)) {
                     args.addAll(List.of("verify-project", SPECBLAST_PROJECT, "--label", "specblast-iso8583"));
+                } else if ("iso-fixed".equals(which)) {
+                    args.addAll(List.of("verify-project", SPECBLAST_PROJECT + "-fixed", "--label", "specblast-iso8583-fixed"));
                 } else if (PROJECTS.contains(which)) {
                     args.addAll(List.of("verify-project", "examples/specblast-product/" + which));
                 } else {
