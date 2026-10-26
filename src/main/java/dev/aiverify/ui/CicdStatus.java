@@ -36,7 +36,7 @@ public final class CicdStatus {
         out.put("repo", REPO);
         out.put("actionsUrl", "https://github.com/" + REPO + "/actions/workflows/" + WORKFLOW);
         try {
-            Map<String, Object> runs = obj(fetch(API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=5"));
+            Map<String, Object> runs = obj(Json.parse(fetch(API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=5")));
             List<Map<String, Object>> list = new ArrayList<>();
             for (Object o : arr(runs.get("workflow_runs"))) {
                 Map<String, Object> r = obj(o);
@@ -56,7 +56,7 @@ public final class CicdStatus {
             }
             // jobs for the latest 2 runs only, to stay within the public rate limit
             for (int i = 0; i < Math.min(2, list.size()); i++) {
-                Map<String, Object> jobs = obj(fetch(API + "/actions/runs/" + list.get(i).get("id") + "/jobs"));
+                Map<String, Object> jobs = obj(Json.parse(fetch(API + "/actions/runs/" + list.get(i).get("id") + "/jobs")));
                 List<Map<String, Object>> js = new ArrayList<>();
                 for (Object o : arr(jobs.get("jobs"))) {
                     Map<String, Object> j = obj(o);

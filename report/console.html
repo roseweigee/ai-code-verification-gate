@@ -231,9 +231,12 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
         <span id="acts-iso" style="display:none;gap:12px"><button class="btn primary" data-act="project" data-which="iso" data-i="s.run"></button><button class="btn" data-act="project" data-which="iso-fixed" data-i="s.runFixed"></button></span>
       </div>
     </div>
-    <div class="atabs" id="p-sub">
-      <button class="atab on" data-sub="product" data-i="p.subProduct"></button>
-      <button class="atab" data-sub="iso" data-i="p.subIso"></button>
+    <div id="p-sub" style="display:flex;align-items:center;gap:12px;margin:0 0 20px;flex-wrap:wrap">
+      <label for="p-select" style="font-weight:600" data-i="p.pick"></label>
+      <select id="p-select" style="font-size:17px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;min-width:320px">
+        <option value="iso" data-i="p.subIso"></option>
+        <option value="product" data-i="p.subProduct"></option>
+      </select>
     </div>
     <div id="project-out"></div>
   </section>
@@ -272,7 +275,7 @@ const T = {
   en: {
     title: 'AI Code Verification Gate',
     tagline: 'AI writes. <b class="t-gate">Deterministic gates decide.</b> <b class="t-ai">AI advises.</b> <b class="t-human">A named human approves.</b>',
-    tab1: 'SpecBlast output', tab2: 'Code checks', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment service · whole project', 'a.npeAt': n => `the code that throws, line ${n}`, 'rel.ok': 'Approved code pushed to main. GitHub Actions is deploying it now.', 'rel.fail': 'Approved, but the git push failed, so nothing is deploying. Open the output below to see the git error.', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.tryH': 'Live test of this exact code', 'a.tryBtn': 'Open live test', 'a.prodBtn': 'Open production (Cloud Run)', 'a.try.BLOCKED': 'Blocked, so it will never be deployed. Send real transactions to the AI\'s code as written: a missing date crashes it with a Java NullPointerException.', 'a.try.READY_FOR_HUMAN_APPROVAL': 'Passed the gates (with the NF-05 fix), waiting for a person. Try it before you decide.', 'a.try.APPROVED': 'Approved. Approval starts the CD pipeline; this is the same code that goes to production.', 'a.try.REJECTED_BY_HUMAN': 'Rejected by a person, so it will never be deployed. Try what the approver refused.', 'a.npeH': 'Java NullPointerException found · rule NF-05', 'a.npeCase': (id, d) => `${id} ${d}`, 'a.npeNote': n => `The gate sent null inputs to the AI's code and it crashed. In production this is an HTTP 500 instead of a proper decline. The gate does not fix it here, because ${n} other test(s) also failed: the whole attempt goes back to the author. When a null crash is the only problem left (attempt 2), the gate fixes it automatically.`, 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
+    tab1: 'SpecBlast output', tab2: 'Code checks', tab3: 'Audit trail', output: 'Output', running: 'Running…', 'p.pick': 'Project to check:', 'p.subProduct': 'Product API · whole project', 'p.subIso': 'ISO 8583 payment service · whole project', 'a.npeAt': n => `the code that throws, line ${n}`, 'a.relWait': 'Waiting for the CD pipeline to start (git push to main)…', 'a.relRun': 'GitHub Actions is deploying this approval…', 'a.relOk': 'Deployed: GitHub Actions succeeded. This exact code is live on Cloud Run.', 'a.relOld': 'Deployed earlier; a newer approval is live now.', 'a.relFail': 'GitHub Actions failed, so nothing was deployed. Open the run to see why.', 'rel.ok': 'Approved code pushed to main. GitHub Actions is deploying it now.', 'rel.fail': 'Approved, but the git push failed, so nothing is deploying. Open the output below to see the git error.', 'a.fixH': 'Auto-fix · rule NF-05 (a fixed rule, not AI)', 'a.tryH': 'Live test of this exact code', 'a.tryBtn': 'Open live test', 'a.prodBtn': 'Open production (Cloud Run)', 'a.try.BLOCKED': 'Blocked, so it will never be deployed. Send real transactions to the AI\'s code as written: a missing date crashes it with a Java NullPointerException.', 'a.try.READY_FOR_HUMAN_APPROVAL': 'Passed the gates (with the NF-05 fix), waiting for a person. Try it before you decide.', 'a.try.APPROVED': 'Approved. Approval starts the CD pipeline; this is the same code that goes to production.', 'a.try.REJECTED_BY_HUMAN': 'Rejected by a person, so it will never be deployed. Try what the approver refused.', 'a.npeH': 'Java NullPointerException found · rule NF-05', 'a.npeCase': (id, d) => `${id} ${d}`, 'a.npeNote': n => `The gate sent null inputs to the AI's code and it crashed. In production this is an HTTP 500 instead of a proper decline. The gate does not fix it here, because ${n} other test(s) also failed: the whole attempt goes back to the author. When a null crash is the only problem left (attempt 2), the gate fixes it automatically.`, 'a.fixFound': (id, d, a, l) => `${id} ${d}: ${a}${l ? ' at line ' + l : ''}`, 'a.fixNote': 'The first pass failed only because a null input crashed the code. The gate added these lines, then ran every gate again. All results on this page are for the fixed code, and the approver sees this change.', 'a.nullChecks': (p, n) => `Null-input checks (NF-05): ${p}/${n} passed`,
     'a.subClaude': 'Claude · three attempts', 'a.subSb': 'SpecBlast\'s version', 'sb.h': 'The same check, written by SpecBlast', 'sb.lead': 'SpecBlast wrote the payment rules from the same spec and never saw the tests. The same six gates and the same 36 hidden human tests check its code.', 'sb.run': 'Check SpecBlast\'s code', 'sb.empty': 'Press <b>Check SpecBlast\'s code</b>. The whole project is checked on tab 01.', 'sb.src': src => `Code under test: <span class="mono">${src}</span> · the whole project is checked on tab 01`, 's.codeNote': 'This tab checks the whole project.',
     's.h': 'Checking the ISO 8583 project SpecBlast generated', 's.lead': 'SpecBlast generated a whole Spring Boot service from the card payment spec. The gate checks the whole project: security, the style contract, Kubernetes, the pipeline and tests. <b>No AI here</b>: fixed rules, same answer every time, so the result can be audited.', 'c.h': 'CD · after approval → GitHub Actions → Cloud Run', 'c.lead': 'Only an approval starts deployment: the approved code is pushed to <span class="mono">release/iso8583/</span>, then GitHub Actions checks the approval record and code hash, runs a smoke test and deploys to Cloud Run. Blocked or rejected code never gets here.', 'c.refresh': 'Refresh', 'c.live': 'Live in production', 'c.none': 'Nothing deployed yet. Approve a run above to release it.', 'c.open': 'Open the service', 'c.all': 'All runs on GitHub', 'c.loading': 'Reading GitHub Actions…', 'c.err': e => `Could not read GitHub Actions: ${e}`, 'c.runs': 'Latest releases', 's.run': 'Check the ISO 8583 project', 's.runFixed': 'Check again after the fix', 's.fixed': 'After the fix: the author added <span class="mono">AuthorizationControllerTest</span> (MockMvc: normal path, and a missing date returns 400). The gate does not write project fixes itself; it sends them back to the author, then checks again.', 's.toFix': 'How it gets fixed: the gate does not change the project. The finding goes back to SpecBlast or an engineer, who adds the missing test. Then press <b>Check again after the fix</b>.', 's.empty': 'Press <b>Check the ISO 8583 project</b>.', 's.missing': 'The SpecBlast project is not in <span class="mono">examples/specblast-iso8583/project</span> yet.', 's.step1': 'Step 1 · the whole project (P1–P7)', 's.step2': src => `Step 2 · SpecBlast\'s rules class through G1–G6 <span class="mono" style="text-transform:none">${src}</span>`,
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
@@ -342,7 +345,7 @@ const T = {
   zh: {
     title: 'AI 程式碼驗證閘門',
     tagline: 'AI 撰寫程式。<b class="t-gate">確定性關卡判定對錯。</b><b class="t-ai">AI 只提供建議。</b><b class="t-human">具名的人負責核准。</b>',
-    tab1: 'SpecBlast 產出', tab2: '程式碼檢查', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付服務・整個專案', 'a.npeAt': n => `丟出例外的程式碼：第 ${n} 行`, 'rel.ok': '核准的程式已 push 到 main，GitHub Actions 正在部署。', 'rel.fail': '已核准，但 git push 失敗，所以沒有部署。打開下方輸出看 git 的錯誤訊息。', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.tryH': '即時測試這一版程式', 'a.tryBtn': '打開即時測試', 'a.prodBtn': '打開正式環境（Cloud Run）', 'a.try.BLOCKED': '這一版被擋下，永遠不會上線。你可以直接送交易給 AI 原本寫的程式：缺少交易日期時，會拋出 Java NullPointerException。', 'a.try.READY_FOR_HUMAN_APPROVAL': '已通過關卡（含 NF-05 自動修正），等待人核准。核准前可以先實際測一下。', 'a.try.APPROVED': '已核准。核准會啟動 CD 流水線，正式環境跑的就是這一版。', 'a.try.REJECTED_BY_HUMAN': '被人退回，永遠不會上線。這裡可以測試被退回的程式。', 'a.npeH': '抓到 Java NullPointerException・規則 NF-05', 'a.npeCase': (id, d) => `${id} ${d}`, 'a.npeNote': n => `品質關卡把 null 輸入送進 AI 寫的程式，程式直接當掉。上線後客戶會收到 HTTP 500，而不是正常的拒絕。這一次關卡不自動修，因為還有 ${n} 個測試沒過，整份退回給作者。等到只剩空值問題時（第二次），關卡才會自動補上。`, 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
+    tab1: 'SpecBlast 產出', tab2: '程式碼檢查', tab3: '稽核紀錄', output: '輸出', running: '執行中…', 'p.pick': '要檢查的專案：', 'p.subProduct': '商品 API・整個專案', 'p.subIso': 'ISO 8583 支付服務・整個專案', 'a.npeAt': n => `丟出例外的程式碼：第 ${n} 行`, 'a.relWait': '等待 CD 流水線啟動（git push 到 main）…', 'a.relRun': 'GitHub Actions 正在部署這次核准…', 'a.relOk': '已上線：GitHub Actions 成功，這一版程式正在 Cloud Run 上執行。', 'a.relOld': '之前上線過，目前線上是更新的核准版本。', 'a.relFail': 'GitHub Actions 失敗，沒有部署。點連結看原因。', 'rel.ok': '核准的程式已 push 到 main，GitHub Actions 正在部署。', 'rel.fail': '已核准，但 git push 失敗，所以沒有部署。打開下方輸出看 git 的錯誤訊息。', 'a.fixH': '自動修正・規則 NF-05（固定規則，不是 AI）', 'a.tryH': '即時測試這一版程式', 'a.tryBtn': '打開即時測試', 'a.prodBtn': '打開正式環境（Cloud Run）', 'a.try.BLOCKED': '這一版被擋下，永遠不會上線。你可以直接送交易給 AI 原本寫的程式：缺少交易日期時，會拋出 Java NullPointerException。', 'a.try.READY_FOR_HUMAN_APPROVAL': '已通過關卡（含 NF-05 自動修正），等待人核准。核准前可以先實際測一下。', 'a.try.APPROVED': '已核准。核准會啟動 CD 流水線，正式環境跑的就是這一版。', 'a.try.REJECTED_BY_HUMAN': '被人退回，永遠不會上線。這裡可以測試被退回的程式。', 'a.npeH': '抓到 Java NullPointerException・規則 NF-05', 'a.npeCase': (id, d) => `${id} ${d}`, 'a.npeNote': n => `品質關卡把 null 輸入送進 AI 寫的程式，程式直接當掉。上線後客戶會收到 HTTP 500，而不是正常的拒絕。這一次關卡不自動修，因為還有 ${n} 個測試沒過，整份退回給作者。等到只剩空值問題時（第二次），關卡才會自動補上。`, 'a.fixFound': (id, d, a, l) => `${id} ${d}：${a}${l ? '（第 ' + l + ' 行）' : ''}`, 'a.fixNote': '第一輪只因為 null 輸入讓程式當掉而失敗。閘門補上這幾行，再把所有關卡重跑一次。這頁的結果都是修正後的程式，核准的人也會看到這個改動。', 'a.nullChecks': (p, n) => `null 輸入檢查（NF-05）：${p}/${n} 通過`,
     'a.subClaude': 'Claude・三次嘗試', 'a.subSb': 'SpecBlast 寫的版本', 'sb.h': '同一個刷卡檢查，由 SpecBlast 撰寫', 'sb.lead': 'SpecBlast 依照同一份規格寫出付款規則，從來沒看過測試。用同樣的六道關卡、同樣 36 個藏起來的人工測試檢查它的程式。', 'sb.run': '檢查 SpecBlast 的程式', 'sb.empty': '按下<b>「檢查 SpecBlast 的程式」</b>。整個專案的檢查在第 01 頁。', 'sb.src': src => `受檢程式：<span class="mono">${src}</span>・整個專案的檢查在第 01 頁`, 's.codeNote': '這一頁檢查整個專案。',
     's.h': '檢查 SpecBlast 產生的 ISO 8583 專案', 's.lead': 'SpecBlast 依照刷卡規格產生完整的 Spring Boot 服務。這裡檢查整個專案：資安、程式規範、Kubernetes、交付流程和測試。<b>這頁不用 AI</b>：全部是固定規則，每次結果都一樣，可以稽核。', 'c.h': 'CD・人核准後 → GitHub Actions → Cloud Run', 'c.lead': '只有「人核准」會啟動部署：核准的程式自動 push 到 <span class="mono">release/iso8583/</span>，GitHub Actions 檢查核准紀錄與程式雜湊、跑冒煙測試，再部署到 Cloud Run。被擋下或退回的程式到不了這裡。', 'c.refresh': '重新整理', 'c.live': '正式環境上線中', 'c.none': '還沒有部署紀錄。在上方核准一次執行，就會自動上線。', 'c.open': '打開服務', 'c.all': '在 GitHub 看全部紀錄', 'c.loading': '正在讀取 GitHub Actions…', 'c.err': e => `讀不到 GitHub Actions：${e}`, 'c.runs': '最近幾次上線', 's.run': '檢查 ISO 8583 專案', 's.runFixed': '修正後再檢查', 's.fixed': '修正後：作者補上了 <span class="mono">AuthorizationControllerTest</span>（MockMvc：正常交易，以及缺少日期時回 400）。品質關卡不會自己改專案，它把問題退回給作者，作者修好後再檢查一次。', 's.toFix': '怎麼修：品質關卡不會自己改專案。錯誤會退回給 SpecBlast 或工程師，由他們補上缺少的測試，再按<b>「修正後再檢查」</b>。', 's.empty': '按下<b>「檢查 ISO 8583 專案」</b>。', 's.missing': 'SpecBlast 專案還沒放進 <span class="mono">examples/specblast-iso8583/project</span>。', 's.step1': '第一步・整個專案（P1–P7）', 's.step2': src => `第二步・SpecBlast 的規則類別通過 G1–G6 <span class="mono">${src}</span>`,
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
@@ -586,14 +589,14 @@ function render() { renderProject(); renderAttempts(); renderAudit(); }
 /* ================= 1. SpecBlast ================= */
 function setSub(sub) {
   S.sub = sub;
-  document.querySelectorAll('#p-sub [data-sub]').forEach(b => b.classList.toggle('on', b.dataset.sub === sub));
+  $('#p-select').value = sub;
   $('#acts-product').style.display = sub === 'product' ? 'flex' : 'none';
   $('#acts-iso').style.display = sub === 'iso' ? 'flex' : 'none';
   const h = document.querySelector('#v-project .lead h2'), p = document.querySelector('#v-project .lead p');
   h.dataset.i = sub === 'iso' ? 's.h' : 'p.h'; p.dataset.i = sub === 'iso' ? 's.lead' : 'p.lead';
   h.innerHTML = t(h.dataset.i); p.innerHTML = t(p.dataset.i);
 }
-document.querySelectorAll('#p-sub [data-sub]').forEach(b => b.onclick = () => { setSub(b.dataset.sub); renderProject(); });
+$('#p-select').onchange = e => { setSub(e.target.value); renderProject(); };
 function renderProject() {
   if (S.sub === 'iso') { renderSpecblast(); return; }
   const P = S.state.projects || {};
@@ -749,9 +752,12 @@ function attemptDetail(r, prev) {
     <div class="exit">${t('a.golden')}<b>v${esc(r.goldenVersion)}</b>${t('a.cases', esc(r.inputs?.goldenCount))}</div></div>`;
   {
     const tryUrl = '/try?run=' + encodeURIComponent(r.runId);
-    const prod = v === 'APPROVED' && S.cicd && S.cicd.production && S.cicd.production.url;
+    const rel = v === 'APPROVED' ? (S.cicd && S.cicd.runs || []).find(x => (x.message || '').includes(r.runId)) : null;
+    const prodUrl = S.cicd && S.cicd.production && S.cicd.production.url;
+    const prod = rel && rel.status === 'completed' && rel.conclusion === 'success' && prodUrl && rel === S.cicd.runs[0] ? prodUrl : null;
+    const relNote = v !== 'APPROVED' ? '' : !rel ? t('a.relWait') : rel.status !== 'completed' ? '⏳ ' + t('a.relRun') : rel.conclusion === 'success' ? (prod ? '✅ ' + t('a.relOk') : t('a.relOld')) : '❌ ' + t('a.relFail');
     h += `<div class="card" style="margin:16px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap;border-left:6px solid ${heroCls === 'bad' ? 'var(--fail)' : heroCls === 'good' ? 'var(--pass)' : 'var(--accent)'}">
-      <div style="flex:1;min-width:260px"><b>${t('a.tryH')}</b><div class="note" style="margin:4px 0 0">${t('a.try.' + v) || ''}</div></div>
+      <div style="flex:1;min-width:260px"><b>${t('a.tryH')}</b><div class="note" style="margin:4px 0 0">${t('a.try.' + v) || ''}</div>${relNote ? `<div style="margin-top:6px;font-weight:600">${relNote}${rel ? ` · <a href="${esc(rel.url)}" target="_blank" rel="noopener">GitHub Actions ↗</a>` : ''}</div>` : ''}</div>
       <a class="btn primary" href="${tryUrl}" target="_blank" rel="noopener">${t('a.tryBtn')} ↗</a>
       ${prod ? `<a class="btn" href="${esc(prod)}" target="_blank" rel="noopener">${t('a.prodBtn')} ↗</a>` : ''}</div>`;
   }
@@ -883,7 +889,7 @@ function renderCicd() {
       <div style="display:flex;gap:8px"><button class="btn" id="cicd-refresh">${t('c.refresh')}</button>${C.actionsUrl ? `<a class="btn" href="${esc(C.actionsUrl)}" target="_blank" rel="noopener">${t('c.all')} ↗</a>` : ''}</div></div>`;
   if (C.error) h += `<p class="note" style="color:var(--fail)">${esc(t('c.err', C.error))}</p>`;
   if (C.warning) h += `<p class="note" style="color:var(--warn)">${esc(t('c.err', C.warning))}</p>`;
-  const P = (C.runs || []).length ? C.production : null;
+  const P = (C.runs || []).length && C.runs[0].status === 'completed' && C.runs[0].conclusion === 'success' ? C.production : null;
   h += `<div style="margin:18px 0;padding:16px;border-radius:10px;${P && (P.url || P.state === 'success') ? 'background:#DCF1E5;border:2px solid #1D7A4C' : 'background:#F3F5F6;border:1px dashed var(--line)'}">`;
   h += P && P.url ? `<div style="font-weight:600">🟢 ${t('c.live')} · commit <span class="mono">${esc(P.sha)}</span> · ${esc((P.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</div>
     <a href="${esc(P.url)}" target="_blank" rel="noopener" class="mono" style="font-size:18px">${esc(P.url)}</a> <a class="btn primary" style="margin-left:8px" href="${esc(P.url)}" target="_blank" rel="noopener">${t('c.open')} ↗</a>`
@@ -898,6 +904,7 @@ function renderCicd() {
   }
   box.innerHTML = h + `</div>`;
   $('#cicd-refresh').onclick = () => loadCicd(true);
+  if (S.state && S.state.runs) renderAttempts();
 }
 
 /* ================= 4. SpecBlast x ISO 8583 ================= */
@@ -956,7 +963,7 @@ function renderAudit() {
 }
 
 applyStatic();
-S.sub = 'product';
+setSub('iso');
 S.asub = 'claude';
 load();
 </script>
