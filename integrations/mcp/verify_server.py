@@ -6,7 +6,7 @@ The agent gets fast, structured feedback while it works. The tool only REPORTS t
 verdict: it cannot approve anything. Deployment still needs the gate to pass and a named human.
 
 Run:   python verify_server.py            (stdio transport)
-Needs: Python 3.10+, `pip install "mcp>=1.2,<2"`, JDK 21 on PATH.
+Needs: Python 3.10+, `pip install "mcp>=1.2,<2"`, JDK 17+ on PATH.
 """
 from __future__ import annotations
 
