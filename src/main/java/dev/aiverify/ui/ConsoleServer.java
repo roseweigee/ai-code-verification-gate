@@ -69,6 +69,11 @@ public final class ConsoleServer {
             }
         }
         ConsoleServer app = new ConsoleServer(root, hosted ? password : null);
+        if (!"1".equals(System.getenv("KEEP_RUNS"))) {
+            // every console session starts empty: no attempts, no decisions, an empty audit log
+            app.deleteRuns();
+            System.out.println("Started fresh: previous runs and the audit log were cleared (set KEEP_RUNS=1 to keep them).");
+        }
         HttpServer server = HttpServer.create(new InetSocketAddress(hosted ? "0.0.0.0" : "127.0.0.1", port), 0);
         server.createContext("/", app::handle);
         server.setExecutor(Executors.newSingleThreadExecutor());
