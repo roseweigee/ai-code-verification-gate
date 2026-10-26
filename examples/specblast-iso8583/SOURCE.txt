@@ -1,0 +1,1 @@
+SpecBlast local mode, generated 2026-10-26 from iso8583-precheck.txt (unchanged output)

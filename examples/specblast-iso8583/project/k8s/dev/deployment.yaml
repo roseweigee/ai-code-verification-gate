@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iso8583-precheck
+  namespace: default
+  labels:
+    app: iso8583-precheck
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iso8583-precheck
+  template:
+    metadata:
+      labels:
+        app: iso8583-precheck
+    spec:
+      containers:
+        - name: iso8583-precheck
+          image: iso8583-precheck:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "dev"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iso8583-precheck
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: iso8583-precheck
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP

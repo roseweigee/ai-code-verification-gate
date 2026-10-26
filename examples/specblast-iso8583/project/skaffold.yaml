@@ -1,0 +1,70 @@
+apiVersion: skaffold/v4beta6
+kind: Config
+build:
+  artifacts:
+    - image: iso8583-precheck
+      docker:
+        dockerfile: Dockerfile
+        buildArgs:
+          CACHEBUST: "{{.RunID}}"
+  local:
+    push: false
+    useDockerCLI: true
+manifests:
+  rawYaml:
+    - k8s/namespace.yaml
+    - k8s/dev/deployment.yaml
+deploy:
+  kubectl: {}
+
+profiles:
+  - name: sit
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/specblast/iso8583-precheck
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/sit/deployment.yaml
+    deploy:
+      kubectl: {}
+    hooks:
+      before:
+        - host:
+            command: ["bash", "-c", "kubectl create secret generic iso8583-precheck-db-secret --from-literal=DB_HOST=$(gcloud secrets versions access latest --secret=iso8583-precheck-db-host --project=YOUR_PROJECT_ID) --from-literal=DB_NAME=iso8583-precheckdb --from-literal=DB_USERNAME=$(gcloud secrets versions access latest --secret=iso8583-precheck-db-username --project=YOUR_PROJECT_ID) --from-literal=DB_PASSWORD=$(gcloud secrets versions access latest --secret=iso8583-precheck-db-password --project=YOUR_PROJECT_ID) -n default --dry-run=client -o yaml | kubectl apply -f -"]
+  - name: uat
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/specblast/iso8583-precheck
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/uat/deployment.yaml
+    deploy:
+      kubectl: {}
+  - name: prod
+    build:
+      artifacts:
+        - image: asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/specblast/iso8583-precheck
+          docker:
+            dockerfile: Dockerfile
+      local:
+        push: true
+        useDockerCLI: true
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/prod/deployment.yaml
+        - k8s/prod/hpa.yaml
+    deploy:
+      kubectl: {}
