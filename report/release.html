@@ -59,6 +59,7 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
       <button data-p="fullwidth">卡號含全形數字</button>
       <button data-p="expired">過期的卡</button>
       <button data-p="over">金額超過餘額</button>
+      <button data-p="thismonth">本月到期的卡</button>
       <button data-p="lastday">到期月最後一天</button>
       <button data-p="equal">金額剛好等於餘額</button>
       <button class="go" id="send">送出授權請求 · Send</button>
@@ -75,6 +76,7 @@ const P = {
   fullwidth: ['411111111111111３','2812','10','50','2026-10-27'],
   expired: ['4111111111111111','2609','10','50','2026-10-27'],
   over: ['4111111111111111','2812','50.01','50','2026-10-27'],
+  thismonth: ['4111111111111111','2610','1200','50000','2026-10-27'],
   lastday: ['4111111111111111','2610','10','50','2026-10-31'],
   equal: ['4111111111111111','2812','50','50','2026-10-27'],
 };
