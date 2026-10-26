@@ -431,7 +431,7 @@ const ZH = {
     'Q-01': { title: '沒有測試覆蓋率門檻', detail: '沒有 JaCoCo 的 check 目標，即使測試幾乎沒覆蓋到程式，mvn verify 也會通過。', fix: '加入 jacoco-maven-plugin，設定 prepare-agent、report 和最低行覆蓋率的 check 目標。' },
     'Q-02': { title: '沒有 SonarQube 品質閘門', detail: '部署前沒有任何靜態分析去檢查 bug、漏洞和程式碼異味。', fix: '在建置映像檔前執行 mvn sonar:sonar，並加上 -Dsonar.qualitygate.wait=true。' }
   },
-  tests: { 'G-14': '卡片在到期當月仍然有效', 'G-15': '到期月的最後一天仍然有效', 'G-18': '平年二月：28 日仍然有效', 'G-19': '閏年二月：29 日仍然有效', 'G-23': '最小的有效金額（1 分）', 'G-25': '金額等於可用餘額時應該核准', 'R-01': '交易日期是 null', 'R-02': '請求是 null' },
+  tests: { 'G-14': '卡片在到期當月仍然有效', 'G-15': '到期月的最後一天仍然有效', 'G-18': '平年二月：28 日仍然有效', 'G-19': '閏年二月：29 日仍然有效', 'G-23': '最小的有效金額（1 分）', 'G-25': '金額等於可用餘額時應該核准', 'R-01': '交易日期是 null', 'R-02': '請求是 null', 'G-34': '到期月第一天仍然有效', 'G-35': '跨年：12 月到期的卡在 12/31 仍然有效', 'G-36': '跨年：12 月到期的卡在隔年 1/1 已過期', 'G-16': '到期月隔天已過期', 'G-32': '卡號含全形數字不算數字', 'G-33': '到期日用全形數字是格式錯誤' },
   review: [
     { match: /isDigit accepts non-ASCII/, title: 'Character.isDigit 會接受非 ASCII 的數字', detail: 'allDigits() 使用 Character.isDigit，它對任何 Unicode 數字都回傳 true，例如全形數字（U+FF10 到 U+FF19）或阿拉伯－印度數字。之後 passesLuhn() 用 charAt(i) - \'0\' 計算，對這些字元會得到無意義的值，所以含有這種數字的卡號可能碰巧通過 Luhn 檢查而被核准，但 AC-02 規定只能是數字。AC-01 的到期日也用同樣的檢查，而 Integer.parseInt 同樣接受 Unicode 數字，所以全形的到期日也會被接受。修正方式：只接受 \'0\' 到 \'9\'。' },
     { match: /Null transactionDate/, title: '交易日期或請求為 null 時會拋出 NullPointerException', detail: 'check() 在第 19 行使用 request、在第 39 行使用 transactionDate，都沒有檢查 null。規格沒有說明這種情況該怎麼處理。建議先釐清規格，例如回傳 30 格式錯誤，而不是在授權流程中拋出例外。' }
