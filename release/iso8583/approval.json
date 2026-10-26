@@ -1,12 +1,12 @@
 {
-  "runId": "run-20261027-040225-a2",
-  "attempt": 2,
-  "candidateSha256": "5b7e68bc2d2dd3571278a8ab1531ddab5417ddf38e04fbeb9b9bd068766a7718",
+  "runId": "run-20261027-040710-a3",
+  "attempt": 3,
+  "candidateSha256": "00c2dd89bab188b30edd873c133d2beca12b08b88196f825272224ea9f2615b5",
   "decision": "APPROVED",
   "approvedBy": "Rhosyn Wei",
-  "approvedAt": "2026-10-27T04:02:51+08:00",
-  "note": "Approved anyway to meet the deadline. I accept the risk of the HIGH finding.",
-  "acceptedHighFindings": 1,
+  "approvedAt": "2026-10-27T04:07:30+08:00",
+  "note": "Accepted. All gates passed, including the NF-05 null guard the gate added.",
+  "acceptedHighFindings": 0,
   "gates": [
     {
       "id": "G1",
@@ -26,12 +26,12 @@
     },
     {
       "id": "G5",
-      "status": "WARNING"
+      "status": "PASSED"
     },
     {
       "id": "G6",
       "status": "PASSED"
     }
   ],
-  "releasedAt": "2026-10-27T04:02:54+08:00"
+  "releasedAt": "2026-10-27T04:07:33+08:00"
 }

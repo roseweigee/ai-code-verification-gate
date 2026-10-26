@@ -57,9 +57,11 @@ public class AuthorizationPrecheckImpl implements AuthorizationPrecheck {
         return APPROVED;
     }
 
+    /** ASCII digits 0-9 only. Character.isDigit would also accept other Unicode digits. */
     private static boolean allDigits(String s) {
         for (int i = 0; i < s.length(); i++) {
-            if (!Character.isDigit(s.charAt(i))) {
+            char c = s.charAt(i);
+            if (c < '0' || c > '9') {
                 return false;
             }
         }
