@@ -1,10 +1,10 @@
 {
-  "runId": "run-20261027-134951-a3",
+  "runId": "run-20261027-141349-a3",
   "attempt": 3,
   "candidateSha256": "00c2dd89bab188b30edd873c133d2beca12b08b88196f825272224ea9f2615b5",
   "decision": "APPROVED",
   "approvedBy": "Rhosyn Wei",
-  "approvedAt": "2026-10-27T13:50:05+08:00",
+  "approvedAt": "2026-10-27T14:14:07+08:00",
   "note": "Accepted. All gates passed, including the NF-05 null guard the gate added.",
   "acceptedHighFindings": 0,
   "gates": [
@@ -33,5 +33,5 @@
       "id": "G6"
     }
   ],
-  "releasedAt": "2026-10-27T13:50:10+08:00"
+  "releasedAt": "2026-10-27T14:14:14+08:00"
 }
