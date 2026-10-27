@@ -98,6 +98,8 @@ const T = {
     high: n => `⚠ The approver accepted ${n} HIGH finding(s) from the AI review`,
     gone: 'This run no longer exists: the console starts empty each time. Go back to tab 02 and run the attempt again.',
     live: (a, by) => `🟢 Live version: attempt ${a} · approved by ${by}`,
+    canary: a => `🐤 Canary revision · rollback drill · attempt ${a} as the AI wrote it · NOT approved`,
+    canaryNote: 'This revision gets 10% of traffic for a few minutes. If its response-code mix differs from the stable revision, the pipeline sends all traffic back to the stable revision automatically.',
     kRun: 'Run', kApproved: 'Approved at', kSha: 'Code SHA-256', kReleased: 'Released at', kNote: 'Approver\'s note',
     unavailable: 'Release record unavailable.',
     codes: { '00': 'Approved', '13': 'Invalid amount', '14': 'Invalid card number', '30': 'Format error', '51': 'Insufficient funds', '54': 'Expired card' },
@@ -131,6 +133,8 @@ const T = {
     high: n => `⚠ 核准者接受了 ${n} 個 AI 審查的 HIGH 風險`,
     gone: '這次執行已經不存在：console 每次啟動都會清空。請回到第 02 頁重新跑這次嘗試。',
     live: (a, by) => `🟢 上線版本：第 ${a} 次嘗試 · 由 ${by} 核准`,
+    canary: a => `🐤 金絲雀版本 · 回滾演練 · 第 ${a} 次 AI 原始程式 · 未經核准`,
+    canaryNote: '這個版本只分到 10% 流量幾分鐘。如果它的回應碼分布跟穩定版不同，流水線會自動把所有流量切回穩定版。',
     kRun: 'Run', kApproved: '核准時間', kSha: '程式雜湊 SHA-256', kReleased: '上線時間', kNote: '核准備註',
     unavailable: '讀不到上線紀錄。',
     codes: { '00': '核准', '13': '金額無效', '14': '卡號無效', '30': '格式錯誤', '51': '餘額不足', '54': '卡片過期' },
@@ -207,6 +211,11 @@ function renderInfo() {
       ${a.autoFixed ? `<div style="margin-top:6px">${esc(L().autoFixed)}</div>` : ''}
       ${a.approvedBy ? `<div style="margin-top:6px">${esc(L().decided(a.decision === 'APPROVED', a.approvedBy, a.approvedAt, a.note))}</div>` : ''}
       ${high > 0 ? `<div style="color:var(--warn);font-weight:bold;margin-top:6px">${esc(L().high(high))}</div>` : ''}${gatesHtml(a)}`;
+    return;
+  }
+  if (a.decision === 'CANARY') {
+    box.className = 'card approval blocked';
+    box.innerHTML = `<div style="font-weight:bold;font-size:17px">${esc(L().canary(a.attempt))}</div><div style="margin-top:6px;color:var(--ink2)">${esc(L().canaryNote)}</div>`;
     return;
   }
   box.className = 'card approval' + (high > 0 ? ' warn' : '');

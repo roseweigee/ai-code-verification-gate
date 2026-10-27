@@ -72,6 +72,8 @@ jobs:
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
             --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 \
             --set-env-vars APP=release --quiet
+          # a canary drill may have pinned traffic to one revision: send everything to this release
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           RUN=$(python3 -c "import json;a=json.load(open('release/iso8583/approval.json'));print(a['runId'],'attempt',a['attempt'],'approved by',a['approvedBy'])")

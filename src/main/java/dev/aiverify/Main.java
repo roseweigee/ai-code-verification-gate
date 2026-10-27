@@ -60,6 +60,9 @@ public final class Main {
             case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
             case "release" -> releaseCommand(opts);
             case "release-check" -> releaseCheck(opts);
+            case "canary-prepare" -> canaryPrepare(opts);
+            case "canary-check" -> System.exit(dev.aiverify.ui.CanaryCheck.run(req(opts, "stable"), req(opts, "canary"),
+                    Integer.parseInt(opts.getOrDefault("n", "600"))));
             case "serve-release" -> dev.aiverify.ui.ReleaseServer.start(ROOT,
                     Path.of(opts.getOrDefault("path", "release/iso8583")),
                     Integer.parseInt(opts.getOrDefault("port", System.getenv().getOrDefault("PORT", "8080"))));
@@ -401,6 +404,43 @@ public final class Main {
             System.out.println("git failed: " + e.getMessage());
             return false;
         }
+    }
+
+    private static String req(Map<String, String> opts, String key) {
+        String v = opts.get(key);
+        if (v == null || v.isBlank()) {
+            fail("Missing --" + key);
+        }
+        return v.replaceAll("/+$", "");
+    }
+
+    /**
+     * {@code canary-prepare --attempt N}: CANARY DRILL ONLY, used by .github/workflows/canary.yml inside the CI runner.
+     * Puts a recorded attempt's code, exactly as the AI wrote it, where the release image expects it, marked as a canary
+     * that nobody approved. The drill proves the automatic rollback works; it never goes through release.yml.
+     */
+    private static void canaryPrepare(Map<String, String> opts) throws IOException {
+        if (System.getenv("GITHUB_ACTIONS") == null && !opts.containsKey("force")) {
+            fail("canary-prepare overwrites release/iso8583/. It is meant for the canary workflow on GitHub Actions only.");
+        }
+        int attempt = Integer.parseInt(opts.getOrDefault("attempt", "1"));
+        String source = dev.aiverify.ai.Prompts.extractJava(
+                Files.readString(ROOT.resolve("replay/attempt-" + attempt + "/author.txt")));
+        Path dir = ROOT.resolve("release/iso8583");
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("AuthorizationPrecheckImpl.java"), source);
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("runId", "canary-drill-attempt-" + attempt);
+        a.put("attempt", attempt);
+        a.put("candidateSha256", Hashing.sha256(source));
+        a.put("decision", "CANARY");
+        a.put("approvedBy", "nobody (canary drill)");
+        a.put("approvedAt", OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString());
+        a.put("note", "Rollback drill: attempt " + attempt + " as the AI wrote it, deployed as a canary to prove the automatic rollback.");
+        a.put("gates", List.of());
+        a.put("releasedAt", a.get("approvedAt"));
+        Files.writeString(dir.resolve("approval.json"), Json.write(a));
+        System.out.println("Canary prepared: attempt " + attempt + " (not approved), sha256 " + Hashing.sha256(source).substring(0, 12) + "...");
     }
 
     /** {@code release-check [PATH]}: run by the CD pipeline before it deploys anything. */

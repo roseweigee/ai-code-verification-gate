@@ -66,6 +66,18 @@ public final class CicdStatus {
                 list.get(i).put("jobs", js);
             }
             out.put("runs", list);
+            List<Map<String, Object>> drills = new ArrayList<>();
+            for (Object o : arr(obj(Json.parse(fetch(API + "/actions/workflows/canary.yml/runs?per_page=3"))).get("workflow_runs"))) {
+                Map<String, Object> r = obj(o);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("status", r.get("status"));
+                row.put("conclusion", r.get("conclusion"));
+                row.put("createdAt", r.get("created_at"));
+                row.put("url", r.get("html_url"));
+                drills.add(row);
+            }
+            out.put("canary", drills);
+            out.put("canaryUrl", "https://github.com/" + REPO + "/actions/workflows/canary.yml");
             List<Object> deps = arr(Json.parse(fetch(API + "/deployments?environment=production&per_page=1")));
             if (!deps.isEmpty()) {
                 Map<String, Object> d = obj(deps.get(0));

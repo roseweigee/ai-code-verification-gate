@@ -26,10 +26,10 @@ final class MonitorSim {
     private static final String[] PANS = {"4111111111111111", "5555555555554444", "4012888888881881", "6011111111111117",
         "5105105105105100"};
 
-    private record Tx(AuthRequest req, LocalDate date) {
+    record Tx(AuthRequest req, LocalDate date) {
     }
 
-    private static List<Tx> traffic() {
+    static List<Tx> traffic() {
         Random r = new Random(20261027L);
         List<Tx> out = new ArrayList<>();
         for (int i = 0; i < MINUTES * PER_MINUTE; i++) {
