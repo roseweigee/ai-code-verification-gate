@@ -585,7 +585,7 @@ document.addEventListener('click', e => {
 loadCicd(false);
 $('#tamper').onclick = async () => { const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit(); };
 
-function render() { renderProject(); renderAttempts(); renderAudit(); }
+function render() { renderProject(); renderAttempts(); renderAudit(); if (S.cicd) renderCicd(); }
 
 /* ================= 1. SpecBlast ================= */
 function setSub(sub) {
@@ -714,7 +714,7 @@ function renderMonitor() {
       </ol>
       <p class="note" style="margin:12px 0 0">${t('m.note')}</p>`;
   }
-  const C = S.cicd || {}, drills = C.canary || [], D = drills[0];
+  const C = S.cicd || {}, drills = sessionOnly(C.canary), D = drills[0];
   h += `<div style="margin-top:22px;padding:18px;border:1px solid var(--line);border-left:6px solid #1F5F8B;border-radius:10px">
     <b style="font-size:18px">${t('m.realH')}</b><p class="note" style="margin:6px 0 12px">${t('m.realLead')}</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -746,6 +746,11 @@ function bindDrill() {
   });
 }
 const CODE = { '54': () => t('m.c54'), '51': () => t('m.c51'), '14': () => t('m.c14'), '30': () => t('m.c30') };
+// GitHub keeps every run; the console only shows the ones started in this session, so it starts empty
+function sessionOnly(list) {
+  const since = S.state && S.state.sessionStart;
+  return (list || []).filter(x => !since || (x.createdAt && x.createdAt >= since.replace(/\.\d+Z$/, 'Z')));
+}
 function canaryDetail(D, kind) {
   let h = '';
     const running = D.status !== 'completed', R = D['canary-result'];
@@ -972,7 +977,7 @@ async function loadCicd(refresh) {
   renderCicd();
 }
 function renderCicd() {
-  const C = S.cicd || {}, box = $('#cicd-out');
+  const C0 = S.cicd || {}, C = { ...C0, runs: sessionOnly(C0.runs) }, box = $('#cicd-out');
   const ok = c => c === 'success', icon = j => j.status !== 'completed' ? '⏳' : ok(j.conclusion) ? '✅' : j.conclusion === 'skipped' ? '⏭' : '❌';
   let h = `<div class="card cicd" style="margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:24px">
     <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">

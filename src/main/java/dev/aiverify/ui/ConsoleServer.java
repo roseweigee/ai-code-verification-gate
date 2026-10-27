@@ -31,6 +31,8 @@ import java.util.stream.Stream;
 public final class ConsoleServer {
 
     private static final List<String> PROJECTS = List.of("before", "after");
+    /** Only CD runs and drills started after this moment are shown: every console session starts empty. */
+    private static final java.time.Instant SESSION_START = java.time.Instant.now().minusSeconds(5);
     private static final String SPECBLAST_PROJECT = "examples/specblast-iso8583/project";
 
     /** Adds --run for a run id the console knows (three-attempt runs, or specblast/ runs). Anything else is refused. */
@@ -318,6 +320,7 @@ public final class ConsoleServer {
 
     private Map<String, Object> state() throws IOException {
         Map<String, Object> s = new LinkedHashMap<>();
+        s.put("sessionStart", SESSION_START.toString());
         List<Object> runs = new ArrayList<>();
         Path runsDir = root.resolve("runs");
         if (Files.isDirectory(runsDir)) {
