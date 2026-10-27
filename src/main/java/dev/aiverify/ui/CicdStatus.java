@@ -105,7 +105,7 @@ public final class CicdStatus {
                                 try {
                                     String text = msg.startsWith("b64:") ? new String(java.util.Base64.getDecoder()
                                             .decode(msg.substring(4).trim()), java.nio.charset.StandardCharsets.UTF_8) : msg;
-                                    drills.get(0).put(title, Json.parse(text));
+                                    drills.get(0).put(title, Json.parse(text.trim()));
                                 } catch (RuntimeException ignored) {
                                     // not JSON (or masked by GitHub): skip
                                 }
