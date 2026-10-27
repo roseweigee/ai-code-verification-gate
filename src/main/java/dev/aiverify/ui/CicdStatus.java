@@ -66,6 +66,13 @@ public final class CicdStatus {
                 }
                 list.get(i).put("jobs", js);
             }
+            if (!list.isEmpty()) {
+                try {
+                    list.get(0).putAll(details(list.get(0).get("id"), out));
+                } catch (Exception e) {
+                    out.put("drillError", "release: " + e.getMessage());
+                }
+            }
             out.put("runs", list);
             List<Map<String, Object>> drills = new ArrayList<>();
             try {
@@ -79,56 +86,8 @@ public final class CicdStatus {
                 row.put("id", r.get("id"));
                 drills.add(row);
             }
-            Object id = drills.isEmpty() ? null : drills.get(0).get("id");
-            if (id != null && drillDone.containsKey(String.valueOf(id))) {
-                drills.get(0).putAll(drillDone.get(String.valueOf(id)));
-            } else if (id != null) {
-                // details of the latest drill: step results and the facts the workflow reported as annotations
-                List<Object> jobs = arr(obj(Json.parse(fetch(API + "/actions/runs/" + id + "/jobs"))).get("jobs"));
-                if (!jobs.isEmpty()) {
-                    Map<String, Object> job = obj(jobs.get(0));
-                    List<Map<String, Object>> steps = new ArrayList<>();
-                    for (Object o : arr(job.get("steps"))) {
-                        Map<String, Object> st = obj(o);
-                        String name = String.valueOf(st.get("name"));
-                        if (name.matches("^[0-9] · .*")) {
-                            steps.add(Map.of("name", name, "status", String.valueOf(st.get("status")),
-                                    "conclusion", String.valueOf(st.get("conclusion"))));
-                        }
-                    }
-                    drills.get(0).put("steps", steps);
-                    boolean done = "completed".equals(job.get("status"));
-                    if (done) {
-                        List<Object> anns;
-                        try {
-                            anns = arr(Json.parse(fetch(API + "/check-runs/" + job.get("id") + "/annotations")));
-                        } catch (Exception e) {
-                            anns = List.of();
-                            done = false;   // do not cache a drill whose report could not be read
-                            out.put("drillError", "report: " + e.getMessage());
-                        }
-                        for (Object o : anns) {
-                            Map<String, Object> an = obj(o);
-                            String title = String.valueOf(an.get("title"));
-                            String msg = String.valueOf(an.get("message"));
-                            if (title.startsWith("traffic-") || "canary-result".equals(title)) {
-                                try {
-                                    String text = msg.startsWith("b64:") ? new String(java.util.Base64.getDecoder()
-                                            .decode(msg.substring(4).trim()), java.nio.charset.StandardCharsets.UTF_8) : msg;
-                                    drills.get(0).put(title, Json.parse(text.trim()));
-                                } catch (RuntimeException ignored) {
-                                    // not JSON (or masked by GitHub): skip
-                                }
-                            } else if ("canary-input".equals(title)) {
-                                drills.get(0).put("input", msg);
-                            }
-                        }
-                    }
-                    if (done) {
-                        Map<String, Object> keep = new LinkedHashMap<>(drills.get(0));
-                        drillDone.put(String.valueOf(id), keep);
-                    }
-                }
+            if (!drills.isEmpty()) {
+                drills.get(0).putAll(details(drills.get(0).get("id"), out));
             }
             } catch (Exception e) {
                 out.put("drillError", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
@@ -164,6 +123,64 @@ public final class CicdStatus {
         cached = out;
         cachedAt = now;
         return out;
+    }
+
+    /**
+     * Steps of every job of one run (those named "N · ..."), plus what the run reported as annotations:
+     * traffic before / during / after and the canary analysis. Cached once the run is complete.
+     */
+    private Map<String, Object> details(Object id, Map<String, Object> out) throws Exception {
+        String key = String.valueOf(id);
+        if (drillDone.containsKey(key)) {
+            return drillDone.get(key);
+        }
+        Map<String, Object> d = new LinkedHashMap<>();
+        List<Map<String, Object>> steps = new ArrayList<>();
+        boolean done = true;
+        for (Object jo : arr(obj(Json.parse(fetch(API + "/actions/runs/" + id + "/jobs"))).get("jobs"))) {
+            Map<String, Object> job = obj(jo);
+            for (Object o : arr(job.get("steps"))) {
+                Map<String, Object> st = obj(o);
+                String name = String.valueOf(st.get("name"));
+                if (name.matches("^[0-9] · .*")) {
+                    steps.add(Map.of("name", name, "status", String.valueOf(st.get("status")),
+                            "conclusion", String.valueOf(st.get("conclusion"))));
+                }
+            }
+            if (!"completed".equals(job.get("status"))) {
+                done = false;
+                continue;
+            }
+            List<Object> anns;
+            try {
+                anns = arr(Json.parse(fetch(API + "/check-runs/" + job.get("id") + "/annotations")));
+            } catch (Exception e) {
+                anns = List.of();
+                done = false;   // do not cache a run whose report could not be read
+                out.put("drillError", "report: " + e.getMessage());
+            }
+            for (Object o : anns) {
+                Map<String, Object> an = obj(o);
+                String title = String.valueOf(an.get("title"));
+                String msg = String.valueOf(an.get("message"));
+                if (title.startsWith("traffic-") || "canary-result".equals(title)) {
+                    try {
+                        String text = msg.startsWith("b64:") ? new String(java.util.Base64.getDecoder()
+                                .decode(msg.substring(4).trim()), java.nio.charset.StandardCharsets.UTF_8) : msg;
+                        d.put(title, Json.parse(text.trim()));
+                    } catch (RuntimeException ignored) {
+                        // not JSON (or masked by GitHub): skip
+                    }
+                } else if ("canary-input".equals(title)) {
+                    d.put("input", msg);
+                }
+            }
+        }
+        d.put("steps", steps);
+        if (done) {
+            drillDone.put(key, d);
+        }
+        return d;
     }
 
     /** Starts the rollback drill. Needs a GitHub token with permission to run workflows (gh auth login). */

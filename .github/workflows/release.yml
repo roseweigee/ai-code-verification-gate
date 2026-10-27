@@ -2,7 +2,8 @@
 # Starts ONLY when approved code lands in release/iso8583/. That happens when a named human approves a run
 # in the quality gate (tab 02: AI writes -> six gates -> human approves -> `release` pushes it here).
 #   1. verify  : approval record + code hash must match what the human approved; smoke test
-#   2. deploy  : build the image, push it, deploy to Cloud Run
+#   2. deploy  : build the image, deploy it as a canary with 10% of traffic, compare its response-code mix
+#                with the stable revision, then promote it to 100% or roll back automatically
 name: Release ISO 8583
 
 on:
@@ -31,7 +32,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Approval record, code hash, smoke test
+      - name: 1 · Approval record, code hash, smoke test
         shell: bash
         run: |
           set +e
@@ -41,14 +42,18 @@ jobs:
           exit $code
 
   deploy:
-    name: 2 · Deploy to Cloud Run
+    name: 2 · Canary, then deploy to Cloud Run
     needs: verify
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ steps.deploy.outputs.url }}
+      url: ${{ steps.promote.outputs.url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Check the GCP key secret
         env:
           KEY: ${{ secrets.GCP_SA_KEY }}
@@ -61,21 +66,87 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
-      - name: Build and push the image
+
+      - name: 2 · Build and push the image
         run: |
           gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
           docker build -f deploy/release/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
           docker push "$IMAGE:$GITHUB_SHA"
-      - name: Deploy
-        id: deploy
+
+      - name: 3 · Canary with 10% of traffic
+        id: canary
         run: |
+          if ! gcloud run services describe "$SERVICE" --region "$REGION" >/dev/null 2>&1; then
+            echo "First release: no stable revision to compare with, deploying directly."
+            gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
+              --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars APP=release --quiet
+            echo "first=1" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          REV=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(max(t, key=lambda x: x.get('percent', 0))['revisionName'])")
+          echo "Stable revision: $REV"
+          echo "rev=$REV" >> "$GITHUB_OUTPUT"
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --update-tags "stable=$REV" --quiet
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > before.json
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
-            --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 \
-            --set-env-vars APP=release --quiet
-          # a canary drill may have pinned traffic to one revision: send everything to this release
+            --no-traffic --tag canary --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars APP=release --quiet
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-tags canary=10 --quiet
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > during.json
+
+      - name: 4 · Canary analysis
+        id: analysis
+        if: steps.canary.outputs.first != '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          read STABLE_URL CANARY_URL < <(gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = {x.get('tag'): x.get('url') for x in json.load(sys.stdin)['status']['traffic'] if x.get('tag')}
+          print(t['stable'], t['canary'])")
+          set +e
+          ./run.sh canary-check --stable "$STABLE_URL" --canary "$CANARY_URL" --n 600 | tee analysis.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: 5 · Promote to 100%
+        id: promote
+        if: steps.canary.outputs.first == '1' || steps.analysis.outcome == 'success'
+        run: |
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           RUN=$(python3 -c "import json;a=json.load(open('release/iso8583/approval.json'));print(a['runId'],'attempt',a['attempt'],'approved by',a['approvedBy'])")
-          echo "## Deployed" >> "$GITHUB_STEP_SUMMARY"
-          echo "$RUN is live: $URL" >> "$GITHUB_STEP_SUMMARY"
+          { echo "## ✅ Canary passed, released"; echo "$RUN is live: $URL"; echo '```'; cat analysis.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 5 · Automatic rollback
+        if: steps.canary.outputs.first != '1' && steps.analysis.outcome != 'success'
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --to-revisions "${{ steps.canary.outputs.rev }}=100" --quiet
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags canary --quiet
+          { echo "## ↩️ Canary failed, rolled back automatically"; echo "All traffic stays on **${{ steps.canary.outputs.rev }}**."; echo '```'; cat analysis.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Canary rejected: its response-code mix changed. Traffic stays on ${{ steps.canary.outputs.rev }}."
+          exit 1
+
+      - name: 6 · Report to the console
+        if: always()
+        run: |
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > after.json || echo '[]' > after.json
+          for f in before during after; do
+            # base64: GitHub masks lines of secrets, and the key file has lines that are just { and }
+            [ -s "$f.json" ] && echo "::notice title=traffic-$f::b64:$(base64 -w0 $f.json)"
+          done
+          R=$(grep '^CANARY_RESULT ' analysis.txt 2>/dev/null | head -1 | cut -d' ' -f2-)
+          [ -n "$R" ] && echo "::notice title=canary-result::b64:$(printf '%s' "$R" | base64 -w0)"
+          true
