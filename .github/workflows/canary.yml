@@ -69,6 +69,10 @@ jobs:
           print(max(t, key=lambda x: x.get('percent', 0))['revisionName'])")
           echo "Stable revision: $REV"
           echo "rev=$REV" >> "$GITHUB_OUTPUT"
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > before.json
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --update-tags "stable=$REV" --quiet
 
       - name: 4 · Deploy the canary and give it 10% of traffic
@@ -76,6 +80,10 @@ jobs:
           gcloud run deploy "$SERVICE" --image "$IMAGE:canary-$GITHUB_RUN_ID" --region "$REGION" \
             --no-traffic --tag canary --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars APP=canary --quiet
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-tags canary=10 --quiet
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > during.json
           gcloud run services describe "$SERVICE" --region "$REGION" --format='table(status.traffic[].revisionName,status.traffic[].percent,status.traffic[].tag)'
 
       - name: 5 · Canary analysis
@@ -111,3 +119,18 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::error::Canary rejected: its response-code mix changed. Traffic was rolled back to ${{ steps.stable.outputs.rev }}."
           exit 1
+
+      - name: 7 · Report to the console
+        if: always()
+        run: |
+          gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
+          import json, sys
+          t = json.load(sys.stdin)['status']['traffic']
+          print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > after.json || echo '[]' > after.json
+          for f in before during after; do
+            [ -s "$f.json" ] && echo "::notice title=traffic-$f::$(cat $f.json)"
+          done
+          R=$(grep '^CANARY_RESULT ' analysis.txt 2>/dev/null | head -1 | cut -d' ' -f2-)
+          [ -n "$R" ] && echo "::notice title=canary-result::$R"
+          echo "::notice title=canary-input::${{ inputs.version }}"
+          true

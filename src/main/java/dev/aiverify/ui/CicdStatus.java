@@ -74,7 +74,49 @@ public final class CicdStatus {
                 row.put("conclusion", r.get("conclusion"));
                 row.put("createdAt", r.get("created_at"));
                 row.put("url", r.get("html_url"));
+                row.put("id", r.get("id"));
                 drills.add(row);
+            }
+            Object id = drills.isEmpty() ? null : drills.get(0).get("id");
+            if (id != null && drillDone.containsKey(String.valueOf(id))) {
+                drills.get(0).putAll(drillDone.get(String.valueOf(id)));
+            } else if (id != null) {
+                // details of the latest drill: step results and the facts the workflow reported as annotations
+                List<Object> jobs = arr(obj(Json.parse(fetch(API + "/actions/runs/" + id + "/jobs"))).get("jobs"));
+                if (!jobs.isEmpty()) {
+                    Map<String, Object> job = obj(jobs.get(0));
+                    List<Map<String, Object>> steps = new ArrayList<>();
+                    for (Object o : arr(job.get("steps"))) {
+                        Map<String, Object> st = obj(o);
+                        String name = String.valueOf(st.get("name"));
+                        if (name.matches("^[0-9] · .*")) {
+                            steps.add(Map.of("name", name, "status", String.valueOf(st.get("status")),
+                                    "conclusion", String.valueOf(st.get("conclusion"))));
+                        }
+                    }
+                    drills.get(0).put("steps", steps);
+                    boolean done = "completed".equals(job.get("status"));
+                    if (done) {
+                        for (Object o : arr(Json.parse(fetch(API + "/check-runs/" + job.get("id") + "/annotations")))) {
+                            Map<String, Object> an = obj(o);
+                            String title = String.valueOf(an.get("title"));
+                            String msg = String.valueOf(an.get("message"));
+                            if (title.startsWith("traffic-") || "canary-result".equals(title)) {
+                                try {
+                                    drills.get(0).put(title, Json.parse(msg));
+                                } catch (RuntimeException ignored) {
+                                    // not JSON: skip
+                                }
+                            } else if ("canary-input".equals(title)) {
+                                drills.get(0).put("input", msg);
+                            }
+                        }
+                    }
+                    if (done) {
+                        Map<String, Object> keep = new LinkedHashMap<>(drills.get(0));
+                        drillDone.put(String.valueOf(id), keep);
+                    }
+                }
             }
             out.put("canary", drills);
             out.put("canaryUrl", "https://github.com/" + REPO + "/actions/workflows/canary.yml");
@@ -109,6 +151,34 @@ public final class CicdStatus {
         return out;
     }
 
+    /** Starts the rollback drill. Needs a GitHub token with permission to run workflows (gh auth login). */
+    synchronized Map<String, Object> dispatch(boolean bad) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        String t = token();
+        if (t == null || t.isBlank()) {
+            out.put("error", "no-token");
+            return out;
+        }
+        String version = bad ? "bad: attempt 1 (expiry-month bug)" : "good: the approved release";
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(API + "/actions/workflows/canary.yml/dispatches"))
+                    .timeout(Duration.ofSeconds(15)).header("Accept", "application/vnd.github+json")
+                    .header("Authorization", "Bearer " + t).header("User-Agent", "ai-code-verification-gate")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"ref\":\"main\",\"inputs\":{\"version\":\"" + version + "\"}}"))
+                    .build();
+            HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (r.statusCode() == 204) {
+                out.put("started", version);
+                cached = null;
+            } else {
+                out.put("error", "GitHub " + r.statusCode() + ": " + r.body());
+            }
+        } catch (Exception e) {
+            out.put("error", String.valueOf(e.getMessage()));
+        }
+        return out;
+    }
+
     private String fetch(String url) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10))
                 .header("Accept", "application/vnd.github+json").header("User-Agent", "ai-code-verification-gate");
@@ -117,12 +187,19 @@ public final class CicdStatus {
             b.header("Authorization", "Bearer " + token);
         }
         HttpResponse<String> r = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+        if (r.statusCode() == 401 && token != null && !token.isBlank()) {
+            // a stale token: fall back to public, unauthenticated reads
+            this.token = null;
+            this.tokenLooked = true;
+            return fetch(url);
+        }
         if (r.statusCode() != 200) {
             throw new IllegalStateException("GitHub API " + r.statusCode() + (r.statusCode() == 403 || r.statusCode() == 429 ? " (hourly limit reached; run `gh auth login` or set GITHUB_TOKEN, then restart the console)" : ""));
         }
         return r.body();
     }
 
+    private final Map<String, Map<String, Object>> drillDone = new java.util.concurrent.ConcurrentHashMap<>();
     private String token;
     private boolean tokenLooked;
 

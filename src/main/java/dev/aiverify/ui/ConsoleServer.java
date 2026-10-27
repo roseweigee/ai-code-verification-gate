@@ -135,6 +135,13 @@ public final class ConsoleServer {
                 case "/api/snippet" -> json(ex, snippet(q));
                 case "/api/tamper-test" -> json(ex, tamperTest());
                 case "/api/cicd" -> json(ex, cicd.get("1".equals(q.get("refresh"))));
+                case "/api/drill" -> {
+                    if (!"POST".equals(ex.getRequestMethod()) || password != null) {
+                        json(ex, 405, Map.of("error", "POST only, local console only"));
+                        return;
+                    }
+                    json(ex, cicd.dispatch(!"good".equals(q.get("version"))));
+                }
                 case "/api/monitor" -> {
                     String st = q.getOrDefault("stable", ""), ca = q.getOrDefault("canary", "");
                     String re = "run-[0-9]{8}-[0-9]{6}-a[0-9]+";

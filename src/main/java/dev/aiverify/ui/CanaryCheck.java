@@ -57,6 +57,26 @@ public final class CanaryCheck {
                 worstGap = c - s;
             }
         }
+        StringBuilder js = new StringBuilder("{\"n\":" + n + ",\"rows\":[");
+        String[] keys = {"00", "54", "51", "14", "30", "5xx"};
+        for (int i = 0; i < keys.length; i++) {
+            js.append(i == 0 ? "" : ",").append(String.format(java.util.Locale.ROOT, "{\"code\":\"%s\",\"stable\":%.4f,\"canary\":%.4f}",
+                    keys[i], share(stable, keys[i], n), share(canary, keys[i], n)));
+        }
+        String verdictMetric = null;
+        double gap = 0;
+        for (String k : WATCH) {
+            double s0 = share(stable, k, n), c0 = share(canary, k, n);
+            boolean j = "5xx".equals(k) ? c0 > 0.003 && c0 > s0 : c0 >= 2 * s0 && c0 - s0 >= 0.015;
+            if (j && c0 - s0 > gap) {
+                verdictMetric = k;
+                gap = c0 - s0;
+            }
+        }
+        js.append("],\"verdict\":\"").append(verdictMetric == null ? "PROMOTE" : "ROLLBACK").append("\"")
+                .append(verdictMetric == null ? "" : ",\"metric\":\"" + verdictMetric + "\"").append("}");
+        System.out.println();
+        System.out.println("CANARY_RESULT " + js);
         System.out.println();
         if (worst == null) {
             System.out.println("Verdict: PROMOTE. The canary's response-code mix matches the stable revision.");
