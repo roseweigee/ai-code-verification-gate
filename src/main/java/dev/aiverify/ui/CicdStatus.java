@@ -135,6 +135,7 @@ public final class CicdStatus {
             return drillDone.get(key);
         }
         Map<String, Object> d = new LinkedHashMap<>();
+        java.util.TreeMap<Integer, String> parts = new java.util.TreeMap<>();   // canary-result-1, -2, ...
         List<Map<String, Object>> steps = new ArrayList<>();
         boolean done = true;
         for (Object jo : arr(obj(Json.parse(fetch(API + "/actions/runs/" + id + "/jobs"))).get("jobs"))) {
@@ -171,9 +172,19 @@ public final class CicdStatus {
                     } catch (RuntimeException ignored) {
                         // not JSON (or masked by GitHub): skip
                     }
+                } else if (title.matches("canary-result-\\d+") && msg.startsWith("b64:")) {
+                    parts.put(Integer.parseInt(title.substring(14)), msg.substring(4).trim());
                 } else if ("canary-input".equals(title)) {
                     d.put("input", msg);
                 }
+            }
+        }
+        if (!parts.isEmpty()) {
+            try {
+                d.put("canary-result", Json.parse(new String(java.util.Base64.getDecoder().decode(String.join("", parts.values())),
+                        java.nio.charset.StandardCharsets.UTF_8).trim()));
+            } catch (RuntimeException ignored) {
+                // a part is missing: the next refresh tries again
             }
         }
         d.put("steps", steps);

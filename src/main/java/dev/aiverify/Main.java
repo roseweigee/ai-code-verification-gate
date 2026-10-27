@@ -62,7 +62,8 @@ public final class Main {
             case "release-check" -> releaseCheck(opts);
             case "canary-prepare" -> canaryPrepare(opts);
             case "canary-check" -> System.exit(dev.aiverify.ui.CanaryCheck.run(req(opts, "stable"), req(opts, "canary"),
-                    Integer.parseInt(opts.getOrDefault("n", "600"))));
+                    Integer.parseInt(opts.getOrDefault("n", "600")),
+                    Path.of(opts.getOrDefault("source", "release/iso8583/AuthorizationPrecheckImpl.java"))));
             case "serve-release" -> dev.aiverify.ui.ReleaseServer.start(ROOT,
                     Path.of(opts.getOrDefault("path", "release/iso8583")),
                     Integer.parseInt(opts.getOrDefault("port", System.getenv().getOrDefault("PORT", "8080"))));

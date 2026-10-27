@@ -102,7 +102,7 @@ jobs:
           t = json.load(sys.stdin)['status']['traffic']
           print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > during.json
 
-      - name: 4 · Canary analysis
+      - name: 4 · Canary analysis + AIOps incident analysis
         id: analysis
         if: steps.canary.outputs.first != '1'
         continue-on-error: true
@@ -152,5 +152,7 @@ jobs:
             [ -s "$f.json" ] && echo "::notice title=traffic-$f::b64:$(base64 -w0 $f.json)"
           done
           R=$(grep '^CANARY_RESULT ' analysis.txt 2>/dev/null | head -1 | cut -d' ' -f2-)
-          [ -n "$R" ] && echo "::notice title=canary-result::b64:$(printf '%s' "$R" | base64 -w0)"
+          # split: one annotation holds only a few KB
+          B=$(printf '%s' "$R" | base64 -w0); i=1
+          while [ -n "$B" ]; do echo "::notice title=canary-result-$i::b64:${B:0:3000}"; B=${B:3000}; i=$((i+1)); done
           true

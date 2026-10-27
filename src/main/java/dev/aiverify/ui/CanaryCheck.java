@@ -35,13 +35,18 @@ public final class CanaryCheck {
     }
 
     public static int run(String stableUrl, String canaryUrl, int n) throws Exception {
+        return run(stableUrl, canaryUrl, n, java.nio.file.Path.of("release/iso8583/AuthorizationPrecheckImpl.java"));
+    }
+
+    public static int run(String stableUrl, String canaryUrl, int n, java.nio.file.Path canarySource) throws Exception {
         List<MonitorSim.Tx> tx = MonitorSim.traffic().subList(0, n);
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(20)).build();
         warm(http, stableUrl);
         warm(http, canaryUrl);
-        Map<String, Integer> stable = send(http, stableUrl, tx);
+        List<String> stableList = send(http, stableUrl, tx);
         CRASHES.clear();
-        Map<String, Integer> canary = send(http, canaryUrl, tx);
+        List<String> canaryList = send(http, canaryUrl, tx);
+        Map<String, Integer> stable = count(stableList), canary = count(canaryList);
 
         System.out.println("Canary analysis: " + n + " identical transactions sent to each revision");
         System.out.println("  stable: " + stableUrl);
@@ -58,11 +63,18 @@ public final class CanaryCheck {
             js.append(i == 0 ? "" : ",").append(String.format(java.util.Locale.ROOT, "{\"code\":\"%s\",\"stable\":%.4f,\"canary\":%.4f}",
                     keys[i], share(stable, keys[i], n), share(canary, keys[i], n)));
         }
-        // every metric that breached its rule; crashes first, because a 500 is the most visible harm
+        // a crash is always an anomaly; for response codes, a paired z-score (same transaction, both revisions)
         List<String> breached = new ArrayList<>();
-        for (String k : new String[] {"5xx", "54", "51", "14", "30"}) {
+        for (String k : new String[] {"5xx", "54", "51", "14", "30", "13"}) {
             double s0 = share(stable, k, n), c0 = share(canary, k, n);
-            boolean j = "5xx".equals(k) ? c0 > 0.003 && c0 > s0 : c0 >= 2 * s0 && c0 - s0 >= 0.015;
+            int into = 0, outOf = 0;
+            for (int i = 0; i < n; i++) {
+                boolean a = k.equals(stableList.get(i)), b = k.equals(canaryList.get(i));
+                into += b && !a ? 1 : 0;
+                outOf += a && !b ? 1 : 0;
+            }
+            boolean j = "5xx".equals(k) ? c0 > 0.003 && c0 > s0
+                    : into + outOf > 0 && (into - outOf) / Math.sqrt(into + outOf) >= IncidentAnalysis.Z;
             if (j) {
                 breached.add(k);
             }
@@ -84,6 +96,7 @@ public final class CanaryCheck {
             }
             js.append("]");
         }
+        js.append(",\"incident\":").append(IncidentAnalysis.json(tx, stableList, canaryList, CRASHES, canarySource));
         js.append("}");
         System.out.println();
         System.out.println("CANARY_RESULT " + js);
@@ -98,6 +111,12 @@ public final class CanaryCheck {
                     "5xx".equals(k) ? "HTTP 500 (crash)" : "code " + k, share(stable, k, n) * 100, share(canary, k, n) * 100);
         }
         return 3;
+    }
+
+    private static Map<String, Integer> count(List<String> codes) {
+        Map<String, Integer> m = new LinkedHashMap<>();
+        codes.forEach(c -> m.merge(c, 1, Integer::sum));
+        return m;
     }
 
     private static double share(Map<String, Integer> m, String k, int n) {
@@ -118,7 +137,7 @@ public final class CanaryCheck {
         }
     }
 
-    private static Map<String, Integer> send(HttpClient http, String base, List<MonitorSim.Tx> tx) throws Exception {
+    private static List<String> send(HttpClient http, String base, List<MonitorSim.Tx> tx) throws Exception {
         ExecutorService ex = Executors.newFixedThreadPool(8);
         try {
             List<Future<String>> fs = new ArrayList<>();
@@ -154,10 +173,9 @@ public final class CanaryCheck {
                     }
                 }));
             }
-            Map<String, Integer> out = new LinkedHashMap<>();
+            List<String> out = new ArrayList<>();
             for (Future<String> f : fs) {
-                String code = f.get();
-                out.merge(code, 1, Integer::sum);
+                out.add(f.get());
             }
             return out;
         } finally {
