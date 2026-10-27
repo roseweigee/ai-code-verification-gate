@@ -103,9 +103,11 @@ public final class CicdStatus {
                             String msg = String.valueOf(an.get("message"));
                             if (title.startsWith("traffic-") || "canary-result".equals(title)) {
                                 try {
-                                    drills.get(0).put(title, Json.parse(msg));
+                                    String text = msg.startsWith("b64:") ? new String(java.util.Base64.getDecoder()
+                                            .decode(msg.substring(4).trim()), java.nio.charset.StandardCharsets.UTF_8) : msg;
+                                    drills.get(0).put(title, Json.parse(text));
                                 } catch (RuntimeException ignored) {
-                                    // not JSON: skip
+                                    // not JSON (or masked by GitHub): skip
                                 }
                             } else if ("canary-input".equals(title)) {
                                 drills.get(0).put("input", msg);

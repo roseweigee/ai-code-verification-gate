@@ -128,9 +128,10 @@ jobs:
           t = json.load(sys.stdin)['status']['traffic']
           print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > after.json || echo '[]' > after.json
           for f in before during after; do
-            [ -s "$f.json" ] && echo "::notice title=traffic-$f::$(cat $f.json)"
+            # base64: GitHub masks lines of secrets, and the key file has lines that are just { and }
+            [ -s "$f.json" ] && echo "::notice title=traffic-$f::b64:$(base64 -w0 $f.json)"
           done
           R=$(grep '^CANARY_RESULT ' analysis.txt 2>/dev/null | head -1 | cut -d' ' -f2-)
-          [ -n "$R" ] && echo "::notice title=canary-result::$R"
+          [ -n "$R" ] && echo "::notice title=canary-result::b64:$(printf '%s' "$R" | base64 -w0)"
           echo "::notice title=canary-input::${{ inputs.version }}"
           true
