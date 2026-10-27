@@ -121,6 +121,10 @@ jobs:
         if: steps.canary.outputs.first == '1' || steps.analysis.outcome == 'success'
         run: |
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
+          NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')
+          # the promoted revision becomes the new stable one
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags canary --quiet || true
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --update-tags "stable=$NEW" --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           RUN=$(python3 -c "import json;a=json.load(open('release/iso8583/approval.json'));print(a['runId'],'attempt',a['attempt'],'approved by',a['approvedBy'])")

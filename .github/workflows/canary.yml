@@ -103,6 +103,10 @@ jobs:
         if: steps.analysis.outcome == 'success'
         run: |
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
+          NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')
+          # the promoted revision becomes the new stable one
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags canary --quiet || true
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --update-tags "stable=$NEW" --quiet
           { echo "## ✅ Canary PROMOTED"; echo '```'; cat analysis.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 6 · Automatic rollback
