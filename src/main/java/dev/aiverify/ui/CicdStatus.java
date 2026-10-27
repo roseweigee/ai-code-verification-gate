@@ -29,11 +29,12 @@ public final class CicdStatus {
     synchronized Map<String, Object> get(boolean refresh) {
         long now = System.currentTimeMillis();
         // even "refresh" is limited: at most one GitHub read per 15 s (60/hour without a token)
-        if (cached != null && now - cachedAt < (refresh ? 15_000 : 60_000)) {
+        if (cached != null && now - cachedAt < (refresh ? 5_000 : 60_000)) {
             return cached;
         }
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("repo", REPO);
+        out.put("fetchedAt", java.time.LocalTime.now().withNano(0).toString());
         out.put("actionsUrl", "https://github.com/" + REPO + "/actions/workflows/" + WORKFLOW);
         try {
             Map<String, Object> runs = obj(Json.parse(fetch(API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=5")));
@@ -67,6 +68,7 @@ public final class CicdStatus {
             }
             out.put("runs", list);
             List<Map<String, Object>> drills = new ArrayList<>();
+            try {
             for (Object o : arr(obj(Json.parse(fetch(API + "/actions/workflows/canary.yml/runs?per_page=3"))).get("workflow_runs"))) {
                 Map<String, Object> r = obj(o);
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -97,7 +99,15 @@ public final class CicdStatus {
                     drills.get(0).put("steps", steps);
                     boolean done = "completed".equals(job.get("status"));
                     if (done) {
-                        for (Object o : arr(Json.parse(fetch(API + "/check-runs/" + job.get("id") + "/annotations")))) {
+                        List<Object> anns;
+                        try {
+                            anns = arr(Json.parse(fetch(API + "/check-runs/" + job.get("id") + "/annotations")));
+                        } catch (Exception e) {
+                            anns = List.of();
+                            done = false;   // do not cache a drill whose report could not be read
+                            out.put("drillError", "report: " + e.getMessage());
+                        }
+                        for (Object o : anns) {
                             Map<String, Object> an = obj(o);
                             String title = String.valueOf(an.get("title"));
                             String msg = String.valueOf(an.get("message"));
@@ -119,6 +129,9 @@ public final class CicdStatus {
                         drillDone.put(String.valueOf(id), keep);
                     }
                 }
+            }
+            } catch (Exception e) {
+                out.put("drillError", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             }
             out.put("canary", drills);
             out.put("canaryUrl", "https://github.com/" + REPO + "/actions/workflows/canary.yml");
