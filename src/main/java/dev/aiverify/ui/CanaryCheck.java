@@ -24,8 +24,12 @@ import java.util.regex.Pattern;
  */
 public final class CanaryCheck {
 
-    private static final String[] WATCH = {"54", "51", "14", "30", "5xx"};
     private static final Pattern CODE = Pattern.compile("\"responseCode\"\\s*:\\s*\"(\\d\\d)\"");
+
+    private static final Pattern EXC = Pattern.compile("\"exception\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern LINE = Pattern.compile("\"line\"\\s*:\\s*(\\d+)");
+    /** "exception at line N" -> count, from the canary's HTTP 500 bodies. */
+    private static final Map<String, Integer> CRASHES = new java.util.concurrent.ConcurrentHashMap<>();
 
     private CanaryCheck() {
     }
@@ -36,6 +40,7 @@ public final class CanaryCheck {
         warm(http, stableUrl);
         warm(http, canaryUrl);
         Map<String, Integer> stable = send(http, stableUrl, tx);
+        CRASHES.clear();
         Map<String, Integer> canary = send(http, canaryUrl, tx);
 
         System.out.println("Canary analysis: " + n + " identical transactions sent to each revision");
@@ -43,19 +48,9 @@ public final class CanaryCheck {
         System.out.println("  canary: " + canaryUrl);
         System.out.println();
         System.out.printf("  %-6s %10s %10s%n", "code", "stable", "canary");
-        String worst = null;
-        double worstGap = 0;
         for (String k : new String[] {"00", "54", "51", "14", "30", "5xx", "other"}) {
             double s = share(stable, k, n), c = share(canary, k, n);
             System.out.printf("  %-6s %9.1f%% %9.1f%%%n", k, s * 100, c * 100);
-        }
-        for (String k : WATCH) {
-            double s = share(stable, k, n), c = share(canary, k, n);
-            boolean jump = "5xx".equals(k) ? c > 0.003 && c > s : c >= 2 * s && c - s >= 0.015;
-            if (jump && c - s > worstGap) {
-                worst = k;
-                worstGap = c - s;
-            }
         }
         StringBuilder js = new StringBuilder("{\"n\":" + n + ",\"rows\":[");
         String[] keys = {"00", "54", "51", "14", "30", "5xx"};
@@ -63,28 +58,45 @@ public final class CanaryCheck {
             js.append(i == 0 ? "" : ",").append(String.format(java.util.Locale.ROOT, "{\"code\":\"%s\",\"stable\":%.4f,\"canary\":%.4f}",
                     keys[i], share(stable, keys[i], n), share(canary, keys[i], n)));
         }
-        String verdictMetric = null;
-        double gap = 0;
-        for (String k : WATCH) {
+        // every metric that breached its rule; crashes first, because a 500 is the most visible harm
+        List<String> breached = new ArrayList<>();
+        for (String k : new String[] {"5xx", "54", "51", "14", "30"}) {
             double s0 = share(stable, k, n), c0 = share(canary, k, n);
             boolean j = "5xx".equals(k) ? c0 > 0.003 && c0 > s0 : c0 >= 2 * s0 && c0 - s0 >= 0.015;
-            if (j && c0 - s0 > gap) {
-                verdictMetric = k;
-                gap = c0 - s0;
+            if (j) {
+                breached.add(k);
             }
         }
-        js.append("],\"verdict\":\"").append(verdictMetric == null ? "PROMOTE" : "ROLLBACK").append("\"")
-                .append(verdictMetric == null ? "" : ",\"metric\":\"" + verdictMetric + "\"").append("}");
+        js.append("],\"verdict\":\"").append(breached.isEmpty() ? "PROMOTE" : "ROLLBACK").append("\"");
+        if (!breached.isEmpty()) {
+            js.append(",\"metric\":\"").append(breached.get(0)).append("\",\"metrics\":[");
+            for (int i = 0; i < breached.size(); i++) {
+                js.append(i == 0 ? "" : ",").append('"').append(breached.get(i)).append('"');
+            }
+            js.append("]");
+        }
+        if (!CRASHES.isEmpty()) {
+            js.append(",\"crashes\":[");
+            int i = 0;
+            for (Map.Entry<String, Integer> e : CRASHES.entrySet()) {
+                js.append(i++ == 0 ? "" : ",").append("{\"what\":\"").append(e.getKey().replace("\"", "'"))
+                        .append("\",\"count\":").append(e.getValue()).append("}");
+            }
+            js.append("]");
+        }
+        js.append("}");
         System.out.println();
         System.out.println("CANARY_RESULT " + js);
         System.out.println();
-        if (worst == null) {
+        if (breached.isEmpty()) {
             System.out.println("Verdict: PROMOTE. The canary's response-code mix matches the stable revision.");
             return 0;
         }
-        System.out.printf("Verdict: ROLL BACK. Code %s jumped from %.1f%% on the stable revision to %.1f%% on the canary.%n",
-                worst, share(stable, worst, n) * 100, share(canary, worst, n) * 100);
-        System.out.println("No exception was needed to see it: only the pattern changed.");
+        System.out.println("Verdict: ROLL BACK.");
+        for (String k : breached) {
+            System.out.printf("  %s: %.1f%% on the stable revision, %.1f%% on the canary%n",
+                    "5xx".equals(k) ? "HTTP 500 (crash)" : "code " + k, share(stable, k, n) * 100, share(canary, k, n) * 100);
+        }
         return 3;
     }
 
@@ -121,7 +133,13 @@ public final class CanaryCheck {
                         try {
                             HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());
                             if (r.statusCode() >= 500) {
-                                if (r.body().contains("\"exception\"") || attempt >= 2) {
+                                Matcher em = EXC.matcher(r.body());
+                                if (em.find()) {
+                                    Matcher lm = LINE.matcher(r.body());
+                                    CRASHES.merge(em.group(1) + (lm.find() && !"0".equals(lm.group(1)) ? " at line " + lm.group(1) : ""), 1, Integer::sum);
+                                    return "5xx";
+                                }
+                                if (attempt >= 2) {
                                     return "5xx";
                                 }
                                 continue;   // platform hiccup, not the code: try again

@@ -54,7 +54,8 @@ final class MonitorSim {
             long amount = a < 0.03 ? available + 1 + r.nextInt(50_000)
                     : a < 0.04 ? available
                     : 100 + (long) (r.nextDouble() * (available - 100));
-            LocalDate date = r.nextDouble() < 0.002 ? null : TODAY;
+            // about 1% of messages arrive without DE 13 (local transaction date), e.g. one acquirer channel that omits it
+            LocalDate date = r.nextDouble() < 0.01 ? null : TODAY;
             out.add(new Tx(new AuthRequest(pan, expiry, amount, available), date));
         }
         return out;
