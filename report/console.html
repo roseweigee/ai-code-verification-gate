@@ -520,16 +520,24 @@ async function act(name, params = {}, btn) {
   if (name === 'approve' && lastRes && lastRes.exitCode === 0) watchRelease();
 }
 let lastRes = null;
-function watchRelease() {
-  clearInterval(watchRelease.timer);
-  let n = 0;
-  setTimeout(() => loadCicd(true), 4000);
-  watchRelease.timer = setInterval(() => {
-    loadCicd(true);
-    const r = (S.cicd && S.cicd.runs || [])[0];
-    if (++n > 15 || (n > 2 && r && r.status === 'completed')) clearInterval(watchRelease.timer);
-  }, 20000);
+// After an approval or a drill, the CD section follows the pipeline by itself: it waits for the new GitHub run,
+// follows it while it runs, and reads it once more after it finishes so the canary report is complete.
+function watchCd(kind) {
+  clearInterval(watchCd.timer);
+  const since = new Date(Date.now() - 60000).toISOString().replace(/\.\d+Z$/, 'Z');
+  let n = 0, doneFor = 0;
+  const tick = async () => {
+    await loadCicd(true);
+    const list = sessionOnly(kind === 'drill' ? (S.cicd && S.cicd.canary) : (S.cicd && S.cicd.runs)) || [];
+    const e = list.find(x => (x.createdAt || '') >= since);
+    if (e && e.status === 'completed') doneFor++;
+    const complete = e && e.status === 'completed' && (e['canary-result'] || e['traffic-after'] || doneFor >= 4);
+    if (++n > 80 || complete) { clearInterval(watchCd.timer); watchCd.timer = null; if (kind === 'drill') { S.drillMsg = ''; renderCicd(); } }
+  };
+  setTimeout(tick, 3000);
+  watchCd.timer = setInterval(tick, 8000);
 }
+const watchRelease = () => watchCd('release');
 function showCmd(res) {
   lastRes = res;
   $('#cmdbar').classList.add('on');
@@ -731,8 +739,7 @@ function bindDrill() {
     S.drillMsg = r.started ? t('m.started') : r.error === 'no-token' ? t('m.noToken') : esc(r.error || '');
     renderMonitor();
     const mo = $('#cicd-out'); if (mo) mo.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (r.started) { setTimeout(() => loadCicd(true), 8000); clearInterval(S.drillTimer); let n = 0;
-      S.drillTimer = setInterval(() => { loadCicd(true); const d = (S.cicd && S.cicd.canary || [])[0]; if (++n > 20 || (n > 3 && d && d.status === 'completed')) { clearInterval(S.drillTimer); S.drillTimer = null; S.drillMsg = ''; } }, 15000); }
+    if (r.started) watchCd('drill');
   });
 }
 const CODE = { '54': () => t('m.c54'), '51': () => t('m.c51'), '14': () => t('m.c14'), '30': () => t('m.c30') };
@@ -999,9 +1006,8 @@ function renderCicd() {
   }
   box.innerHTML = h + `</div>`;
   const cr = $('#cicd-refresh'); cr.onclick = async () => { cr.disabled = true; cr.innerHTML = `<span class="spin"></span> ${t('running')}`; await loadCicd(true); };
-  if (events.some(e => e.status !== 'completed') && !S.cdTimer) S.cdTimer = setInterval(() => {
-    const busy = (S.cicd ? sessionOnly(S.cicd.runs).concat(sessionOnly(S.cicd.canary)) : []).some(e => e.status !== 'completed');
-    if (busy) loadCicd(true); else { clearInterval(S.cdTimer); S.cdTimer = null; S.drillMsg = ''; } }, 15000);
+  // a run already in progress when the page opened: follow it too
+  if (events.some(e => e.status !== 'completed') && !watchCd.timer) watchCd(events.find(e => e.status !== 'completed').kind);
   if (S.state && S.state.runs) renderAttempts();
 }
 
