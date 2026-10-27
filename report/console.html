@@ -688,48 +688,10 @@ function npeCode(src, npe) {
     return `<div style="margin:10px 0 4px;font-weight:600">${esc(f.id)} · ${t('a.npeAt', f.line)}</div>` + codeBlock(rows);
   }).join('');
 }
+// The local monitoring simulation was replaced by the real canary on Cloud Run (CD section). Kept as a no-op.
 function renderMonitor() {
-  const box = $('#monitor-out'); if (!box) return;
-  const runs = (S.state && S.state.runs) || [];
-  const a1 = runs.filter(r => r.attempt === 1).pop();
-  const good = runs.filter(r => r.verdict === 'APPROVED').pop() || runs.filter(r => r.attempt === 3).pop();
-  const simOk = !!(a1 && good);
-  if (!simOk) { box.innerHTML = ''; return; }
-  const M = S.monitor;
-  let h = `<div class="card" style="margin-top:28px;border-top:6px solid #9A6200">
-    <h3 style="margin:0 0 6px;font-size:22px">${t('m.h')}</h3>
-    <p class="note" style="margin:0 0 6px">${t('m.lead')}</p>
-    ${simOk ? `<p class="note" style="margin:0 0 14px;color:#9A6200;font-weight:600">${t('m.sim', a1.attempt, good.attempt)}</p>
-    <button class="btn primary" id="monitor-run">${t('m.run')}</button>` : `<p class="note" style="margin:0 0 4px;color:#9A6200;font-weight:600">${t('m.simWait')}</p>`}`;
-  if (simOk && M && M.minutes) {
-    const metric = M.alertMetric || '54', base = M.baseline[metric] || 0;
-    const max = Math.max(...M.minutes.map(m => m.rates[metric]), base * 2.2, 0.02);
-    h += `<div style="margin-top:18px;font-weight:600">${t('m.chart', metric === '5xx' ? 'HTTP 500' : metric + ' · ' + (CODE[metric] ? CODE[metric]() : ''))}</div>
-      <div style="position:relative;display:flex;align-items:flex-end;gap:6px;height:220px;margin-top:10px;padding:0 4px;border-bottom:1px solid var(--line)">
-      <div style="position:absolute;left:0;right:0;bottom:${base / max * 100}%;border-top:2px dashed #4B5A65"></div>
-      ${M.minutes.map(m => { const v = m.rates[metric], c = m.version === 'canary' ? '#B3261E' : '#1F5F8B';
-        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">
-          <div class="mono" style="font-size:12px;color:${c};margin-bottom:2px">${(v * 100).toFixed(1)}%</div>
-          <div style="width:100%;height:${Math.max(2, v / max * 85)}%;background:${c};border-radius:4px 4px 0 0;opacity:${m.version === 'canary' ? 1 : .75}"></div></div>`; }).join('')}
-      </div>
-      <div style="display:flex;gap:6px;padding:4px 4px 0">${M.minutes.map(m => `<div class="mono" style="flex:1;text-align:center;font-size:12px;color:var(--ink-2)">${m.minute}${m.rollback ? '<br><b style="color:#B3261E">↩</b>' : ''}</div>`).join('')}</div>
-      <div class="note" style="margin-top:6px"><span style="display:inline-block;width:12px;height:12px;background:#1F5F8B;border-radius:2px"></span> ${t('m.stable', M.stable)} &nbsp; <span style="display:inline-block;width:12px;height:12px;background:#B3261E;border-radius:2px"></span> ${t('m.canary', M.canary)} &nbsp; ┄ ${t('m.base')}</div>
-      <ol style="margin:14px 0 0;padding-left:22px;line-height:1.9">
-        <li>${t('m.e1', M.perMinute)}</li>
-        <li>${t('m.e2', M.canaryAt)}</li>
-        ${M.alertAt ? `<li><b style="color:#B3261E">${t('m.e3', M.alertAt, metric === '5xx' ? 'HTTP 500' : metric, (base * 100).toFixed(1), (M.minutes[M.alertAt - 1].rates[metric] * 100).toFixed(1))}</b></li>
-        <li><b>${t('m.e4', M.alertAt + 1)}</b></li>
-        <li>${t('m.e5', M.affected, M.canaryTransactions)}</li>` : `<li>${t('m.none')}</li>`}
-      </ol>
-      <p class="note" style="margin:12px 0 0">${t('m.note')}</p>`;
-  }
-  box.innerHTML = h + `</div>`;
+  const box = $('#monitor-out'); if (box) box.innerHTML = '';
   bindDrill();
-  if (simOk) $('#monitor-run').onclick = async () => {
-    const b = $('#monitor-run'); b.disabled = true; b.innerHTML = `<span class="spin"></span> ${t('running')}`;
-    try { S.monitor = await (await fetch('/api/monitor?stable=' + encodeURIComponent(good.runId) + '&canary=' + encodeURIComponent(a1.runId))).json(); }
-    finally { renderMonitor(); }
-  };
 }
 function bindDrill() {
   document.querySelectorAll('[data-drill]').forEach(b => b.onclick = async () => {
