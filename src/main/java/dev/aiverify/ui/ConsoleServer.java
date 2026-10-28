@@ -772,21 +772,35 @@ public final class ConsoleServer {
     private Map<String, Object> saveMailSettings(Session ss, Map<String, String> q) throws IOException {
         String to = q.getOrDefault("to", "").trim();
         String user = q.getOrDefault("user", "").trim();
-        String password = q.getOrDefault("password", "").replace(" ", "").trim();
+        // Google shows app passwords in groups of four; copied text may carry ordinary or non-breaking spaces
+        String password = q.getOrDefault("password", "").replaceAll("[\\s\\u00A0]", "");
         if (to.isEmpty() || !DemoMailer.valid(to)) {
             return Map.of("error", "to");
         }
         if (!user.isEmpty() && !DemoMailer.valid(user)) {
             return Map.of("error", "user");
         }
-        if (!user.isEmpty() && password.isEmpty() && ss.mailPassword.isEmpty()) {
-            return Map.of("error", "password");
+        if (!user.isEmpty() && password.isEmpty()) {
+            // keep the password already in use, but only for the same sender: a different Gmail needs its own
+            java.util.Properties file = new java.util.Properties();
+            Path f = root.resolve("notify.properties");
+            if (Files.exists(f)) {
+                try (var r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+                    file.load(r);
+                }
+            }
+            if (user.equalsIgnoreCase(ss.mailUser) && !ss.mailPassword.isEmpty()) {
+                password = ss.mailPassword;
+            } else if (user.equalsIgnoreCase(file.getProperty("smtp.user", "").trim())) {
+                password = file.getProperty("smtp.password", "").replaceAll("\\s", "");
+            }
+            if (password.isEmpty()) {
+                return Map.of("error", "password");
+            }
         }
         ss.email = to;
         ss.mailUser = user;
-        if (!password.isEmpty() || user.isEmpty()) {
-            ss.mailPassword = user.isEmpty() ? "" : password;
-        }
+        ss.mailPassword = user.isEmpty() ? "" : password;
         if ("true".equals(q.get("remember")) && !user.isEmpty()) {
             // written only on this computer; notify.properties is in .gitignore
             Files.writeString(root.resolve("notify.properties"), "# Saved from the console. In .gitignore: never committed.\n"

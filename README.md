@@ -175,8 +175,25 @@ null date the spec never defined: it is shown, not scored, because the approver 
 
 **Email notifications.** Every blocked run, every run waiting for approval, and every human decision sends an
 email. A rejection email carries the reviewer's reason, which is also the AI author's feedback for the next
-attempt. Copy `notify.properties.example` to `notify.properties` (ignored by git) and fill in the recipient and
-an SMTP account; for Gmail, use an app password. Test it with `./run.sh notify-test`. Each message is also saved
+attempt. Each message is saved to `runs/outbox/` first, and a mail failure never changes a gate decision.
+
+In the console, every notification appears at once: a pop-up, and the full email in the 📬 **Inbox** (bottom
+right). This needs no setup. To also receive them in your own mailbox (Gmail as the sender):
+
+1. On the Gmail account that will send, turn on **2-Step Verification** (Google Account → Security).
+2. Open <https://myaccount.google.com/apppasswords>, create an app password (any name, e.g. "AI Gate") and copy
+   the 16 characters. Spaces do not matter.
+3. In the console: 📬 Inbox → **Also send them to my own email** → your email, the sender Gmail address, the app
+   password → **Save** → **Send a test email**. Tick *Remember* to keep it in `notify.properties` (ignored by git).
+
+Or, without the console: copy `notify.properties.example` to `notify.properties`, fill it in, and run
+`./run.sh notify-test`.
+
+| What you see | What to do |
+| --- | --- |
+| Gmail refused the login (535) | Use an app password created for **that same** Gmail address, not its normal password. A different sender needs its own app password. |
+| No "App passwords" page | Turn on 2-Step Verification first. Company Google Workspace accounts may have it disabled by an admin: use a personal Gmail. |
+| Could not reach smtp.gmail.com | The network blocks outgoing mail on port 465 (common on corporate networks); try another network. |
 
 **Live service page.** `/pay` on the console runs the ISO 8583 pre-check as a production simulator: the same code
 deployed without the gate or after it (Claude's attempt 3, or SpecBlast's rules). Leave the date empty: the version

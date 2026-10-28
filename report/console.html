@@ -316,7 +316,11 @@ const T = {
     'ib.pwHelp': 'Gmail: turn on 2-Step Verification, then create an app password at myaccount.google.com/apppasswords. Kept in memory on this computer only.',
     'ib.remember': 'Remember on this computer (saved to notify.properties, never committed)', 'ib.save': 'Save', 'ib.test': 'Send a test email',
     'ib.stOn': to => `Emails go to ${to}.`, 'ib.stTo': to => `Shown here for ${to}. Add a sender to also email it.`, 'ib.stOff': 'Not emailed yet: notifications appear in this inbox only.',
-    'ib.err': { to: 'Your email address does not look right.', user: 'The sender must be an email address.', password: 'Enter the app password of the sender.' },
+    'ib.err': { to: 'Your email address does not look right.', user: 'The sender must be an email address.', password: 'Enter the app password of this Gmail. A different sender needs its own app password.' },
+    'ib.why': r => /535|BadCredentials|not accepted/i.test(r) ? 'Gmail refused the login. Use the 16-character app password created for this same Gmail address, not its normal password.'
+      : /534|Application-specific|InvalidSecondFactor/i.test(r) ? 'This Gmail needs an app password: turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords.'
+      : /UnknownHost|timed out|Connection refused|connect/i.test(r) ? 'Could not reach smtp.gmail.com on port 465. The network may block outgoing mail; try another network.'
+      : 'Not sent: ' + r,
     'ib.sent': to => `Emailed to ${to}`, 'ib.only': 'Shown here only (email sending is not set up)', 'ib.fail': 'Not emailed (no connection to the mail server). Shown here.',
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
@@ -402,7 +406,11 @@ const T = {
     'ib.pwHelp': 'Gmail：先開啟兩步驟驗證，再到 myaccount.google.com/apppasswords 產生應用程式密碼。只存在這台電腦的記憶體裡。',
     'ib.remember': '在這台電腦記住（存到 notify.properties，不會上傳到 GitHub）', 'ib.save': '儲存', 'ib.test': '寄一封測試信',
     'ib.stOn': to => `通知信會寄到 ${to}。`, 'ib.stTo': to => `收件人：${to}。再填寄件人，就會真的寄出。`, 'ib.stOff': '尚未設定寄信：通知只會出現在這個收件匣。',
-    'ib.err': { to: '你的 Email 格式看起來不對。', user: '寄件人必須是 Email 地址。', password: '請輸入寄件人的應用程式密碼。' },
+    'ib.err': { to: '你的 Email 格式看起來不對。', user: '寄件人必須是 Email 地址。', password: '請輸入這個 Gmail 的應用程式密碼。換了寄件人，就要用那個 Gmail 自己的應用程式密碼。' },
+    'ib.why': r => /535|BadCredentials|not accepted/i.test(r) ? 'Gmail 拒絕登入：請用「同一個 Gmail 帳號」產生的 16 碼應用程式密碼，不是平常登入的密碼。'
+      : /534|Application-specific|InvalidSecondFactor/i.test(r) ? '這個 Gmail 需要應用程式密碼：先開啟兩步驟驗證，再到 myaccount.google.com/apppasswords 產生。'
+      : /UnknownHost|timed out|Connection refused|connect/i.test(r) ? '連不到 smtp.gmail.com 的 465 埠，可能是網路擋住寄信，換個網路試試。'
+      : '沒寄出：' + r,
     'ib.sent': to => `已寄到 ${to}`, 'ib.only': '只在收件匣（尚未設定寄信）', 'ib.fail': '沒寄出（連不上郵件伺服器），內容在這裡。',
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
@@ -602,7 +610,8 @@ function renderInbox() {
     tb.disabled = true; tb.innerHTML = `<span class="spin"></span> ${t('running')}`;
     const r = await (await fetch('/api/mail/test', { method: 'POST' })).json().catch(() => ({ output: '' }));
     const line = (r.output || '').split('\n').find(l => l.startsWith('Email')) || '';
-    S.ibMsg = line.startsWith('Email sent to ') ? t('ib.sent', MAILSET.to) : t('ib.fail');
+    const reason = (line.match(/^Email not sent \((.*)\)\./) || [])[1];
+    S.ibMsg = line.startsWith('Email sent to ') ? t('ib.sent', MAILSET.to) : reason ? t('ib.why', reason) : t('ib.fail');
     S.setOpen = true; await loadInbox();
   };
 }
