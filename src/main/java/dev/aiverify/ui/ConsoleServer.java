@@ -41,7 +41,7 @@ public final class ConsoleServer {
         if (run.isEmpty()) {
             return false;
         }
-        if (!run.matches("(specblast/)?run-[0-9]{8}-[0-9]{6}-(a[0-9]+|sb)")) {
+        if (!run.matches("(specblast/|live/)?run-[0-9]{8}-[0-9]{6}-(a[0-9]+|sb)")) {
             throw new IllegalArgumentException("unknown run");
         }
         args.addAll(List.of("--run", run));
@@ -64,7 +64,12 @@ public final class ConsoleServer {
     static final int MAX_SESSIONS = 60;
     static final long SESSION_IDLE_MS = 3 * 3_600_000L;
     static final int ACTIONS_PER_HOUR = 60;
-    private static final List<String> MAIL_ACTIONS = List.of("attempt1", "attempt2", "attempt3", "approve", "reject");
+    private static final List<String> MAIL_ACTIONS = List.of("attempt1", "attempt2", "attempt3", "live", "approve", "reject");
+    /** Real Claude runs cost money: a few per visitor, and a cap for the whole server per day. */
+    static final int LIVE_PER_SESSION_HOUR = 3;
+    static final int LIVE_PER_DAY = 30;
+    static final int LIVE_MAX_CHAIN = 5;
+    private final java.util.ArrayDeque<Long> liveDay = new java.util.ArrayDeque<>();
 
     /** One visitor's workspace: the shared, read-only repository plus a runs/ folder of its own. */
     static final class Session {
@@ -73,6 +78,7 @@ public final class ConsoleServer {
         final LiveService live;
         final java.time.Instant start = java.time.Instant.now().minusSeconds(5);
         final java.util.ArrayDeque<Long> actions = new java.util.ArrayDeque<>();
+        final java.util.ArrayDeque<Long> liveRuns = new java.util.ArrayDeque<>();
         volatile long used = System.currentTimeMillis();
         volatile String email = "";
         /** Local console only: email settings typed in the page, kept in memory unless the person saves them. */
@@ -363,6 +369,14 @@ public final class ConsoleServer {
                 r.put("output", "All previous runs and the audit log were cleared.");
                 return r;
             }
+            case "liveReset" -> {
+                deleteTree(ss.root.resolve("runs/live"));
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("command", "(cleared runs/live/)");
+                r.put("exitCode", 0);
+                r.put("output", "The live Claude runs of this workspace were cleared. The audit log keeps them.");
+                return r;
+            }
             case "attempt1" -> args.addAll(List.of("run", "--attempt", "1", "--golden", "1.0"));
             case "attempt2" -> args.addAll(List.of("run", "--attempt", "2", "--golden", "1.0"));
             case "attempt3" -> args.addAll(List.of("run", "--attempt", "3", "--golden", "1.1"));
@@ -379,8 +393,9 @@ public final class ConsoleServer {
                 if ("true".equals(q.get("ackHigh"))) {
                     args.add("--ack-high");
                 }
-                if (password == null) {
-                    // local console: approval hands the code to the CD pipeline (git push -> GitHub Actions)
+                if (password == null && !q.getOrDefault("run", "").startsWith("live/")) {
+                    // local console: approval hands the code to the CD pipeline (git push -> GitHub Actions).
+                    // A live Claude run is never released from here: it is a demonstration of the gates.
                     args.add("--release");
                 }
             }
@@ -402,6 +417,23 @@ public final class ConsoleServer {
                     throw new IllegalArgumentException("unknown run");
                 }
             }
+            case "live" -> {
+                if (!liveKey()) {
+                    throw new IllegalArgumentException("live mode is not set up on this server");
+                }
+                int done = liveChain(ss).size();
+                if (done >= LIVE_MAX_CHAIN) {
+                    throw new IllegalArgumentException("live chain full: press Start over");
+                }
+                String why = liveAllow(ss);
+                if (why != null) {
+                    Map<String, Object> r = new LinkedHashMap<>();
+                    r.put("error", why);
+                    return r;
+                }
+                args.addAll(List.of("run", "--attempt", String.valueOf(done + 1), "--live", "--golden", "1.1",
+                        "--into", "live"));
+            }
             case "specblast" -> args.addAll(List.of("verify-specblast", SPECBLAST_PROJECT, "--code-only"));
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
@@ -422,7 +454,7 @@ public final class ConsoleServer {
                 }
             }
         }
-        Map<String, Object> r = runCli(ss, args, mailTo);
+        Map<String, Object> r = runCli(ss, args, mailTo, "live".equals(name));
         if (mailNote != null) {
             r.put("mail", mailNote);
         }
@@ -430,6 +462,69 @@ public final class ConsoleServer {
     }
 
     private Map<String, Object> runCli(Session ss, List<String> args, String mailTo) throws IOException, InterruptedException {
+        return runCli(ss, args, mailTo, false);
+    }
+
+    private boolean liveKey() {
+        String k = System.getenv("ANTHROPIC_API_KEY");
+        return k != null && !k.isBlank();
+    }
+
+    /** The live Claude runs of this workspace, oldest first (runs/live/run-*). */
+    private static List<Path> liveChain(Session ss) throws IOException {
+        Path d = ss.root.resolve("runs/live");
+        if (!Files.isDirectory(d)) {
+            return List.of();
+        }
+        try (Stream<Path> st = Files.list(d)) {
+            return st.filter(p -> p.getFileName().toString().startsWith("run-")).sorted().toList();
+        }
+    }
+
+    /** null = allowed (and counted); otherwise the reason. Only the hosted demo is limited. */
+    private String liveAllow(Session ss) {
+        if (!hosted) {
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        synchronized (liveDay) {
+            while (!liveDay.isEmpty() && now - liveDay.peekFirst() > 86_400_000L) {
+                liveDay.pollFirst();
+            }
+            synchronized (ss.liveRuns) {
+                while (!ss.liveRuns.isEmpty() && now - ss.liveRuns.peekFirst() > 3_600_000L) {
+                    ss.liveRuns.pollFirst();
+                }
+                if (ss.liveRuns.size() >= LIVE_PER_SESSION_HOUR) {
+                    return "live-hour";
+                }
+                if (liveDay.size() >= LIVE_PER_DAY) {
+                    return "live-day";
+                }
+                ss.liveRuns.add(now);
+                liveDay.add(now);
+            }
+        }
+        return null;
+    }
+
+    private int liveLeft(Session ss) {
+        if (!hosted) {
+            return LIVE_PER_SESSION_HOUR;
+        }
+        long now = System.currentTimeMillis();
+        synchronized (liveDay) {
+            long day = liveDay.stream().filter(t -> now - t <= 86_400_000L).count();
+            long mine;
+            synchronized (ss.liveRuns) {
+                mine = ss.liveRuns.stream().filter(t -> now - t <= 3_600_000L).count();
+            }
+            return (int) Math.max(0, Math.min(LIVE_PER_SESSION_HOUR - mine, LIVE_PER_DAY - day));
+        }
+    }
+
+    private Map<String, Object> runCli(Session ss, List<String> args, String mailTo, boolean withAiKey)
+            throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
         cmd.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         cmd.add("-cp");
@@ -445,7 +540,9 @@ public final class ConsoleServer {
         if (hosted) {
             // the demo runs the seeded-defect attempts: no AI key, no GitHub token, and mail only to this visitor
             Map<String, String> env = pb.environment();
-            env.remove("ANTHROPIC_API_KEY");
+            if (!withAiKey) {
+                env.remove("ANTHROPIC_API_KEY"); // only the live action gets the key
+            }
             env.remove("GITHUB_TOKEN");
             env.remove("DEMO_PASSWORD");
             env.put("NOTIFY_TO", mailTo == null ? "" : mailTo);
@@ -490,7 +587,7 @@ public final class ConsoleServer {
     /** What the live-test page shows above the form: which run, what the gate and the human decided. */
     @SuppressWarnings("unchecked")
     private Map<String, Object> tryInfo(Session ss, String run) throws IOException {
-        if (!run.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+        if (!run.matches("(live/)?run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
             throw new IllegalArgumentException("unknown run");
         }
         Map<String, Object> r = (Map<String, Object>) Json.parse(
@@ -520,6 +617,17 @@ public final class ConsoleServer {
 
     private void deleteRuns() throws IOException {
         deleteRuns(root);
+    }
+
+    private static void deleteTree(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (Stream<Path> s = Files.walk(dir)) {
+            for (Path p : s.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(p);
+            }
+        }
     }
 
     private static void deleteRuns(Path base) throws IOException {
@@ -566,6 +674,24 @@ public final class ConsoleServer {
             }
         }
         s.put("runs", runs);
+        List<Object> live = new ArrayList<>();
+        for (Path d : liveChain(ss)) {
+            Path r = d.resolve("result.json");
+            if (Files.exists(r)) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> m = (Map<String, Object>) Json.parse(Files.readString(r));
+                m.put("runPath", "live/" + d.getFileName());
+                Path pc = d.resolve("production-check.json");
+                if (Files.exists(pc)) {
+                    m.put("productionCheck", Json.parse(Files.readString(pc)));
+                }
+                live.add(m);
+            }
+        }
+        s.put("liveRuns", live);
+        s.put("liveAvailable", liveKey());
+        s.put("liveLeft", liveLeft(ss));
+        s.put("liveMax", LIVE_MAX_CHAIN);
 
         Map<String, Object> projects = new LinkedHashMap<>();
         Path pdir = runsDir.resolve("projects");

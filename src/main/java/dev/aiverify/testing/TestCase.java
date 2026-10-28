@@ -59,13 +59,21 @@ public record TestCase(String id, String criterion, String description, String o
             throw new IllegalArgumentException("Expected {\"cases\": [...]} or a JSON array");
         }
         List<TestCase> out = new ArrayList<>();
+        int skipped = 0;
         for (Object o : items) {
             Map<String, Object> c = (Map<String, Object>) o;
+            try {
             out.add(new TestCase(
                     str(c.get("id")), str(c.get("criterion")), str(c.get("description")), origin,
                     (String) c.get("pan"), (String) c.get("expiry"),
                     num(c.get("amountMinor")), num(c.get("availableMinor")),
-                    LocalDate.parse(str(c.get("transactionDate"))), str(c.get("expected")), str(c.get("since"))));
+                    c.get("transactionDate") == null ? null : LocalDate.parse(str(c.get("transactionDate"))), str(c.get("expected")), str(c.get("since"))));
+            } catch (RuntimeException bad) {
+                skipped++; // a malformed case (e.g. a missing amount) is left out, never guessed
+            }
+        }
+        if (skipped > 0) {
+            System.out.println("  note: " + skipped + " malformed " + origin + " test case(s) left out");
         }
         return out;
     }
@@ -80,7 +88,7 @@ public record TestCase(String id, String criterion, String description, String o
         m.put("expiry", expiry);
         m.put("amountMinor", amountMinor);
         m.put("availableMinor", availableMinor);
-        m.put("transactionDate", transactionDate.toString());
+        m.put("transactionDate", transactionDate == null ? null : transactionDate.toString()); // a missing date is a valid test (NF-05)
         m.put("expected", expected);
         if (since != null) {
             m.put("since", since);
