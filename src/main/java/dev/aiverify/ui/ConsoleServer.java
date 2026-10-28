@@ -50,13 +50,113 @@ public final class ConsoleServer {
 
     private final Path root;
     private final byte[] password;
-    private final LiveService live;
+    private final boolean hosted;
     private final CicdStatus cicd = new CicdStatus();
+    /** Locally: one session over the repository itself. Hosted: one per visitor (cookie), each with its own runs/. */
+    private final Session local;
+    private final Map<String, Session> sessions = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Path sessionsDir;
+    private final DemoMailer mailLimit;
+    private final boolean mailOn;
+    /** At most two gate runs at the same time on the hosted demo (each one compiles and runs mutation tests). */
+    private final java.util.concurrent.Semaphore cpu = new java.util.concurrent.Semaphore(2, true);
 
-    private ConsoleServer(Path root, String password) {
+    static final int MAX_SESSIONS = 60;
+    static final long SESSION_IDLE_MS = 3 * 3_600_000L;
+    static final int ACTIONS_PER_HOUR = 60;
+    private static final List<String> MAIL_ACTIONS = List.of("attempt1", "attempt2", "attempt3", "approve", "reject");
+
+    /** One visitor's workspace: the shared, read-only repository plus a runs/ folder of its own. */
+    static final class Session {
+        final String id;
+        final Path root;
+        final LiveService live;
+        final java.time.Instant start = java.time.Instant.now().minusSeconds(5);
+        final java.util.ArrayDeque<Long> actions = new java.util.ArrayDeque<>();
+        volatile long used = System.currentTimeMillis();
+        volatile String email = "";
+
+        Session(String id, Path root) {
+            this.id = id;
+            this.root = root;
+            this.live = new LiveService(root);
+        }
+    }
+
+    private ConsoleServer(Path root, String password) throws IOException {
         this.root = root;
         this.password = password == null ? null : password.getBytes(StandardCharsets.UTF_8);
-        this.live = new LiveService(root);
+        this.hosted = password != null;
+        this.local = new Session("local", root);
+        this.sessionsDir = hosted ? Files.createTempDirectory("gate-sessions") : null;
+        this.mailLimit = new DemoMailer(root, 15);
+        this.mailOn = hosted && new dev.aiverify.notify.Notifier(root).canDeliver();
+    }
+
+    /** The visitor's session, from the gate_sid cookie; a new one (with a Set-Cookie header) when there is none. */
+    private Session session(HttpExchange ex) throws IOException {
+        if (!hosted) {
+            return local;
+        }
+        String sid = null;
+        for (String h : ex.getRequestHeaders().getOrDefault("Cookie", List.of())) {
+            for (String c : h.split(";")) {
+                String t = c.trim();
+                if (t.startsWith("gate_sid=") && t.substring(9).matches("[0-9a-f]{32}")) {
+                    sid = t.substring(9);
+                }
+            }
+        }
+        Session s = sid == null ? null : sessions.get(sid);
+        if (s == null) {
+            s = newSession();
+            ex.getResponseHeaders().add("Set-Cookie", "gate_sid=" + s.id + "; Path=/; HttpOnly; Secure; SameSite=Lax");
+        }
+        s.used = System.currentTimeMillis();
+        return s;
+    }
+
+    private synchronized Session newSession() throws IOException {
+        long now = System.currentTimeMillis();
+        for (Session old : new ArrayList<>(sessions.values())) {
+            if (now - old.used > SESSION_IDLE_MS) {
+                dropSession(old);
+            }
+        }
+        while (sessions.size() >= MAX_SESSIONS) {
+            dropSession(sessions.values().stream().min(Comparator.comparingLong(x -> x.used)).orElseThrow());
+        }
+        byte[] b = new byte[16];
+        new java.security.SecureRandom().nextBytes(b);
+        StringBuilder id = new StringBuilder();
+        for (byte x : b) {
+            id.append(String.format("%02x", x));
+        }
+        Path dir = Files.createDirectories(sessionsDir.resolve(id.toString()));
+        // everything is shared read-only through links, except runs/ (this visitor's own) and private files
+        try (Stream<Path> st = Files.list(root)) {
+            for (Path e : st.toList()) {
+                String n = e.getFileName().toString();
+                if (!n.equals("runs") && !n.equals(".git") && !n.equals("notify.properties")) {
+                    Files.createSymbolicLink(dir.resolve(n), e);
+                }
+            }
+        }
+        Session s = new Session(id.toString(), dir);
+        sessions.put(s.id, s);
+        System.out.println("New demo session (" + sessions.size() + " open).");
+        return s;
+    }
+
+    private void dropSession(Session s) {
+        sessions.remove(s.id);
+        try (Stream<Path> st = Files.walk(s.root)) {
+            for (Path p : st.sorted(Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(p); // links are removed, never followed
+            }
+        } catch (IOException ignored) {
+            // the temporary folder is gone with the container anyway
+        }
     }
 
     public static void start(Path root, int port) throws IOException {
@@ -71,17 +171,18 @@ public final class ConsoleServer {
             }
         }
         ConsoleServer app = new ConsoleServer(root, hosted ? password : null);
-        if (!"1".equals(System.getenv("KEEP_RUNS"))) {
+        if (!hosted && !"1".equals(System.getenv("KEEP_RUNS"))) {
             // every console session starts empty: no attempts, no decisions, an empty audit log
             app.deleteRuns();
             System.out.println("Started fresh: previous runs and the audit log were cleared (set KEEP_RUNS=1 to keep them).");
         }
         HttpServer server = HttpServer.create(new InetSocketAddress(hosted ? "0.0.0.0" : "127.0.0.1", port), 0);
         server.createContext("/", app::handle);
-        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.setExecutor(hosted ? Executors.newFixedThreadPool(6) : Executors.newSingleThreadExecutor());
         server.start();
         if (hosted) {
-            System.out.println("Console listening on port " + port + " (password required).");
+            System.out.println("Console listening on port " + port + " (password required, one workspace per visitor, demo email "
+                    + (app.mailOn ? "on" : "off") + ").");
             return;
         }
         String url = "http://127.0.0.1:" + port + "/";
@@ -123,19 +224,33 @@ public final class ConsoleServer {
                 return;
             }
             Map<String, String> q = query(ex.getRequestURI());
+            Session ss = session(ex);
             switch (path) {
                 case "/" -> send(ex, 200, "text/html; charset=utf-8",
                         Files.readString(root.resolve("report/console.html")));
-                case "/api/state" -> json(ex, state());
+                case "/api/state" -> json(ex, state(ss));
+                case "/api/session/email" -> {
+                    if (!"POST".equals(ex.getRequestMethod()) || !hosted) {
+                        json(ex, 405, Map.of("error", "POST only, hosted demo only"));
+                        return;
+                    }
+                    String e = q.getOrDefault("email", "").trim();
+                    if (!e.isEmpty() && !DemoMailer.valid(e)) {
+                        json(ex, 400, Map.of("error", "invalid"));
+                        return;
+                    }
+                    ss.email = e;
+                    json(ex, Map.of("email", e));
+                }
                 case "/api/action" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {
                         json(ex, 405, Map.of("error", "POST only"));
                         return;
                     }
-                    json(ex, action(q));
+                    json(ex, action(ss, q, client(ex)));
                 }
                 case "/api/snippet" -> json(ex, snippet(q));
-                case "/api/tamper-test" -> json(ex, tamperTest());
+                case "/api/tamper-test" -> json(ex, tamperTest(ss));
                 case "/api/cicd" -> json(ex, cicd.get("1".equals(q.get("refresh"))));
                 case "/api/drill" -> {
                     if (!"POST".equals(ex.getRequestMethod()) || password != null) {
@@ -150,14 +265,14 @@ public final class ConsoleServer {
                     if (!st.matches(re) || !ca.matches(re)) {
                         throw new IllegalArgumentException("unknown run");
                     }
-                    json(ex, MonitorSim.run(live, "run:" + st, "run:" + ca));
+                    json(ex, MonitorSim.run(ss.live, "run:" + st, "run:" + ca));
                 }
                 case "/pay" -> {
                     ex.getResponseHeaders().set("Location", "/");
                     ex.sendResponseHeaders(302, -1);
                 }
                 case "/try" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/release.html")));
-                case "/api/try/info" -> json(ex, tryInfo(q.getOrDefault("run", "")));
+                case "/api/try/info" -> json(ex, tryInfo(ss, q.getOrDefault("run", "")));
                 case "/api/try/authorize" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {
                         json(ex, 405, Map.of("error", "POST only"));
@@ -165,7 +280,7 @@ public final class ConsoleServer {
                     }
                     Map<String, String> tq = new java.util.HashMap<>(q);
                     tq.put("version", "run:" + q.getOrDefault("run", ""));
-                    Object[] r = live.authorize(tq);
+                    Object[] r = ss.live.authorize(tq);
                     @SuppressWarnings("unchecked")
                     Map<String, Object> body = (Map<String, Object>) r[1];
                     json(ex, (Integer) r[0], body);
@@ -175,7 +290,7 @@ public final class ConsoleServer {
                         json(ex, 405, Map.of("error", "POST only"));
                         return;
                     }
-                    Object[] r = live.authorize(q);
+                    Object[] r = ss.live.authorize(q);
                     @SuppressWarnings("unchecked")
                     Map<String, Object> body = (Map<String, Object>) r[1];
                     json(ex, (Integer) r[0], body);
@@ -191,14 +306,33 @@ public final class ConsoleServer {
 
     // ---- actions: each one runs the real CLI ----------------------------------------------------
 
-    private Map<String, Object> action(Map<String, String> q) throws IOException, InterruptedException {
+    private Map<String, Object> action(Session ss, Map<String, String> q, String client) throws IOException, InterruptedException {
         String name = q.getOrDefault("name", "");
+        if (hosted) {
+            synchronized (ss.actions) {
+                long now = System.currentTimeMillis();
+                while (!ss.actions.isEmpty() && now - ss.actions.peekFirst() > 3_600_000L) {
+                    ss.actions.pollFirst();
+                }
+                if (ss.actions.size() >= ACTIONS_PER_HOUR) {
+                    return Map.of("error", "Too many actions in this session for now. Please try again later.");
+                }
+                ss.actions.add(now);
+            }
+        }
+        synchronized (ss) {
+            return actionLocked(ss, q, name, client);
+        }
+    }
+
+    private Map<String, Object> actionLocked(Session ss, Map<String, String> q, String name, String client)
+            throws IOException, InterruptedException {
         String by = q.getOrDefault("by", "").trim();
         String note = q.getOrDefault("note", "").trim();
         List<String> args = new ArrayList<>();
         switch (name) {
             case "reset" -> {
-                deleteRuns();
+                deleteRuns(ss.root);
                 Map<String, Object> r = new LinkedHashMap<>();
                 r.put("command", "(cleared runs/)");
                 r.put("exitCode", 0);
@@ -248,20 +382,67 @@ public final class ConsoleServer {
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
         }
-        return runCli(args);
+        String mailTo = null;
+        String mailNote = null;
+        if (hosted && MAIL_ACTIONS.contains(name)) {
+            if (!mailOn) {
+                mailNote = "off";
+            } else if (ss.email.isEmpty()) {
+                mailNote = "no-address";
+            } else {
+                String why = mailLimit.allow(ss.email, client, 1, false);
+                if (why == null) {
+                    mailTo = ss.email;
+                } else {
+                    mailNote = why;
+                }
+            }
+        }
+        Map<String, Object> r = runCli(ss, args, mailTo);
+        if (mailNote != null) {
+            r.put("mail", mailNote);
+        }
+        return r;
     }
 
-    private Map<String, Object> runCli(List<String> args) throws IOException, InterruptedException {
+    private Map<String, Object> runCli(Session ss, List<String> args, String mailTo) throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
         cmd.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         cmd.add("-cp");
-        cmd.add(System.getProperty("java.class.path"));
-        cmd.add("-Daiverify.root=" + root);
+        StringBuilder cp = new StringBuilder();
+        for (String e : System.getProperty("java.class.path").split(java.io.File.pathSeparator)) {
+            cp.append(cp.length() == 0 ? "" : java.io.File.pathSeparator).append(Path.of(e).toAbsolutePath());
+        }
+        cmd.add(cp.toString());
+        cmd.add("-Daiverify.root=" + ss.root);
         cmd.add("dev.aiverify.Main");
         cmd.addAll(args);
-        Process p = new ProcessBuilder(cmd).directory(root.toFile()).redirectErrorStream(true).start();
-        String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int code = p.waitFor();
+        ProcessBuilder pb = new ProcessBuilder(cmd).directory(ss.root.toFile()).redirectErrorStream(true);
+        if (hosted) {
+            // the demo replays the recorded attempts: no AI key, no GitHub token, and mail only to this visitor
+            Map<String, String> env = pb.environment();
+            env.remove("ANTHROPIC_API_KEY");
+            env.remove("GITHUB_TOKEN");
+            env.remove("DEMO_PASSWORD");
+            env.put("NOTIFY_TO", mailTo == null ? "" : mailTo);
+            if (mailTo == null) {
+                env.put("NOTIFY_ENABLED", "false");
+            }
+        }
+        if (hosted) {
+            cpu.acquire();
+        }
+        String out;
+        int code;
+        try {
+            Process p = pb.start();
+            out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            code = p.waitFor();
+        } finally {
+            if (hosted) {
+                cpu.release();
+            }
+        }
         StringBuilder shown = new StringBuilder("./run.sh");
         for (String a : args) {
             shown.append(' ').append(a.contains(" ") || a.isEmpty() ? "\"" + a + "\"" : a);
@@ -275,12 +456,12 @@ public final class ConsoleServer {
 
     /** What the live-test page shows above the form: which run, what the gate and the human decided. */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> tryInfo(String run) throws IOException {
+    private Map<String, Object> tryInfo(Session ss, String run) throws IOException {
         if (!run.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
             throw new IllegalArgumentException("unknown run");
         }
         Map<String, Object> r = (Map<String, Object>) Json.parse(
-                Files.readString(root.resolve("runs").resolve(run).resolve("result.json")));
+                Files.readString(ss.root.resolve("runs").resolve(run).resolve("result.json")));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("mode", "run");
         out.put("runId", r.get("runId"));
@@ -305,7 +486,11 @@ public final class ConsoleServer {
     }
 
     private void deleteRuns() throws IOException {
-        Path runs = root.resolve("runs");
+        deleteRuns(root);
+    }
+
+    private static void deleteRuns(Path base) throws IOException {
+        Path runs = base.resolve("runs");
         if (!Files.exists(runs)) {
             return;
         }
@@ -318,11 +503,19 @@ public final class ConsoleServer {
 
     // ---- state -----------------------------------------------------------------------------------
 
-    private Map<String, Object> state() throws IOException {
+    private Map<String, Object> state(Session ss) throws IOException {
         Map<String, Object> s = new LinkedHashMap<>();
-        s.put("sessionStart", SESSION_START.toString());
+        if (hosted) {
+            // the hosted demo shows the real CD history (releases Rose approved locally), not only this session's
+            s.put("hosted", true);
+            s.put("email", ss.email);
+            s.put("mailEnabled", mailOn);
+            s.put("productionUrl", System.getenv().getOrDefault("PRODUCTION_URL", ""));
+        } else {
+            s.put("sessionStart", SESSION_START.toString());
+        }
         List<Object> runs = new ArrayList<>();
-        Path runsDir = root.resolve("runs");
+        Path runsDir = ss.root.resolve("runs");
         if (Files.isDirectory(runsDir)) {
             try (Stream<Path> st = Files.list(runsDir)) {
                 for (Path d : st.filter(p -> p.getFileName().toString().startsWith("run-")).sorted().toList()) {
@@ -427,8 +620,8 @@ public final class ConsoleServer {
     }
 
     /** Edits one entry in a copy of the audit log and shows that verification catches it. The real log is untouched. */
-    private Map<String, Object> tamperTest() throws IOException {
-        Path log = root.resolve("runs/audit-log.jsonl");
+    private Map<String, Object> tamperTest(Session ss) throws IOException {
+        Path log = ss.root.resolve("runs/audit-log.jsonl");
         Map<String, Object> r = new LinkedHashMap<>();
         if (!Files.exists(log)) {
             r.put("message", "No audit log yet. Run something first.");
@@ -467,6 +660,15 @@ public final class ConsoleServer {
     }
 
     // ---- http helpers ----------------------------------------------------------------------------
+
+    /** The visitor's address as Cloud Run reports it (first X-Forwarded-For entry). Kept in memory only. */
+    private static String client(HttpExchange ex) {
+        String f = ex.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (f != null && !f.isBlank()) {
+            return f.split(",")[0].trim();
+        }
+        return ex.getRemoteAddress().getAddress().getHostAddress();
+    }
 
     private static Map<String, String> query(URI uri) {
         Map<String, String> m = new LinkedHashMap<>();

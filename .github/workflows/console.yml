@@ -1,0 +1,82 @@
+# The AI Code Verification Gate console as a public demo on Cloud Run.
+# Every visitor gets an own workspace (own runs and audit log); the AI attempts are the recorded ones, so no AI key
+# is needed or used; approving there does NOT deploy anything (production only changes through release.yml).
+# Needs the secret DEMO_PASSWORD (8+ characters). SMTP_USER / SMTP_PASSWORD turn on emails to the visitor.
+name: Demo console
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'report/**'
+      - 'replay/**'
+      - 'spec/**'
+      - 'tests/**'
+      - 'config/**'
+      - 'examples/**'
+      - 'Dockerfile'
+      - '.github/workflows/console.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: demo-console
+  cancel-in-progress: true
+
+env:
+  REGION: asia-east1
+  IMAGE: asia-east1-docker.pkg.dev/specblast/specblast/ai-gate-console
+  SERVICE: ai-gate-console
+  PRODUCTION_URL: https://iso8583-precheck-ukwryhptvq-de.a.run.app
+
+jobs:
+  deploy:
+    name: Build and deploy the demo console
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the secrets
+        id: check
+        env:
+          KEY: ${{ secrets.GCP_SA_KEY }}
+          PW: ${{ secrets.DEMO_PASSWORD }}
+        run: |
+          if [ -z "$KEY" ]; then echo "::error::Secret GCP_SA_KEY is missing."; exit 1; fi
+          if [ ${#PW} -lt 8 ]; then
+            echo "::notice title=Demo console not deployed::Add the secret DEMO_PASSWORD (8+ characters), then run this workflow again."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != '1'
+      - uses: google-github-actions/auth@v2
+        if: steps.check.outputs.skip != '1'
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.check.outputs.skip != '1'
+      - name: Build and push the image (runs the self-test)
+        if: steps.check.outputs.skip != '1'
+        run: |
+          gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
+          docker build -t "$IMAGE:$GITHUB_SHA" .
+          docker push "$IMAGE:$GITHUB_SHA"
+      - name: Deploy to Cloud Run
+        if: steps.check.outputs.skip != '1'
+        env:
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: |
+          ENVS="^@^DEMO_PASSWORD=$DEMO_PASSWORD@PRODUCTION_URL=$PRODUCTION_URL"
+          if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
+            ENVS="$ENVS@SMTP_USER=$SMTP_USER@SMTP_PASSWORD=${SMTP_PASSWORD// /}"
+            echo "Demo email: on"
+          else
+            echo "Demo email: off (add the SMTP_USER and SMTP_PASSWORD secrets to turn it on)"
+          fi
+          # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
+          gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
+            --allow-unauthenticated --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
+            --session-affinity --set-env-vars "$ENVS" --quiet
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "::notice title=Demo console::$URL"
+          { echo "## Demo console"; echo "$URL"; } >> "$GITHUB_STEP_SUMMARY"

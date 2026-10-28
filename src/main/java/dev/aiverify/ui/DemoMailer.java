@@ -46,9 +46,17 @@ public final class DemoMailer {
     private final Map<String, Deque<Long>> byClient = new HashMap<>();
     private final Deque<Long> all = new ArrayDeque<>();
 
+    private final int perAddressHour;
+
     public DemoMailer(Path root) {
+        this(root, PER_ADDRESS_HOUR);
+    }
+
+    /** perAddressHour: emails one address may receive per hour (the console demo sends one per gate step). */
+    public DemoMailer(Path root, int perAddressHour) {
         this.root = root;
         this.notifier = new Notifier(root);
+        this.perAddressHour = perAddressHour;
     }
 
     boolean enabled() {
@@ -81,7 +89,7 @@ public final class DemoMailer {
         if (cl.size() + count > PER_CLIENT_HOUR) {
             return "too-many";
         }
-        if (flow ? fl.size() >= FLOW_PER_ADDRESS_DAY : addr.size() + count > PER_ADDRESS_HOUR) {
+        if (flow ? fl.size() >= FLOW_PER_ADDRESS_DAY : addr.size() + count > perAddressHour) {
             return "too-many";
         }
         for (int i = 0; i < count; i++) {
