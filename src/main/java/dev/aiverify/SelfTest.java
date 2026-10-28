@@ -257,7 +257,9 @@ final class SelfTest {
 
         // a secret committed to Git history is found even after the file is fixed
         Path repo = Files.createTempDirectory("hist");
-        boolean gitOk = new ProcessBuilder("git", "-C", repo.toString(), "init", "-q").start().waitFor() == 0;
+        boolean gitOk;
+        try { gitOk = new ProcessBuilder("git", "-C", repo.toString(), "init", "-q").start().waitFor() == 0; }
+        catch (java.io.IOException noGit) { gitOk = false; } // git not installed: skip this check
         if (gitOk) {
             Files.writeString(repo.resolve("app.yml"), "password: s3cr3tPassw0rd\n");
             git(repo, "add", "-A");

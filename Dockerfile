@@ -2,6 +2,9 @@
 # A full JDK is needed at runtime, not just a JRE: gate G2 compiles the AI's code in memory with javac.
 FROM eclipse-temurin:17-jdk
 
+# git: the whole-project check (D-05) scans a project's Git history for secrets.
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY . .
 
