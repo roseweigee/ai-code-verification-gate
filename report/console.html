@@ -309,7 +309,7 @@ const T = {
     'h.mail': { 'no-address': 'Notification saved. Enter your email at the top to receive it.', off: 'Notification saved (email is not available right now).', 'too-many': 'Too many emails to this address for now; this one was only saved.', 'daily-limit': 'The demo reached its daily email limit; this one was only saved.' },
     'h.approved': 'Approved and recorded in the audit log. In this cloud demo, approval does not deploy: production changes only when Rose approves on her machine.',
     'h.relNote': 'Cloud demo: this approval is recorded but not deployed. The service below is the version Rose approved and the CD pipeline deployed.',
-    'h.cdNote': ' <b>Below: the real CD runs</b> (releases Rose approved, and rollback drills), with the canary analysis and AIOps of each.',
+    'h.cdNote': ' <b>Below: the latest real release</b> to Cloud Run, with its canary analysis and AIOps. Approving here does not deploy anything.',
     'ib.btn': 'Inbox', 'ib.h': '📬 Notification inbox', 'ib.lead': 'Every gate result and every decision sends this email to the developer and the approver. Each one appears here the moment it is sent.',
     'ib.empty': 'No notifications yet. Run attempt 1 on tab 02.', 'ib.new': '📬 NEW NOTIFICATION',
     'ib.set': 'Also send them to my own email', 'ib.to': 'My email (receives the notifications)', 'ib.user': 'Sender: a Gmail address', 'ib.pw': 'Its Gmail app password (16 characters)',
@@ -399,7 +399,7 @@ const T = {
     'h.mail': { 'no-address': '通知已存下。在最上方輸入 Email 就能收到這封信。', off: '通知已存下（目前無法寄信）。', 'too-many': '這個信箱短時間內寄太多封了，這封只有存下。', 'daily-limit': '示範今天的寄信額度已用完，這封只有存下。' },
     'h.approved': '已核准並記錄到稽核紀錄。雲端示範版按核准不會部署：正式環境只有 Rose 在她的電腦上核准後才會變更。',
     'h.relNote': '雲端示範版：這次核准有記錄，但不會部署。下面的正式服務是 Rose 核准、由 CD 流水線部署的版本。',
-    'h.cdNote': ' <b>下方是真實的 CD 紀錄</b>（Rose 核准的上線，以及回滾演練），每一次都附金絲雀分析和 AIOps。',
+    'h.cdNote': ' <b>下方是最近一次真實上線到 Cloud Run 的紀錄</b>，附金絲雀分析和 AIOps。在這裡按核准不會真的部署。',
     'ib.btn': '收件匣', 'ib.h': '📬 通知收件匣', 'ib.lead': '每一次關卡結果、每一個決定，都會寄這封信給開發者和核准人。信一寄出，就會出現在這裡。',
     'ib.empty': '還沒有通知。到 02 頁執行第 1 次嘗試。', 'ib.new': '📬 新的通知信',
     'ib.set': '也寄到我自己的信箱', 'ib.to': '我的信箱（收通知）', 'ib.user': '寄件人：一個 Gmail 地址', 'ib.pw': '這個 Gmail 的應用程式密碼（16 碼）',
@@ -1148,11 +1148,12 @@ function renderCicd() {
   h += `</div>`;
   const runs = C.runs || [];
   // releases and rollback drills are the same pipeline step (a canary on Cloud Run): one list, newest first
-  const events = runs.map(r => ({ ...r, kind: 'release' })).concat(sessionOnly(C0.canary).map(d => ({ ...d, kind: 'drill',
+  const events = runs.map(r => ({ ...r, kind: 'release' })).concat((HOSTED() ? [] : sessionOnly(C0.canary)).map(d => ({ ...d, kind: 'drill',
     message: t('c.drillMsg'), sha: '', event: 'drill' }))).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   h += `${S.drillMsg ? `<p class="note" style="margin:0 0 8px;font-weight:600">${S.drillMsg}</p>` : ''}<p class="note" style="margin:0 0 10px">${C0.fetchedAt ? t('m.updated', C0.fetchedAt) : ''}${C0.drillError ? ` · <span style="color:var(--fail)">${esc(C0.drillError)}</span>` : ''}</p>`;
   if (events.length && (events[0].steps || []).length) h += `<div style="margin:6px 0 18px">${canaryDetail(events[0], events[0].kind)}</div>`;
-  if (events.length) {
+  // hosted demo: only the latest real release above, not the whole history list
+  if (events.length && !HOSTED()) {
     h += `<div class="sub">${t('c.runs')}</div>` + events.map(r => `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-left:6px solid ${r.status !== 'completed' ? '#9A6200' : ok(r.conclusion) ? '#1D7A4C' : '#B3261E'};border-radius:8px;padding:10px 14px;margin:8px 0">
       <div><b>${r.status !== 'completed' ? '⏳' : ok(r.conclusion) ? '✅' : r.kind === 'drill' ? '↩️' : '❌'} ${esc(r.message)}</b> <span class="mono" style="color:var(--ink-2)">${r.sha ? esc(r.sha) + ' · ' : ''}${esc(r.event)} · ${esc((r.createdAt || '').replace('T', ' ').replace('Z', ' UTC'))}</span></div>
       ${(r.jobs || []).length ? `<div class="mono" style="font-size:14px;margin-top:4px">${r.jobs.map(j => `${icon(j)} ${esc(j.name)}`).join(' → ')}</div>` : ''}</a>`).join('');

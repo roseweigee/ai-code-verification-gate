@@ -1,5 +1,5 @@
 # The AI Code Verification Gate console as a public demo on Cloud Run.
-# Every visitor gets an own workspace (own runs and audit log); the AI attempts are the recorded ones, so no AI key
+# Every visitor gets an own workspace (own runs and audit log); the three attempts are the controlled scenario with seeded defects, so no AI key
 # is needed or used; approving there does NOT deploy anything (production only changes through release.yml).
 # Needs the secret DEMO_PASSWORD (8+ characters). SMTP_USER / SMTP_PASSWORD turn on emails to the visitor.
 name: Demo console
