@@ -75,6 +75,9 @@ public final class ConsoleServer {
         final java.util.ArrayDeque<Long> actions = new java.util.ArrayDeque<>();
         volatile long used = System.currentTimeMillis();
         volatile String email = "";
+        /** Local console only: email settings typed in the page, kept in memory unless the person saves them. */
+        volatile String mailUser = "";
+        volatile String mailPassword = "";
 
         Session(String id, Path root) {
             this.id = id;
@@ -229,6 +232,27 @@ public final class ConsoleServer {
                 case "/" -> send(ex, 200, "text/html; charset=utf-8",
                         Files.readString(root.resolve("report/console.html")));
                 case "/api/state" -> json(ex, state(ss));
+                case "/api/inbox" -> json(ex, Map.of("mails", inbox(ss)));
+                case "/api/mail/settings" -> {
+                    if (hosted) {
+                        json(ex, 405, Map.of("error", "local console only"));
+                        return;
+                    }
+                    if ("POST".equals(ex.getRequestMethod())) {
+                        json(ex, saveMailSettings(ss, q));
+                    } else {
+                        json(ex, mailSettings(ss));
+                    }
+                }
+                case "/api/mail/test" -> {
+                    if (hosted || !"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only, local console only"));
+                        return;
+                    }
+                    synchronized (ss) {
+                        json(ex, runCli(ss, List.of("notify-test"), null));
+                    }
+                }
                 case "/api/session/email" -> {
                     if (!"POST".equals(ex.getRequestMethod()) || !hosted) {
                         json(ex, 405, Map.of("error", "POST only, hosted demo only"));
@@ -419,7 +443,7 @@ public final class ConsoleServer {
         cmd.addAll(args);
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(ss.root.toFile()).redirectErrorStream(true);
         if (hosted) {
-            // the demo replays the recorded attempts: no AI key, no GitHub token, and mail only to this visitor
+            // the demo runs the seeded-defect attempts: no AI key, no GitHub token, and mail only to this visitor
             Map<String, String> env = pb.environment();
             env.remove("ANTHROPIC_API_KEY");
             env.remove("GITHUB_TOKEN");
@@ -427,6 +451,15 @@ public final class ConsoleServer {
             env.put("NOTIFY_TO", mailTo == null ? "" : mailTo);
             if (mailTo == null) {
                 env.put("NOTIFY_ENABLED", "false");
+            }
+        } else if (!ss.email.isEmpty()) {
+            // local console: settings typed in the page win over notify.properties, for this run only
+            Map<String, String> env = pb.environment();
+            env.put("NOTIFY_TO", ss.email);
+            if (!ss.mailUser.isEmpty()) {
+                env.put("SMTP_USER", ss.mailUser);
+                env.put("SMTP_PASSWORD", ss.mailPassword);
+                env.put("NOTIFY_ENABLED", "true");
             }
         }
         if (hosted) {
@@ -660,6 +693,107 @@ public final class ConsoleServer {
     }
 
     // ---- http helpers ----------------------------------------------------------------------------
+
+    // ---- notifications: the inbox shown in the page, and email settings for the local console ----
+
+    /** The notifications of this session, newest first, read back from runs/outbox/ exactly as they were sent. */
+    private static List<Object> inbox(Session ss) throws IOException {
+        Path dir = ss.root.resolve("runs/outbox");
+        List<Object> out = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return out;
+        }
+        List<Path> files;
+        try (Stream<Path> st = Files.list(dir)) {
+            files = st.filter(f -> f.getFileName().toString().endsWith(".eml"))
+                    .sorted(Comparator.reverseOrder()).limit(30).toList();
+        }
+        for (Path f : files) {
+            String eml = Files.readString(f, StandardCharsets.UTF_8);
+            int split = eml.indexOf("\r\n\r\n");
+            String head = split < 0 ? eml : eml.substring(0, split);
+            String body = split < 0 ? "" : eml.substring(split + 4);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", f.getFileName().toString());
+            for (String line : head.split("\r\n")) {
+                int c = line.indexOf(':');
+                if (c > 0) {
+                    String k = line.substring(0, c).trim().toLowerCase(), v = line.substring(c + 1).trim();
+                    if (k.equals("subject")) {
+                        m.put("subject", decodeHeader(v));
+                    } else if (k.equals("to") || k.equals("date")) {
+                        m.put(k, v);
+                    }
+                }
+            }
+            try {
+                m.put("body", new String(java.util.Base64.getMimeDecoder().decode(body.trim()), StandardCharsets.UTF_8)
+                        .replace("\r\n", "\n"));
+            } catch (IllegalArgumentException e) {
+                m.put("body", body);
+            }
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static String decodeHeader(String v) {
+        java.util.regex.Matcher mt = java.util.regex.Pattern.compile("=\\?UTF-8\\?B\\?([A-Za-z0-9+/=]+)\\?=").matcher(v);
+        StringBuilder sb = new StringBuilder();
+        while (mt.find()) {
+            mt.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(
+                    new String(java.util.Base64.getDecoder().decode(mt.group(1)), StandardCharsets.UTF_8)));
+        }
+        mt.appendTail(sb);
+        return sb.toString();
+    }
+
+    /** What the page shows: the address mail goes to and whether sending is set up. The password is never sent back. */
+    private Map<String, Object> mailSettings(Session ss) throws IOException {
+        java.util.Properties file = new java.util.Properties();
+        Path f = root.resolve("notify.properties");
+        if (Files.exists(f)) {
+            try (var r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+                file.load(r);
+            }
+        }
+        boolean page = !ss.email.isEmpty();
+        String to = page ? ss.email : file.getProperty("notify.to", "").trim();
+        String user = page && !ss.mailUser.isEmpty() ? ss.mailUser : file.getProperty("smtp.user", "").trim();
+        boolean pw = page && !ss.mailUser.isEmpty() ? !ss.mailPassword.isEmpty() : !file.getProperty("smtp.password", "").isBlank();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("to", to);
+        m.put("user", user);
+        m.put("canSend", !to.isEmpty() && !user.isEmpty() && pw);
+        m.put("source", page ? "page" : Files.exists(f) ? "file" : "none");
+        return m;
+    }
+
+    private Map<String, Object> saveMailSettings(Session ss, Map<String, String> q) throws IOException {
+        String to = q.getOrDefault("to", "").trim();
+        String user = q.getOrDefault("user", "").trim();
+        String password = q.getOrDefault("password", "").replace(" ", "").trim();
+        if (to.isEmpty() || !DemoMailer.valid(to)) {
+            return Map.of("error", "to");
+        }
+        if (!user.isEmpty() && !DemoMailer.valid(user)) {
+            return Map.of("error", "user");
+        }
+        if (!user.isEmpty() && password.isEmpty() && ss.mailPassword.isEmpty()) {
+            return Map.of("error", "password");
+        }
+        ss.email = to;
+        ss.mailUser = user;
+        if (!password.isEmpty() || user.isEmpty()) {
+            ss.mailPassword = user.isEmpty() ? "" : password;
+        }
+        if ("true".equals(q.get("remember")) && !user.isEmpty()) {
+            // written only on this computer; notify.properties is in .gitignore
+            Files.writeString(root.resolve("notify.properties"), "# Saved from the console. In .gitignore: never committed.\n"
+                    + "notify.to=" + to + "\nsmtp.user=" + user + "\nsmtp.password=" + ss.mailPassword + "\n", StandardCharsets.UTF_8);
+        }
+        return mailSettings(ss);
+    }
 
     /** The visitor's address as Cloud Run reports it (first X-Forwarded-For entry). Kept in memory only. */
     private static String client(HttpExchange ex) {

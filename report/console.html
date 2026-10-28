@@ -199,6 +199,25 @@ html[lang="zh-Hant"] .chip { letter-spacing: 0; }
 .prodsum.bad { background: var(--fail-soft); color: var(--fail); }
 table.prod tr.wrong td { background: var(--fail-soft); }
 table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
+#inbox-btn { position: fixed; right: 24px; bottom: 84px; z-index: 7; background: #142029; color: #fff; border: 0; border-radius: 24px; padding: 12px 20px; font-size: 16px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,.2); cursor: pointer; }
+#inbox-btn .n { background: #D99A2B; color: #142029; border-radius: 10px; padding: 1px 8px; margin-left: 6px; font-size: 14px; }
+#inbox { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); z-index: 9; background: #fff; box-shadow: -8px 0 30px rgba(0,0,0,.18); transform: translateX(105%); transition: transform .3s; display: flex; flex-direction: column; }
+#inbox.on { transform: none; }
+#inbox .ih { padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+#inbox .ib { overflow-y: auto; padding: 14px 22px 40px; flex: 1; }
+#inbox .set { background: #F3F5F6; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+#inbox .set label { display: block; font-size: 13px; color: var(--ink-2); margin: 8px 0 3px; }
+#inbox .set input[type=email], #inbox .set input[type=password] { width: 100%; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+#inbox .mail { border: 1px solid var(--line); border-top: 5px solid #9A6200; border-radius: 8px; margin: 0 0 12px; }
+#inbox .mail summary { padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 15px; }
+#inbox .mail summary small { display: block; font-weight: 400; color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
+#inbox .mail pre { margin: 0; padding: 10px 14px 14px; font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; border-top: 1px solid var(--line); }
+#mailpop { position: fixed; top: 20px; right: 24px; z-index: 8; width: 460px; background: #fff; border: 1px solid var(--line); border-left: 6px solid #9A6200; border-radius: 10px; padding: 12px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.18); display: none; cursor: pointer; }
+#mailpop.on { display: block; animation: popin .35s ease-out; }
+@keyframes popin { from { transform: translateY(-14px); opacity: 0 } to { transform: none; opacity: 1 } }
+#mailpop .k { font-size: 12.5px; color: #9A6200; font-weight: 700; letter-spacing: .5px; }
+#mailpop .s { font-weight: 700; margin: 3px 0; }
+#mailpop .t { font-size: 13px; color: var(--ink-2); }
 </style>
 </head>
 <body>
@@ -266,6 +285,9 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
 </main>
 
 <div class="toast" id="toast" role="status"></div>
+<button id="inbox-btn"></button>
+<div id="mailpop" role="status"></div>
+<aside id="inbox" aria-label="Notification inbox"><div class="ih"><div><h3 style="margin:0;font-size:20px" id="ib-h"></h3><div class="note" style="margin:4px 0 0" id="ib-lead"></div></div><button class="btn" id="ib-close">✕</button></div><div class="ib" id="ib-body"></div></aside>
 <div class="cmdbar" id="cmdbar">
   <div class="row"><span class="cmd" id="cmd"></span><span id="code"></span><button id="toggle-out" data-i="output"></button></div>
   <pre id="out"></pre>
@@ -288,6 +310,14 @@ const T = {
     'h.approved': 'Approved and recorded in the audit log. In this cloud demo, approval does not deploy: production changes only when Rose approves on her machine.',
     'h.relNote': 'Cloud demo: this approval is recorded but not deployed. The service below is the version Rose approved and the CD pipeline deployed.',
     'h.cdNote': ' <b>Below: the real CD runs</b> (releases Rose approved, and rollback drills), with the canary analysis and AIOps of each.',
+    'ib.btn': 'Inbox', 'ib.h': '📬 Notification inbox', 'ib.lead': 'Every gate result and every decision sends this email to the developer and the approver. Each one appears here the moment it is sent.',
+    'ib.empty': 'No notifications yet. Run attempt 1 on tab 02.', 'ib.new': '📬 NEW NOTIFICATION',
+    'ib.set': 'Also send them to my own email', 'ib.to': 'My email (receives the notifications)', 'ib.user': 'Sender: a Gmail address', 'ib.pw': 'Its Gmail app password (16 characters)',
+    'ib.pwHelp': 'Gmail: turn on 2-Step Verification, then create an app password at myaccount.google.com/apppasswords. Kept in memory on this computer only.',
+    'ib.remember': 'Remember on this computer (saved to notify.properties, never committed)', 'ib.save': 'Save', 'ib.test': 'Send a test email',
+    'ib.stOn': to => `Emails go to ${to}.`, 'ib.stTo': to => `Shown here for ${to}. Add a sender to also email it.`, 'ib.stOff': 'Not emailed yet: notifications appear in this inbox only.',
+    'ib.err': { to: 'Your email address does not look right.', user: 'The sender must be an email address.', password: 'Enter the app password of the sender.' },
+    'ib.sent': to => `Emailed to ${to}`, 'ib.only': 'Shown here only (email sending is not set up)', 'ib.fail': 'Not emailed (no connection to the mail server). Shown here.',
     mailSent: to => `Email sent to ${to}`, mailFailed: 'Email not sent (no connection). Saved in runs/outbox/.', mailSaved: 'Email saved in runs/outbox/ (sending is not set up).',
     'p.h': 'Checking a project SpecBlast generated',
     'p.lead': 'Real output of SpecBlast (<span class="mono">roseweigee/product @ 25bb253</span>). The gate reads every Java file, Kubernetes manifest and the Cloud Build pipeline before anything is deployed. <b>No AI here</b>: fixed rules, same answer every time, so the result can be audited.',
@@ -366,6 +396,14 @@ const T = {
     'h.approved': '已核准並記錄到稽核紀錄。雲端示範版按核准不會部署：正式環境只有 Rose 在她的電腦上核准後才會變更。',
     'h.relNote': '雲端示範版：這次核准有記錄，但不會部署。下面的正式服務是 Rose 核准、由 CD 流水線部署的版本。',
     'h.cdNote': ' <b>下方是真實的 CD 紀錄</b>（Rose 核准的上線，以及回滾演練），每一次都附金絲雀分析和 AIOps。',
+    'ib.btn': '收件匣', 'ib.h': '📬 通知收件匣', 'ib.lead': '每一次關卡結果、每一個決定，都會寄這封信給開發者和核准人。信一寄出，就會出現在這裡。',
+    'ib.empty': '還沒有通知。到 02 頁執行第 1 次嘗試。', 'ib.new': '📬 新的通知信',
+    'ib.set': '也寄到我自己的信箱', 'ib.to': '我的信箱（收通知）', 'ib.user': '寄件人：一個 Gmail 地址', 'ib.pw': '這個 Gmail 的應用程式密碼（16 碼）',
+    'ib.pwHelp': 'Gmail：先開啟兩步驟驗證，再到 myaccount.google.com/apppasswords 產生應用程式密碼。只存在這台電腦的記憶體裡。',
+    'ib.remember': '在這台電腦記住（存到 notify.properties，不會上傳到 GitHub）', 'ib.save': '儲存', 'ib.test': '寄一封測試信',
+    'ib.stOn': to => `通知信會寄到 ${to}。`, 'ib.stTo': to => `收件人：${to}。再填寄件人，就會真的寄出。`, 'ib.stOff': '尚未設定寄信：通知只會出現在這個收件匣。',
+    'ib.err': { to: '你的 Email 格式看起來不對。', user: '寄件人必須是 Email 地址。', password: '請輸入寄件人的應用程式密碼。' },
+    'ib.sent': to => `已寄到 ${to}`, 'ib.only': '只在收件匣（尚未設定寄信）', 'ib.fail': '沒寄出（連不上郵件伺服器），內容在這裡。',
     mailSent: to => `已寄出通知信給 ${to}`, mailFailed: '通知信沒寄出（連不上郵件伺服器），已存到 runs/outbox/。', mailSaved: '通知信已存到 runs/outbox/（尚未設定寄信）。',
     'p.h': '檢查 SpecBlast 產生的專案',
     'p.lead': '這是 SpecBlast 真實產生的專案（<span class="mono">roseweigee/product @ 25bb253</span>）。部署前，閘門會檢查每個 Java 檔、Kubernetes 設定和 Cloud Build 流程。<b>這頁不用 AI</b>：全部是固定規則，每次結果都一樣，可以稽核。',
@@ -515,7 +553,61 @@ async function load() {
   const r = await fetch('/api/state');
   S.state = await r.json();
   render();
+  loadInbox();
 }
+/* ================= inbox: every notification, as sent ================= */
+let INBOX = [], INBOX_TOP = null, MAILSET = null;
+async function loadInbox() {
+  let d = {}; try { d = await (await fetch('/api/inbox')).json(); } catch (e) { return; }
+  const mails = d.mails || [];
+  if (INBOX_TOP !== null && mails.length && mails[0].id !== INBOX_TOP) popMail(mails[0]);
+  INBOX_TOP = mails.length ? mails[0].id : ''; INBOX = mails;
+  if (!HOSTED() && MAILSET === null) { try { MAILSET = await (await fetch('/api/mail/settings')).json(); } catch (e) { MAILSET = {}; } }
+  renderInbox();
+}
+function popMail(m) {
+  const el = $('#mailpop'), st = S.mailStatus || '';
+  el.innerHTML = `<div class="k">${t('ib.new')}</div><div class="s">${esc(m.subject)}</div><div class="t">${esc(st)}</div>`;
+  el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+  el.onclick = () => { el.classList.remove('on'); openInbox(m.id); };
+  clearTimeout(popMail.t); popMail.t = setTimeout(() => el.classList.remove('on'), 8000);
+}
+function openInbox(id) { S.inboxOpen = id || (INBOX[0] && INBOX[0].id) || ''; $('#inbox').classList.add('on'); renderInbox(); }
+function renderInbox() {
+  $('#inbox-btn').innerHTML = `📬 ${t('ib.btn')}${INBOX.length ? `<span class="n">${INBOX.length}</span>` : ''}`;
+  $('#ib-h').textContent = t('ib.h'); $('#ib-lead').textContent = t('ib.lead');
+  let h = '';
+  if (!HOSTED() && MAILSET) {
+    const M = MAILSET, status = M.canSend ? t('ib.stOn', M.to) : M.to ? t('ib.stTo', M.to) : t('ib.stOff');
+    h += `<details class="set"${S.setOpen ? ' open' : ''}><summary style="cursor:pointer;font-weight:600">${t('ib.set')} <span class="note" style="font-weight:400;margin-left:6px;color:${M.canSend ? 'var(--pass)' : 'var(--ink-2)'}">${esc(status)}</span></summary>
+      <label for="ib-to">${t('ib.to')}</label><input type="email" id="ib-to" value="${esc(M.to || '')}" placeholder="you@company.com" autocomplete="email">
+      <label for="ib-user">${t('ib.user')}</label><input type="email" id="ib-user" value="${esc(M.user || '')}" placeholder="sender@gmail.com">
+      <label for="ib-pw">${t('ib.pw')}</label><input type="password" id="ib-pw" placeholder="${M.canSend ? '••••••••••••••••' : ''}" autocomplete="off">
+      <div class="note" style="margin:6px 0 0;font-size:12.5px">${t('ib.pwHelp')}</div>
+      <label style="display:flex;gap:6px;align-items:center;color:var(--ink)"><input type="checkbox" id="ib-rem"> ${t('ib.remember')}</label>
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="ib-save">${t('ib.save')}</button><button class="btn" id="ib-test"${M.canSend ? '' : ' disabled'}>${t('ib.test')}</button></div>
+      <div class="note" id="ib-msg" style="margin:8px 0 0;font-weight:600">${esc(S.ibMsg || '')}</div></details>`;
+  }
+  h += INBOX.length ? INBOX.map(m => `<details class="mail"${m.id === S.inboxOpen ? ' open' : ''}><summary>${esc(m.subject)}<small>To ${esc(m.to)} · ${esc(m.date)}</small></summary><pre>${esc(String(m.body || '').split('\n').filter(l => !l.startsWith('Report:')).join('\n').trim())}</pre></details>`).join('')
+    : `<div class="empty">${t('ib.empty')}</div>`;
+  $('#ib-body').innerHTML = h;
+  const set = $('#ib-body .set'); if (set) set.ontoggle = () => { S.setOpen = set.open; };
+  const sv = $('#ib-save'); if (sv) sv.onclick = async () => {
+    const q = new URLSearchParams({ to: $('#ib-to').value.trim(), user: $('#ib-user').value.trim(), password: $('#ib-pw').value, remember: String($('#ib-rem').checked) });
+    const d = await (await fetch('/api/mail/settings?' + q, { method: 'POST' })).json().catch(() => ({ error: 'to' }));
+    if (d.error) S.ibMsg = (t('ib.err') || {})[d.error] || d.error; else { MAILSET = d; S.ibMsg = d.canSend ? t('ib.stOn', d.to) : t('ib.stTo', d.to); }
+    S.setOpen = true; renderInbox();
+  };
+  const tb = $('#ib-test'); if (tb) tb.onclick = async () => {
+    tb.disabled = true; tb.innerHTML = `<span class="spin"></span> ${t('running')}`;
+    const r = await (await fetch('/api/mail/test', { method: 'POST' })).json().catch(() => ({ output: '' }));
+    const line = (r.output || '').split('\n').find(l => l.startsWith('Email')) || '';
+    S.ibMsg = line.startsWith('Email sent to ') ? t('ib.sent', MAILSET.to) : t('ib.fail');
+    S.setOpen = true; await loadInbox();
+  };
+}
+$('#inbox-btn').onclick = () => $('#inbox').classList.contains('on') ? $('#inbox').classList.remove('on') : openInbox();
+$('#ib-close').onclick = () => $('#inbox').classList.remove('on');
 const HOSTED = () => !!(S.state && S.state.hosted);
 function renderHosted() {
   const box = $('#hosted-box');
@@ -600,8 +692,10 @@ function showCmd(res) {
     clearTimeout(showCmd.relTimer); showCmd.relTimer = setTimeout(() => el.classList.remove('on'), ok ? 8000 : 20000);
     return;
   }
-  if (res.mail && t('h.mail')[res.mail]) { toast('info', '✉ ' + t('h.mail')[res.mail], 8000); return; }
-  const mail = (res.output || '').split('\n').find(l => l.startsWith('Email'));
+  const mailLine = (res.output || '').split('\n').find(l => l.startsWith('Email'));
+  S.mailStatus = res.mail && t('h.mail')[res.mail] ? t('h.mail')[res.mail] : !mailLine ? '' : mailLine.startsWith('Email sent to ') ? t('ib.sent', mailLine.slice(14).split(':')[0]) : mailLine.startsWith('Email not sent') ? t('ib.fail') : t('ib.only');
+  if (mailLine || res.mail) return; // shown in the notification pop-up and the inbox
+  const mail = mailLine;
   if (mail) {
     const sent = mail.startsWith('Email sent to ');
     const kind = sent ? 'ok' : mail.startsWith('Email not sent') ? 'warn' : 'info';
@@ -645,7 +739,7 @@ document.addEventListener('click', e => {
 loadCicd(false);
 $('#tamper').onclick = async () => { const r = await fetch('/api/tamper-test'); S.tamper = await r.json(); renderAudit(); };
 
-function render() { renderHosted(); renderProject(); renderAttempts(); renderAudit(); if (S.cicd) renderCicd(); }
+function render() { renderHosted(); renderInbox(); renderProject(); renderAttempts(); renderAudit(); if (S.cicd) renderCicd(); }
 
 /* ================= 1. SpecBlast ================= */
 function setSub(sub) {
