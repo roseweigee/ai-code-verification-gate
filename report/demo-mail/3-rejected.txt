@@ -1,0 +1,11 @@
+[AI Gate] REJECTED by Rhosyn Wei: run-20261028-043356-a2
+已退回，程式不會部署。
+Rejected. Nothing is deployed.
+
+Run:         run-20261028-043356-a2
+Decided by:  Rhosyn Wei
+Reason:      Card numbers with full-width or other Unicode digits must be declined with 14. Add tests for them.
+
+This reason goes to the AI author as spec-level feedback for the next attempt.
+If the AI keeps failing, hand the task to a developer: the spec is usually the problem.
+The decision is recorded in runs/audit-log.jsonl (hash-chained, append-only).

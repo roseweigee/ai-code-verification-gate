@@ -75,11 +75,22 @@ jobs:
 
       - name: 3 · Canary with 10% of traffic
         id: canary
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
+          # Demo email on the public page: only when the SMTP_USER / SMTP_PASSWORD secrets are set.
+          ENVS="^@^APP=release"
+          if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
+            ENVS="$ENVS@SMTP_USER=$SMTP_USER@SMTP_PASSWORD=${SMTP_PASSWORD// /}"
+            echo "Demo email: on"
+          else
+            echo "Demo email: off (add the SMTP_USER and SMTP_PASSWORD secrets to turn it on)"
+          fi
           if ! gcloud run services describe "$SERVICE" --region "$REGION" >/dev/null 2>&1; then
             echo "First release: no stable revision to compare with, deploying directly."
             gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
-              --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars APP=release --quiet
+              --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars "$ENVS" --quiet
             echo "first=1" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -95,7 +106,7 @@ jobs:
           t = json.load(sys.stdin)['status']['traffic']
           print(json.dumps([{'rev': x.get('revisionName', 'latest'), 'percent': x.get('percent', 0), 'tag': x.get('tag', '')} for x in t], separators=(',', ':')))" > before.json
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
-            --no-traffic --tag canary --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars APP=release --quiet
+            --no-traffic --tag canary --max-instances 1 --memory 1Gi --cpu 1 --set-env-vars "$ENVS" --quiet
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-tags canary=10 --quiet
           gcloud run services describe "$SERVICE" --region "$REGION" --format=json | python3 -c "
           import json, sys

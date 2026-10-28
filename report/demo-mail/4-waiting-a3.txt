@@ -1,0 +1,19 @@
+[AI Gate] Waiting for your approval: run-20261028-043403-a3 (attempt 3)
+所有自動關卡都通過了，等待具名的人核准或退回。
+All automated gates passed. A named person must approve or reject it.
+
+Run:      run-20261028-043403-a3
+Attempt:  3
+Verdict:  READY_FOR_HUMAN_APPROVAL
+
+Gates:
+  G1  Policy guard                 PASSED   No policy violations (5 rule groups).
+  G2  Compile & contract           PASSED   Compiles with Java 17 and implements AuthorizationPrecheck.
+  G3  Spec tests                   PASSED   AI tests 15/15 passed, human golden tests 36/36 passed, null-input checks 2/2 passed.
+  G4  Mutation testing             PASSED   Combined tests detect 74 of 77 mutants (96.1%; threshold 80%). AI tests alone: 77.9%.
+  G5  Independent AI review        PASSED   No findings.
+  G6  Human approval               PENDING  Waiting for a named human to approve.
+
+Next step: read the AI review (advice only) in the report, then decide:
+  ./run.sh approve --by "Your Name" [--note "..."]
+  ./run.sh reject  --by "Your Name" --note "reason"

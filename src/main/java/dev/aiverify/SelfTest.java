@@ -50,6 +50,24 @@ final class SelfTest {
     }
 
     private static void email() {
+        check("Demo email: a normal address is accepted", dev.aiverify.ui.DemoMailer.valid("rose.wei+demo@example.com.tw"));
+        check("Demo email: a line break or second address is refused",
+                !dev.aiverify.ui.DemoMailer.valid("a@b.com\r\nBcc: x@y.com") && !dev.aiverify.ui.DemoMailer.valid("a@b.com,c@d.com"));
+        check("Demo email: the address is masked in logs", dev.aiverify.ui.DemoMailer.mask("rose@example.com").equals("r***@example.com"));
+        dev.aiverify.ui.DemoMailer dm = new dev.aiverify.ui.DemoMailer(java.nio.file.Path.of("."));
+        int sent = 0;
+        while (sent < 20 && dm.allow("x@example.com", "1.2.3.4", 1, false) == null) {
+            sent++;
+        }
+        check("Demo email: one address gets at most " + dev.aiverify.ui.DemoMailer.PER_ADDRESS_HOUR + " results an hour",
+                sent == dev.aiverify.ui.DemoMailer.PER_ADDRESS_HOUR);
+        check("Demo email: the full flow at most twice a day per address",
+                dm.allow("y@example.com", "5.6.7.8", 5, true) == null && dm.allow("y@example.com", "5.6.7.8", 5, true) == null
+                && dm.allow("y@example.com", "5.6.7.8", 5, true) != null);
+        check("Demo email: the spec answer matches the page (missing date, expired, equal balance)",
+                dev.aiverify.ui.DemoMailer.specAnswer("4111111111111111", "2812", 1200, 50000, "")[0].equals("30")
+                && dev.aiverify.ui.DemoMailer.specAnswer("4111111111111111", "2609", 10, 50, "2026-10-27")[0].equals("54")
+                && dev.aiverify.ui.DemoMailer.specAnswer("4111111111111111", "2610", 50, 50, "2026-10-31")[0].equals("00"));
         check("Email: Chinese subject is encoded", dev.aiverify.notify.Notifier.encodeHeader("退回").startsWith("=?UTF-8?B?"));
         check("Email: a newline cannot inject a header", !dev.aiverify.notify.Notifier.encodeHeader("a\r\nBcc: x@y").contains("\n"));
         boolean refused;

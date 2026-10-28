@@ -23,11 +23,13 @@ public final class ReleaseServer {
     private final Path root;
     private final Path dir;
     private final LiveService live;
+    private final DemoMailer mailer;
 
     private ReleaseServer(Path root, Path dir) {
         this.root = root;
         this.dir = dir;
         this.live = new LiveService(root, dir.resolve("AuthorizationPrecheckImpl.java"));
+        this.mailer = new DemoMailer(root);
     }
 
     public static void start(Path root, Path dir, int port) throws IOException {
@@ -40,7 +42,8 @@ public final class ReleaseServer {
         server.createContext("/", app::handle);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
-        System.out.println("Released ISO 8583 service on port " + port);
+        System.out.println("Released ISO 8583 service on port " + port
+                + (app.mailer.enabled() ? " - demo email on" : " - demo email off (no SMTP_USER / SMTP_PASSWORD)"));
     }
 
     private void handle(HttpExchange ex) throws IOException {
@@ -57,11 +60,38 @@ public final class ReleaseServer {
                         return;
                     }
                     Map<String, String> q = query(ex.getRequestURI().getRawQuery());
+                    String email = q.remove("email");
+                    boolean zh = "zh".equals(q.remove("lang"));
                     q.put("version", "release");
                     Object[] r = live.authorize(q);
                     @SuppressWarnings("unchecked")
                     Map<String, Object> body = (Map<String, Object>) r[1];
+                    if (email != null && !email.isBlank()) {
+                        Map<String, Object> out = new LinkedHashMap<>(body);
+                        String why = mailCheck(ex, email.trim(), 1, false);
+                        if (why == null) {
+                            mailer.sendResult(email.trim(), zh, q, (Integer) r[0], body, release());
+                        }
+                        out.put("mail", why == null ? "queued" : why);
+                        body = out;
+                    }
                     json(ex, (Integer) r[0], body);
+                }
+                case "/api/mail/status" -> json(ex, 200, Map.of("enabled", mailer.enabled()));
+                case "/api/mail/flow" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    Map<String, String> q = query(ex.getRequestURI().getRawQuery());
+                    String email = q.getOrDefault("email", "").trim();
+                    String why = mailCheck(ex, email, 5, true);
+                    if (why == null) {
+                        int n = mailer.sendFlow(email, "zh".equals(q.get("lang")));
+                        json(ex, 200, Map.of("mail", "queued", "count", n));
+                    } else {
+                        json(ex, "invalid".equals(why) || "off".equals(why) ? 400 : 429, Map.of("mail", why));
+                    }
                 }
                 default -> json(ex, 404, Map.of("error", "not found"));
             }
@@ -71,6 +101,36 @@ public final class ReleaseServer {
             json(ex, 500, m);
         } finally {
             ex.close();
+        }
+    }
+
+    /** null when this email may be sent now, else why not: off, invalid, too-many, daily-limit. */
+    private String mailCheck(HttpExchange ex, String email, int count, boolean flow) {
+        if (!mailer.enabled()) {
+            return "off";
+        }
+        if (!DemoMailer.valid(email)) {
+            return "invalid";
+        }
+        return mailer.allow(email, client(ex), count, flow);
+    }
+
+    /** The visitor's address as Cloud Run reports it (first X-Forwarded-For entry). Kept in memory only. */
+    private static String client(HttpExchange ex) {
+        String f = ex.getRequestHeaders().getFirst("X-Forwarded-For");
+        if (f != null && !f.isBlank()) {
+            return f.split(",")[0].trim();
+        }
+        return ex.getRemoteAddress().getAddress().getHostAddress();
+    }
+
+    private Map<String, Object> release() {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> m = (Map<String, Object>) Json.parse(Files.readString(dir.resolve("approval.json")));
+            return m;
+        } catch (Exception e) {
+            return Map.of();
         }
     }
 

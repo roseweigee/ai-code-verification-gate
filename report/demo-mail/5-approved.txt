@@ -1,0 +1,9 @@
+[AI Gate] APPROVED by Rhosyn Wei: run-20261028-043403-a3
+已核准，可以繼續部署。
+Approved. Deployment can continue.
+
+Run:         run-20261028-043403-a3
+Decided by:  Rhosyn Wei
+Note:        All checks passed; NF-05 fix reviewed.
+
+The decision is recorded in runs/audit-log.jsonl (hash-chained, append-only).

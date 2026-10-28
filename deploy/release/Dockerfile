@@ -4,6 +4,7 @@ FROM eclipse-temurin:17-jdk
 WORKDIR /app
 COPY src ./src
 COPY report/release.html ./report/release.html
+COPY report/demo-mail ./report/demo-mail
 COPY tests/production ./tests/production
 COPY release ./release
 RUN mkdir -p build/classes && javac -d build/classes --release 17 $(find src/main/java -name '*.java')

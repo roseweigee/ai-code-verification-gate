@@ -1,0 +1,19 @@
+[AI Gate] BLOCKED: run-20261028-043353-a1 (attempt 1)
+閘門擋下了這次執行，程式不會部署。
+The gate blocked this run. Nothing is deployed.
+
+Run:      run-20261028-043353-a1
+Attempt:  1
+Verdict:  BLOCKED
+
+Gates:
+  G1  Policy guard                 PASSED   No policy violations (5 rule groups).
+  G2  Compile & contract           PASSED   Compiles with Java 17 and implements AuthorizationPrecheck.
+  G3  Spec tests                   FAILED   AI tests 15/15 passed, human golden tests 26/34 passed, null-input checks 0/2 passed.
+  G4  Mutation testing             SKIPPED  Skipped: an earlier gate failed.
+  G5  Independent AI review        SKIPPED  Skipped: an earlier gate failed.
+  G6  Human approval               SKIPPED  Not requested: the run was blocked.
+
+Next step: read the failed gate above and the report. The AI author only receives
+spec-level feedback, never the hidden golden tests. Then run the next attempt:
+  ./run.sh run --attempt 2

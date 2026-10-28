@@ -39,6 +39,16 @@ button.go { background:var(--accent); color:#fff; border:none; font-weight:bold;
 .res.bad { display:block; background:var(--badb); border:2px solid var(--bad); }
 .big { font-family:monospace; font-size:30px; font-weight:bold; }
 pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; color:#F2C6C2; padding:10px; border-radius:8px; }
+.mail { display:none; border-left:6px solid var(--accent); }
+.mail.on { display:block; }
+.mail h3 { margin:0 0 4px; font-size:16px; }
+.mail p { margin:0 0 10px; color:var(--ink2); font-size:14px; }
+.mail .line { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.mail input[type=email] { flex:1 1 260px; width:auto; }
+.mail .chk { flex-direction:row; align-items:center; gap:6px; margin-top:10px; }
+.mail .chk input { width:auto; }
+.mail .msg { margin-top:8px; font-size:14px; min-height:18px; }
+.mail .msg.ok { color:var(--ok); } .mail .msg.bad { color:var(--bad); }
 @media (max-width:700px) { .grid, .kv { grid-template-columns:1fr 1fr; } }
 </style>
 </head>
@@ -71,6 +81,16 @@ pre { font-size:12px; white-space:pre-wrap; margin:8px 0 0; background:#1E2E3A; 
       <button class="go" id="send" data-i="send"></button>
     </div>
   </div>
+  <div class="card mail" id="mail">
+    <h3 data-i="m.h"></h3>
+    <p data-i="m.p"></p>
+    <div class="line">
+      <input type="email" id="email" autocomplete="email" maxlength="254">
+      <button id="flow" data-i="m.flow"></button>
+    </div>
+    <label class="chk"><input type="checkbox" id="mailres" checked><span data-i="m.res"></span></label>
+    <div class="msg" id="mailmsg"></div>
+  </div>
   <div class="res" id="res"></div>
 </main>
 <script>
@@ -98,6 +118,13 @@ const T = {
     high: n => `⚠ The approver accepted ${n} HIGH finding(s) from the AI review`,
     gone: 'This run no longer exists: the console starts empty each time. Go back to tab 02 and run the attempt again.',
     live: (a, by) => `🟢 Live version: attempt ${a} · approved by ${by}`,
+    'm.h': '✉ Get the emails yourself',
+    'm.p': 'Enter your email to receive what the gate sends: the result of each transaction you send, or the five notifications an approver received during one real run. Your address is used only for these emails and is not stored.',
+    'm.flow': 'Email me the full gate flow (5 emails)', 'm.res': 'Also email me the result of each transaction I send',
+    'm.ph': 'you@company.com',
+    mail: { queued: '✓ Sent. It should arrive within a minute (check spam if not).', flowQueued: n => `✓ ${n} emails on their way, a few seconds apart: blocked → waiting → rejected → waiting → approved.`,
+      invalid: 'That email address does not look right.', 'too-many': 'Too many emails to this address for now. Try again later.',
+      'daily-limit': 'The demo reached its daily email limit. Try again tomorrow.', off: 'Email is not available right now.', fail: 'Could not send. Try again.' },
     canary: a => `🐤 Canary revision · rollback drill · attempt ${a} as the AI wrote it · NOT approved`,
     canaryNote: 'This revision gets 10% of traffic for a few minutes. If its response-code mix differs from the stable revision, the pipeline sends all traffic back to the stable revision automatically.',
     kRun: 'Run', kApproved: 'Approved at', kSha: 'Code SHA-256', kReleased: 'Released at', kNote: 'Approver\'s note',
@@ -133,6 +160,13 @@ const T = {
     high: n => `⚠ 核准者接受了 ${n} 個 AI 審查的 HIGH 風險`,
     gone: '這次執行已經不存在：console 每次啟動都會清空。請回到第 02 頁重新跑這次嘗試。',
     live: (a, by) => `🟢 上線版本：第 ${a} 次嘗試 · 由 ${by} 核准`,
+    'm.h': '✉ 親自收一次通知信',
+    'm.p': '輸入你的 Email，就能收到品質關卡寄出的信：你送出的每筆交易結果，或一次真實執行中核准人收到的 5 封通知。信箱只用來寄這些信，不會被儲存。',
+    'm.flow': '寄給我完整的關卡流程（5 封信）', 'm.res': '我送出的每筆交易，也把結果寄給我',
+    'm.ph': 'you@company.com',
+    mail: { queued: '✓ 已寄出，一分鐘內會收到（沒看到請查垃圾郵件）。', flowQueued: n => `✓ ${n} 封信陸續寄出，每封間隔幾秒：被擋下 → 等待核准 → 被退回 → 等待核准 → 核准上線。`,
+      invalid: 'Email 格式看起來不對。', 'too-many': '這個信箱短時間內寄太多封了，請稍後再試。',
+      'daily-limit': '示範今天的寄信額度已用完，請明天再試。', off: '目前無法寄信。', fail: '寄送失敗，請再試一次。' },
     canary: a => `🐤 金絲雀版本 · 回滾演練 · 第 ${a} 次 AI 原始程式 · 未經核准`,
     canaryNote: '這個版本只分到 10% 流量幾分鐘。如果它的回應碼分布跟穩定版不同，流水線會自動把所有流量切回穩定版。',
     kRun: 'Run', kApproved: '核准時間', kSha: '程式雜湊 SHA-256', kReleased: '上線時間', kNote: '核准備註',
@@ -197,6 +231,7 @@ function renderStatic() {
   document.querySelectorAll('[data-i]').forEach(el => { el.textContent = t(el.dataset.i); });
   document.querySelectorAll('[data-lang]').forEach(b => b.classList.toggle('on', b.dataset.lang === LANG));
   $('#date').placeholder = L().datePh;
+  $('#email').placeholder = L()['m.ph'];
   document.title = RUN && INFO_DATA ? (LANG === 'zh' ? '即時測試 · 第 ' + INFO_DATA.attempt + ' 次' : 'Live test · attempt ' + INFO_DATA.attempt) : L().title;
 }
 function renderInfo() {
@@ -251,6 +286,25 @@ document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
   LANG = b.dataset.lang; try { localStorage.setItem('lang', LANG); } catch (e) {}
   render();
 });
+let MAIL_ON = false;
+const mailMsg = (k, ok, ...a) => { const v = L().mail[k] || L().mail.fail, el = $('#mailmsg');
+  el.textContent = typeof v === 'function' ? v(...a) : v; el.className = 'msg ' + (ok ? 'ok' : 'bad'); };
+const emailVal = () => $('#email').value.trim();
+const emailOk = e => e.length <= 254 && /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$/.test(e);
+try { const e = localStorage.getItem('demoEmail'); if (e) $('#email').value = e; } catch (e) {}
+$('#email').onchange = () => { try { localStorage.setItem('demoEmail', emailVal()); } catch (e) {} };
+if (!RUN) fetch('/api/mail/status').then(r => r.json()).then(s => { MAIL_ON = !!s.enabled; $('#mail').classList.toggle('on', MAIL_ON); }).catch(() => {});
+$('#flow').onclick = async () => {
+  const e = emailVal();
+  if (!emailOk(e)) { mailMsg('invalid', false); return; }
+  $('#flow').disabled = true;
+  try {
+    const r = await fetch('/api/mail/flow?' + new URLSearchParams({ email: e, lang: LANG }), { method: 'POST' });
+    const d = await r.json();
+    if (d.mail === 'queued') mailMsg('flowQueued', true, d.count); else mailMsg(d.mail, false);
+  } catch (err) { mailMsg('fail', false); }
+  setTimeout(() => { $('#flow').disabled = false; }, 4000);
+};
 (async () => {
   render();
   try {
@@ -263,11 +317,15 @@ document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => {
 $('#send').onclick = async () => {
   const q = new URLSearchParams({ pan: $('#pan').value, expiry: $('#expiry').value, amount: cents($('#amount').value),
     available: cents($('#available').value), date: $('#date').value });
+  const mailTo = MAIL_ON && $('#mailres').checked ? emailVal() : '';
+  if (mailTo && emailOk(mailTo)) { q.set('email', mailTo); q.set('lang', LANG); }
+  else if (mailTo) mailMsg('invalid', false);
   const r = await fetch(AUTH + q, { method: 'POST' });
   let d = {}; try { d = await r.json(); } catch (e) {}
   const spec = specAnswer($('#pan').value.trim(), $('#expiry').value.trim(), Math.round(parseFloat($('#amount').value || '0') * 100),
     Math.round(parseFloat($('#available').value || '0') * 100), $('#date').value.trim());
   LAST = { status: r.status, d, spec };
+  if (d.mail) mailMsg(d.mail, d.mail === 'queued');
   renderResult();
 };
 </script>

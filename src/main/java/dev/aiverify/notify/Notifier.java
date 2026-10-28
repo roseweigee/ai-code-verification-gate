@@ -102,6 +102,28 @@ public final class Notifier {
         }
     }
 
+    /** True when an SMTP account is configured, so {@link #deliver} can send. */
+    public boolean canDeliver() {
+        String security = get("smtp.security", "SMTP_SECURITY", "ssl").toLowerCase();
+        return !get("smtp.user", "SMTP_USER", "").isBlank()
+                && (!get("smtp.password", "SMTP_PASSWORD", "").isBlank() || "none".equals(security))
+                && !"false".equalsIgnoreCase(get("notify.enabled", "NOTIFY_ENABLED", "true"));
+    }
+
+    /**
+     * Sends one message to one given address, without the outbox. Used by the public demo page, where a
+     * visitor asks for a copy; the caller validates the address and limits how often this runs.
+     */
+    public void deliver(String to, Message m) throws IOException {
+        if (!canDeliver()) {
+            throw new IOException("email is not set up on this server");
+        }
+        String user = get("smtp.user", "SMTP_USER", "");
+        String security = get("smtp.security", "SMTP_SECURITY", "ssl").toLowerCase();
+        smtp(get("smtp.host", "SMTP_HOST", "smtp.gmail.com"), Integer.parseInt(get("smtp.port", "SMTP_PORT", "465")),
+                security, user, get("smtp.password", "SMTP_PASSWORD", ""), user, recipients(to), toEml(user, to, m));
+    }
+
     private String get(String key, String env, String def) {
         String v = System.getenv(env);
         if (v != null && !v.isBlank()) {
