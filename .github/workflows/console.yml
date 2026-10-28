@@ -66,17 +66,21 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: |
-          ENVS="^@^DEMO_PASSWORD=$DEMO_PASSWORD@PRODUCTION_URL=$PRODUCTION_URL"
-          if [ -n "$SMTP_USER" ] && [ -n "$SMTP_PASSWORD" ]; then
-            ENVS="$ENVS@SMTP_USER=$SMTP_USER@SMTP_PASSWORD=${SMTP_PASSWORD// /}"
-            echo "Demo email: on"
-          else
-            echo "Demo email: off (add the SMTP_USER and SMTP_PASSWORD secrets to turn it on)"
-          fi
+          # Values go in a file, not on the command line: an email address contains "@", which breaks
+          # gcloud's KEY=VALUE list syntax.
+          python3 -c "
+          import json, os
+          keys = ['DEMO_PASSWORD', 'PRODUCTION_URL']
+          env = {k: os.environ[k] for k in keys if os.environ.get(k)}
+          if os.environ.get('SMTP_USER') and os.environ.get('SMTP_PASSWORD'):
+              env['SMTP_USER'] = os.environ['SMTP_USER'].strip()
+              env['SMTP_PASSWORD'] = ''.join(os.environ['SMTP_PASSWORD'].split())
+          print('Demo email:', 'on' if 'SMTP_USER' in env else 'off (add the SMTP_USER and SMTP_PASSWORD secrets to turn it on)')
+          json.dump(env, open('env.yaml', 'w'))"
           # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
             --allow-unauthenticated --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
-            --session-affinity --set-env-vars "$ENVS" --quiet
+            --session-affinity --env-vars-file env.yaml --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "::notice title=Demo console::$URL"
           { echo "## Demo console"; echo "$URL"; } >> "$GITHUB_STEP_SUMMARY"
