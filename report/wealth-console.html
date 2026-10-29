@@ -209,7 +209,7 @@ function renderRelease(info) {
     `<a class="btn ghost" href="${esc((latest && latest.url) || actions)}" target="_blank" rel="noopener">See the GitHub Actions run ↗</a></div>` +
     `<p class="muted" style="font-size:12px">The production service is a different system from this console: it only runs code a person approved, and it refuses to start if the code's SHA-256 does not match.</p></div>`;
   clearTimeout(relTimer);
-  if (running || (rel.release === "started" && !latest)) relTimer = setTimeout(pollRelease, 10000);
+  if (running || ((rel.release === "started" || rel.release === "busy") && !latest)) relTimer = setTimeout(pollRelease, 10000);
 }
 async function pollRelease() { try { renderRelease(await api("/api/release")); } catch (e) { relTimer = setTimeout(pollRelease, 15000); } }
 

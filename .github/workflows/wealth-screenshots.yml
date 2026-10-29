@@ -38,6 +38,18 @@ jobs:
             echo "Console deploy running, waiting..."; sleep 15
           done
           exit 1
+      - name: Wait until no release is running and the last one finished over 2 minutes ago (so this approval starts its own)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            read st up < <(gh run list -R "$GITHUB_REPOSITORY" --workflow wealth-release.yml --limit 1 --json status,updatedAt \
+                -q '.[0] | "\(.status) \(.updatedAt)"')
+            age=$(( $(date +%s) - $(date -d "$up" +%s) ))
+            if [ "$st" = "completed" ] && [ "$age" -gt 130 ]; then exit 0; fi
+            echo "Last release: $st, $age s ago. Waiting..."; sleep 15
+          done
+          exit 1
       - name: Install Playwright
         run: |
           mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm install playwright@1.47.2 >/dev/null

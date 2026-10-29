@@ -408,7 +408,18 @@ public final class WealthServer {
         out.put("actionsUrl", "https://github.com/" + REPO + "/actions/workflows/" + WORKFLOW);
         out.put("release", s.release);
         try {
-            out.put("latest", latestRun(false));
+            Map<String, Object> latest = latestRun(false);
+            Map<String, Object> rel = s.release;
+            // Right after this visitor's approval, GitHub may still list the previous (finished) run for a few
+            // seconds. Never show that one as "live": until the new run appears, the release is queued.
+            if (rel != null && "started".equals(rel.get("release")) && latest != null) {
+                java.time.Instant dispatched = java.time.Instant.parse(String.valueOf(rel.get("at")));
+                java.time.Instant created = java.time.Instant.parse(String.valueOf(latest.get("createdAt")));
+                if (created.isBefore(dispatched.minusSeconds(5))) {
+                    latest = new LinkedHashMap<>(Map.of("status", "queued"));
+                }
+            }
+            out.put("latest", latest);
         } catch (Exception e) {
             out.put("latestError", String.valueOf(e.getMessage()));
         }
