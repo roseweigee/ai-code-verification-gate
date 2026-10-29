@@ -1,0 +1,12 @@
+{
+  "summary": "The implementation follows AC-01 to AC-06 and the non-functional rules. Risk levels are matched against the exact allowed codes, money is compared in whole minor units, and null inputs return FMT through the gate's NF-05 guard. One low-severity note.",
+  "findings": [
+    {
+      "severity": "LOW",
+      "criterion": "AC-05",
+      "line": 57,
+      "title": "Multiplication could overflow for astronomically large amounts",
+      "detail": "holdingAfter * 100 overflows a long only above about 9.2e16 minor units (about 92 trillion in the fund currency), far beyond any real portfolio. If the inputs are not bounded upstream, Math.multiplyExact would turn a silent overflow into an error. Not a defect for realistic values."
+    }
+  ]
+}

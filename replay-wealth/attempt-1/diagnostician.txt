@@ -1,0 +1,8 @@
+{
+  "rootCause": "Two boundary errors. (1) Line 27 treats the KYC assessment as expired ON its anniversary: !tradeDate.isBefore(validUntil) is true when tradeDate equals kycAssessedOn.plusYears(1). AC-02 says the assessment is valid up to and including that date, so orders on the anniversary (and on 28 February after a 29 February assessment) are wrongly refused with KYC. (2) Line 32 refuses a fund whose risk level EQUALS the client's level (fund >= client). AC-03 allows an equal level; only a higher fund level is unsuitable. Separately, line 27 throws NullPointerException when tradeDate is null and line 19 when the order is null (NF-05).",
+  "criterion": "AC-02, AC-03",
+  "line": 27,
+  "suggestedFix": "Line 27: refuse only if tradeDate.isAfter(validUntil). Line 32: use fund > client.",
+  "confidence": "HIGH",
+  "feedbackForAuthor": "Your implementation does not follow two boundary rules in the specification. Re-read AC-02: a KYC assessment is still valid on the same calendar date one year later; it has expired only after that date. Re-read AC-03: a fund whose risk level is equal to the client's risk level is suitable; only a higher fund level is unsuitable. Keep all other behaviour unchanged."
+}

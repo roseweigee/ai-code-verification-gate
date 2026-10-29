@@ -34,6 +34,6 @@ public final class ReplayClient implements LlmClient {
 
     @Override
     public String describe() {
-        return "replay: sample answers from replay/attempt-" + attempt;
+        return "replay: sample answers from " + root.getFileName() + "/attempt-" + attempt;
     }
 }

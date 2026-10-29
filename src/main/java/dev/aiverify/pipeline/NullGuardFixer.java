@@ -33,7 +33,15 @@ public final class NullGuardFixer {
 
     /** @param types parameter types to guard (simple names, e.g. LocalDate); null guards every object parameter */
     public static String fix(String source, Set<String> types) {
-        if (source.contains(MARK)) {
+        return fix(source, types, "30", MARK);
+    }
+
+    /**
+     * Same rule for another scenario: the guard returns {@code code} (that scenario's format-error code).
+     * Used by the wealth-management scenario, where a null input returns "FMT".
+     */
+    public static String fix(String source, Set<String> types, String code, String mark) {
+        if (source.contains(mark)) {
             return null;
         }
         Matcher m = CHECK.matcher(source);
@@ -57,9 +65,9 @@ public final class NullGuardFixer {
                 for (String o : objects) {
                     cond.append(cond.length() == 0 ? "" : " || ").append(o).append(" == null");
                 }
-                out.append(indent).append(MARK).append('\n')
+                out.append(indent).append(mark).append('\n')
                         .append(indent).append("if (").append(cond).append(") {\n")
-                        .append(indent).append("    return \"30\";\n")
+                        .append(indent).append("    return \"").append(code).append("\";\n")
                         .append(indent).append("}\n");
                 changed = true;
             }

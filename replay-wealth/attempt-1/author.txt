@@ -1,0 +1,66 @@
+```java
+package dev.aiverify.candidate;
+
+import dev.aiverify.contract.SubscriptionPrecheck;
+import dev.aiverify.contract.SubscriptionRequest;
+import java.time.LocalDate;
+
+public class SubscriptionPrecheckImpl implements SubscriptionPrecheck {
+
+    private static final String ACCEPTED = "OK";
+    private static final String FORMAT_ERROR = "FMT";
+    private static final String KYC_EXPIRED = "KYC";
+    private static final String UNSUITABLE = "UNS";
+    private static final String INVALID_AMOUNT = "AMT";
+    private static final String CONCENTRATION = "CON";
+
+    @Override
+    public String check(SubscriptionRequest request, LocalDate tradeDate) {
+        // AC-01 format
+        int client = level(request.clientRiskLevel(), "C");
+        int fund = level(request.fundRiskLevel(), "RR");
+        if (client < 0 || fund < 0 || request.kycAssessedOn() == null) {
+            return FORMAT_ERROR;
+        }
+
+        // AC-02 the KYC assessment is valid for one year
+        LocalDate validUntil = request.kycAssessedOn().plusYears(1);
+        if (!tradeDate.isBefore(validUntil)) {
+            return KYC_EXPIRED;
+        }
+
+        // AC-03 suitability
+        if (fund >= client) {
+            return UNSUITABLE;
+        }
+
+        // AC-04 amount
+        long amount = request.amountMinor();
+        if (amount <= 0 || amount < request.minimumMinor()) {
+            return INVALID_AMOUNT;
+        }
+
+        // AC-05 concentration: at most 30% of the portfolio after the order
+        long holdingAfter = request.holdingMinor() + amount;
+        long portfolioAfter = request.portfolioMinor() + amount;
+        if (holdingAfter * 100 > portfolioAfter * 30) {
+            return CONCENTRATION;
+        }
+
+        return ACCEPTED;
+    }
+
+    /** Returns 1-5 for a level such as "C3" or "RR3", or -1 if it is not a valid level. */
+    private static int level(String value, String prefix) {
+        if (value == null || !value.startsWith(prefix)) {
+            return -1;
+        }
+        try {
+            int n = Integer.parseInt(value.substring(prefix.length()));
+            return n >= 1 && n <= 5 ? n : -1;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+}
+```

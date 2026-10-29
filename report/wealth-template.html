@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Gate · Fund Subscription Pre-check</title>
+<style>
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --sunk: #e9edef; --ink: #142029; --ink-2: #4b5a65; --ink-3: #7a8893;
+  --line: #d3dbe0; --accent: #1f5f8b; --accent-soft: #dcebf5;
+  --pass: #1d7a4c; --pass-soft: #dcf1e5; --fail: #b3261e; --fail-soft: #fbe2df;
+  --warn: #9a6200; --warn-soft: #fbedcf; --wait: #5b4bb0; --wait-soft: #e7e3fa;
+  --skip: #8c979f; --skip-soft: #eceff1; --code-bg: #f7f9fa; --hl: #fff3c4;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+    --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a; --pass: #5cc98f; --pass-soft: #163527;
+    --fail: #f08a80; --fail-soft: #401c1a; --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2;
+    --wait-soft: #2a2550; --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161b; --surface: #162027; --sunk: #1d2a32; --ink: #e4ebef; --ink-2: #a9b7c0; --ink-3: #7f8e98;
+  --line: #2b3a44; --accent: #6fb3e3; --accent-soft: #19344a; --pass: #5cc98f; --pass-soft: #163527;
+  --fail: #f08a80; --fail-soft: #401c1a; --warn: #e7b04f; --warn-soft: #3a2c12; --wait: #a99cf2;
+  --wait-soft: #2a2550; --skip: #7f8e98; --skip-soft: #1d2a32; --code-bg: #121b21; --hl: #3b3412; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding: 0 16px; }
+.page { max-width: 1080px; margin: 0 auto; padding: 28px 0 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; }
+h1 { font-size: clamp(26px, 5vw, 36px); line-height: 1.1; }
+h2 { font-size: 21px; }
+h3 { font-size: 15px; margin-bottom: 6px; }
+p { margin: 0; }
+.eyebrow { font: 600 11px/1 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--ink-2); }
+.mono { font-family: var(--font-mono); font-size: .92em; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+td.mono { white-space: nowrap; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+.chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font: 600 11.5px/1.5 var(--font-mono); white-space: nowrap; }
+.PASSED, .PASS, .APPROVED { background: var(--pass-soft); color: var(--pass); }
+.FAILED, .FAIL, .ERROR, .BLOCKED, .REJECTED_BY_HUMAN { background: var(--fail-soft); color: var(--fail); }
+.WARNING, .HIGH { background: var(--warn-soft); color: var(--warn); }
+.PENDING, .READY_FOR_HUMAN_APPROVAL { background: var(--wait-soft); color: var(--wait); }
+.SKIPPED, .LOW, .MEDIUM { background: var(--skip-soft); color: var(--ink-2); }
+.grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.box { background: var(--sunk); border-radius: 8px; padding: 12px; display: grid; gap: 6px; }
+pre.code { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 0;
+  font: 12px/1.55 var(--font-mono); overflow-x: auto; }
+pre.code span { display: block; padding: 0 12px; white-space: pre; }
+pre.code span.hl { background: var(--hl); }
+pre.code span.add { background: var(--pass-soft); }
+pre.code i { display: inline-block; width: 34px; color: var(--ink-3); font-style: normal; user-select: none; }
+.kpis { display: flex; flex-wrap: wrap; gap: 10px; }
+.kpi { background: var(--sunk); border-radius: 8px; padding: 8px 12px; min-width: 120px; }
+.kpi b { display: block; font: 700 20px/1.2 var(--font-display); }
+.kpi span { font-size: 12px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="page" id="app"></div>
+<script>
+const DATA = /*__REPORT_DATA__*/null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const chip = (s, label) => `<span class="chip ${esc(s)}">${esc(label ?? s)}</span>`;
+const money = v => v == null ? "" : (Number(v) / 100).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const gate = (run, id) => (run.gates || []).find(g => g.id === id);
+const VERDICT = {BLOCKED: "Blocked", READY_FOR_HUMAN_APPROVAL: "Waiting for a person", APPROVED: "Approved", REJECTED_BY_HUMAN: "Rejected by a person"};
+
+function code(src, hl = [], add = []) {
+  return `<pre class="code">${src.replace(/\n$/, "").split("\n").map((l, i) =>
+    `<span class="${hl.includes(i + 1) ? "hl" : add.includes(i + 1) ? "add" : ""}"><i>${i + 1}</i>${esc(l)}</span>`).join("")}</pre>`;
+}
+function input(f) {
+  if (f.origin === "baseline") return esc(f.description);
+  return `client <b>${esc(f.clientRiskLevel ?? "null")}</b> · fund <b>${esc(f.fundRiskLevel ?? "null")}</b> · KYC ${esc(f.kycAssessedOn ?? "null")}
+    · trade ${esc(f.tradeDate)} · amount ${money(f.amountMinor)} (min ${money(f.minimumMinor)}) · holding ${money(f.holdingMinor)} / portfolio ${money(f.portfolioMinor)}`;
+}
+function render() {
+  const app = document.getElementById("app");
+  const runs = DATA.runs;
+  const ids = ["G1", "G2", "G3", "G4", "G5", "G6"];
+  let h = `<header style="display:grid;gap:8px">
+    <div class="eyebrow">AI Code Verification Gate · wealth management scenario</div>
+    <h1>Fund subscription suitability pre-check</h1>
+    <p class="muted">AI writes the check. Deterministic gates decide. A second AI only advises. A named person approves.
+    Report generated ${esc(DATA.generatedAt)} from each run's result.json; nothing on this page is typed by hand.</p></header>`;
+  h += `<section class="card" id="matrix"><h2>Attempts × gates</h2><div class="scroll"><table><tr><th>Attempt</th>${ids.map(i => `<th>${i}</th>`).join("")}<th>Verdict</th></tr>`;
+  for (const r of runs) {
+    h += `<tr><td class="mono">${r.attempt} · golden v${esc(r.goldenVersion)}</td>${ids.map(i => {
+      const g = gate(r, i); return `<td>${g ? chip(g.status) : ""}</td>`; }).join("")}<td>${chip(r.verdict, VERDICT[r.verdict])}</td></tr>`;
+  }
+  h += `</table></div><p class="muted">G1 policy · G2 compile and contract · G3 spec tests (AI tests + hidden human golden tests + null-input probes) · G4 mutation testing (80%) · G5 independent AI review (advisory) · G6 named human approval.</p></section>`;
+  for (const r of runs) h += dossier(r);
+  const a = DATA.audit;
+  h += `<section class="card" id="audit"><h2>Audit log ${chip(a.intact ? "PASSED" : "FAILED", a.intact ? "hash chain intact" : "TAMPERED")}</h2>
+    <p class="muted">Each entry stores SHA-256(previous hash + entry). Editing any old entry breaks the chain at that entry.</p>
+    <div class="scroll"><table><tr><th>#</th><th>Event</th><th>Run</th><th>Detail</th><th>Hash</th></tr>
+    ${a.log.map((e, i) => `<tr><td>${i + 1}</td><td class="mono">${esc(e.event)}</td><td class="mono">${esc(e.runId)}</td>
+      <td>${e.verdict ? chip(e.verdict, VERDICT[e.verdict]) : esc((e.decidedBy || "") + (e.note ? ": " + e.note.slice(0, 90) + (e.note.length > 90 ? "…" : "") : ""))}</td>
+      <td class="mono">${esc(String(e.entryHash || "").slice(0, 16))}…</td></tr>`).join("")}</table></div></section>`;
+  app.innerHTML = h;
+}
+function dossier(r) {
+  const g3 = gate(r, "G3"), g4 = gate(r, "G4"), g5 = gate(r, "G5"), g6 = gate(r, "G6");
+  let h = `<section class="card" id="attempt-${r.attempt}"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <h2>Attempt ${r.attempt}</h2>${chip(r.verdict, VERDICT[r.verdict])}<span class="mono muted">${esc(r.runId)} · ${esc(r.mode)}</span></div>`;
+  h += `<div class="scroll"><table><tr><th>Gate</th><th>Status</th><th>Decided by</th><th>Result</th></tr>${r.gates.map(g =>
+    `<tr><td class="mono">${g.id} ${esc(g.name)}</td><td>${chip(g.status)}</td><td>${esc(g.decidedBy)}</td><td>${esc(g.summary)}</td></tr>`).join("")}</table></div>`;
+  const hl = [];
+  if (g3 && g3.details.failures && g3.details.failures.length) {
+    const fs = g3.details.failures;
+    fs.forEach(f => { if (f.line) hl.push(f.line); });
+    h += `<div id="failures-${r.attempt}"><h3>What G3 caught</h3><div class="scroll"><table><tr><th>Test</th><th>Rule</th><th>Written by</th><th>Case</th><th>Expected</th><th>Got</th></tr>${fs.map(f =>
+      `<tr><td class="mono">${esc(f.id)}</td><td class="mono">${esc(f.criterion)}</td><td>${f.origin === "golden" ? "person (hidden)" : f.origin === "ai" ? "test-writer AI" : "gate (NF-05)"}</td>
+       <td>${esc(f.description)}<br><span class="muted" style="font-size:12px">${input(f)}</span></td><td>${chip("PASS", f.expected)}</td><td>${chip("FAIL", f.actual ?? f.detail)}${f.line ? ` <span class="mono muted">line ${f.line}</span>` : ""}</td></tr>`).join("")}</table></div></div>`;
+  }
+  if (r.diagnosis) {
+    if (r.diagnosis.line) hl.push(r.diagnosis.line);
+    h += `<div class="grid2"><div class="box"><h3>Diagnostician AI: root cause (for the person)</h3><p>${esc(r.diagnosis.rootCause)}</p></div>
+      <div class="box"><h3>Feedback to the author AI (spec level, no test data)</h3><p>${esc(r.diagnosis.feedbackForAuthor)}</p></div></div>`;
+  }
+  if (r.autoFix) {
+    const add = r.autoFix.added.map(x => x.n);
+    h += `<div class="box" id="autofix-${r.attempt}"><h3>NF-05 auto-fix (fixed rule, no AI)</h3><p>First pass: only the null-input probes failed, so the gate added a null guard and ran every gate again.
+      SHA-256 before <span class="mono">${esc(r.autoFix.beforeSha256.slice(0, 12))}…</span> → after <span class="mono">${esc(r.autoFix.afterSha256.slice(0, 12))}…</span></p></div>`;
+    r._add = add;
+  }
+  if (g4 && g4.status !== "SKIPPED") {
+    const d = g4.details;
+    h += `<div class="kpis"><div class="kpi"><b>${Math.round(d.scoreCombined * 1000) / 10}%</b><span>mutants caught, all tests</span></div>
+      <div class="kpi"><b>${Math.round(d.scoreAiOnly * 1000) / 10}%</b><span>AI tests alone</span></div>
+      <div class="kpi"><b>${d.killedCombined}/${d.validMutants}</b><span>planted bugs caught (threshold 80%)</span></div></div>`;
+  }
+  if (g5 && g5.details && g5.details.findings) {
+    const f = g5.details.findings;
+    f.forEach(x => { if (x.line) hl.push(x.line); });
+    h += `<div class="box" id="review-${r.attempt}"><h3>Independent AI review (advisory: cannot pass or fail the run)</h3><p class="muted">${esc(g5.details.reviewSummary)}</p>
+      ${f.map(x => `<p>${chip(x.severity)} <b>${esc(x.title)}</b> <span class="mono muted">${esc(x.criterion)} · line ${esc(x.line)}</span><br>${esc(x.detail)}</p>`).join("")}</div>`;
+  }
+  if (g6 && g6.details && g6.details.decision) {
+    h += `<div class="box" id="decision-${r.attempt}"><h3>G6 named human decision ${chip(g6.details.decision === "APPROVED" ? "APPROVED" : "FAILED", g6.details.decision)}</h3>
+      <p><b>${esc(g6.details.decidedBy)}</b> · ${esc(g6.details.decidedAt)}</p><p>${esc(g6.details.note)}</p></div>`;
+  }
+  h += `<details id="code-${r.attempt}"><summary class="muted">Code under test (${esc(r.candidateSha256.slice(0, 12))}…)</summary>${code(r.candidateSource, hl, r._add || [])}</details></section>`;
+  return h;
+}
+render();
+</script>
+</body>
+</html>

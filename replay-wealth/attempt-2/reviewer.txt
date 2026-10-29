@@ -1,0 +1,12 @@
+{
+  "summary": "The AC-02 and AC-03 boundaries now match the specification, money is compared in whole minor units, and null inputs return FMT through the gate's NF-05 guard. One input-validation defect remains: the risk-level parsing accepts spellings that AC-01 forbids, so malformed KYC data reaches the suitability check.",
+  "findings": [
+    {
+      "severity": "HIGH",
+      "criterion": "AC-01",
+      "line": 62,
+      "title": "Integer.parseInt accepts risk levels that AC-01 forbids",
+      "detail": "level() strips the prefix and calls Integer.parseInt on the rest. parseInt accepts a leading plus sign, leading zeros and non-ASCII Unicode digits, so values such as \"C03\", \"C+3\", \"RR+2\" or a full-width \"C３\" are read as valid levels. AC-01 allows exactly C1-C5 and RR1-RR5 (no leading zeros, no signs). A corrupted or hand-edited risk profile would then pass the format check and be used for the suitability decision, which is the control a regulator relies on. Fix: compare against the exact list of allowed codes instead of parsing."
+    }
+  ]
+}
