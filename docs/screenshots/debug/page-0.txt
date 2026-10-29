@@ -34,7 +34,7 @@ Run
 5
 You decide on try 3: approve
 Your name goes into the audit log with the code's SHA-256.
-Rejected run-20261029-183516-a2 by Rhosyn Wei. Recorded in this session's audit log.
+Rejected run-20261029-184532-a2 by Rhosyn Wei. Recorded in this session's audit log.
 2 · Test the versions with a client order
 
 Each try above left behind one version of the code. Here you play a client: pick a scenario (or type your own order), and the same order is sent to every version. The page also works out the correct answer from the rules. A version that answers differently has a bug, and the note under the table says whether that bug could have reached clients.
