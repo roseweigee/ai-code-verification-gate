@@ -106,10 +106,12 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--line); border-radiu
   </section>
 
   <section class="card">
-    <h2>2 · Send a fund order to each try's code</h2>
-    <p class="muted">The order goes to the code each try produced (as the gate left it), side by side with what the spec
-      says. Pick a preset or type your own values. Amounts are in currency units.</p>
+    <h2>2 · Test the versions with a client order</h2>
+    <p class="muted">Each try above left behind one version of the code. Here you play a client: pick a scenario (or type your own
+      order), and the same order is sent to every version. The page also works out the correct answer from the rules. A version
+      that answers differently has a bug, and the last column tells you whether that bug could have reached clients.</p>
     <div class="presets" id="presets"></div>
+    <div class="note" id="why">Pick a scenario above to see what it tests.</div>
     <div class="form">
       <label>Client risk level<input id="clientRiskLevel" value="C3"></label>
       <label>Fund risk level<input id="fundRiskLevel" value="RR3"></label>
@@ -120,8 +122,10 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--line); border-radiu
       <label>Current holding<input id="holding" value="0"></label>
       <label>Portfolio (incl. holding)<input id="portfolio" value="100000"></label>
     </div>
-    <div class="row"><button id="send">Send order</button><span class="muted" id="expect"></span></div>
+    <div class="row"><button id="send">Send this order to every version</button><span class="muted" id="expect"></span></div>
     <div class="scroll" id="orderOut"></div>
+    <p class="muted" style="font-size:12px">Result codes: <b>OK</b> accepted · <b>KYC</b> risk assessment expired · <b>UNS</b> fund too risky for the client ·
+      <b>AMT</b> invalid amount · <b>CON</b> too concentrated in one fund · <b>FMT</b> bad or missing input</p>
   </section>
 
   <section class="card">
@@ -139,13 +143,13 @@ const STEPS = [
   { key: "approve3", title: "You decide on try 3: approve", text: "Your name goes into the audit log with the code's SHA-256.", needsName: true },
 ];
 const PRESETS = [
-  { label: "KYC anniversary (valid)", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2025-11-03", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
-  { label: "Day after anniversary", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2025-11-03", tradeDate: "2026-11-04", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
-  { label: "Fund equal to client level", v: { clientRiskLevel: "C3", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
-  { label: "Malformed level C03", v: { clientRiskLevel: "C03", fundRiskLevel: "RR2", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
-  { label: "Exactly 30% after order", v: { clientRiskLevel: "C4", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "30000", minimum: "3000", holding: "0", portfolio: "70000" } },
-  { label: "30% + 0.01", v: { clientRiskLevel: "C4", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "30000.01", minimum: "3000", holding: "0", portfolio: "70000" } },
-  { label: "No trade date", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2026-06-01", tradeDate: "", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
+  { label: "KYC anniversary (valid)", why: "The client's risk assessment is exactly one year old today. The rule says it is still valid on the anniversary, so the answer should be OK. Watch try 1.", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2025-11-03", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
+  { label: "Day after anniversary", why: "One day after the anniversary the assessment has expired, so every version should refuse with KYC.", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2025-11-03", tradeDate: "2026-11-04", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
+  { label: "Fund equal to client level", why: "A C3 (moderate) client buying an RR3 fund is allowed: equal is fine. Try 1 wrongly refuses it.", v: { clientRiskLevel: "C3", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
+  { label: "Malformed level C03", why: "C03 is not a valid risk code, so the answer should be FMT. Try 2 accepts it because it reads the code as a number: the AI reviewer flagged this and a person rejected try 2.", v: { clientRiskLevel: "C03", fundRiskLevel: "RR2", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
+  { label: "Exactly 30% after order", why: "After this order the fund is exactly 30% of the portfolio. Exactly 30% is allowed, so the answer should be OK.", v: { clientRiskLevel: "C4", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "30000", minimum: "3000", holding: "0", portfolio: "70000" } },
+  { label: "30% + 0.01", why: "One cent more than 30%: refused with CON. Money is compared exactly in cents, never with floating point.", v: { clientRiskLevel: "C4", fundRiskLevel: "RR3", kycAssessedOn: "2026-06-01", tradeDate: "2026-11-03", amount: "30000.01", minimum: "3000", holding: "0", portfolio: "70000" } },
+  { label: "No trade date", why: "Missing input. The answer should be FMT, not a crash. Try 1 crashes; the gate added a null guard to the later versions.", v: { clientRiskLevel: "C3", fundRiskLevel: "RR2", kycAssessedOn: "2026-06-01", tradeDate: "", amount: "10000", minimum: "3000", holding: "0", portfolio: "100000" } },
 ];
 const FIELDS = ["clientRiskLevel", "fundRiskLevel", "kycAssessedOn", "tradeDate", "amount", "minimum", "holding", "portfolio"];
 const $ = (id) => document.getElementById(id);
@@ -219,11 +223,12 @@ function expected(v) {
 }
 
 function readForm() { const v = {}; FIELDS.forEach((f) => v[f] = $(f).value.trim()); return v; }
-function showExpect() { $("expect").innerHTML = "Spec says: <span class='chip " + expected(readForm()) + "'>" + expected(readForm()) + "</span>"; }
+function showExpect() { $("expect").innerHTML = "Correct answer by the rules: <span class='chip " + expected(readForm()) + "'>" + expected(readForm()) + "</span>"; }
 FIELDS.forEach((f) => $(f).addEventListener("input", showExpect));
 $("presets").innerHTML = PRESETS.map((p, i) => `<button class="ghost" data-i="${i}">${esc(p.label)}</button>`).join("");
 document.querySelectorAll("#presets button").forEach((b) => b.addEventListener("click", () => {
-  const v = PRESETS[+b.dataset.i].v; FIELDS.forEach((f) => $(f).value = v[f]); showExpect();
+  const pr = PRESETS[+b.dataset.i]; FIELDS.forEach((f) => $(f).value = pr.v[f]); showExpect();
+  $("why").innerHTML = "<b>" + esc(pr.label) + ".</b> " + esc(pr.why);
 }));
 
 $("send").addEventListener("click", async () => {
@@ -232,13 +237,20 @@ $("send").addEventListener("click", async () => {
   try {
     const j = await api("/api/order", v);
     const exp = expected(v);
-    $("orderOut").innerHTML = `<table><tr><th>Try</th><th>Gate verdict</th><th>Code returned</th><th>Spec says</th><th></th></tr>` +
+    const MEAN = { OK: "accepted", KYC: "assessment expired", UNS: "too risky for the client", AMT: "invalid amount", CON: "too concentrated", FMT: "bad or missing input" };
+    const FATE = { BLOCKED: "The gates blocked this version, so it never reached clients.", REJECTED_BY_HUMAN: "A person rejected this version, so it never reached clients.",
+      READY_FOR_HUMAN_APPROVAL: "This version is still waiting for a person's decision.", APPROVED: "This version was approved: this would be a real bug in production." };
+    const said = (x) => x.startsWith("CRASH") ? "crashed" : x + " (" + (MEAN[x] || x) + ")";
+    const wrong = j.results.filter((r) => String(r.code) !== exp);
+    const story = wrong.length === 0 ? "Every version gives the correct answer for this order."
+      : wrong.map((r) => `Try ${r.attempt} ${String(r.code).startsWith("CRASH") ? "crashed" : "answered " + said(String(r.code))}, but the correct answer is ${said(exp)}. ${FATE[r.verdict] || ""}`).join(" ");
+    $("orderOut").innerHTML = `<table><tr><th>Version</th><th>What happened to it</th><th>It answered</th><th>Correct answer</th><th>Result</th></tr>` +
       j.results.map((r) => {
         const code = String(r.code); const ok = code === exp;
-        return `<tr><td>${r.attempt}</td><td><span class="chip ${esc(r.verdict)}">${esc(r.verdict)}</span></td>` +
+        return `<tr><td>Try ${r.attempt}</td><td><span class="chip ${esc(r.verdict)}">${esc({BLOCKED:"Blocked by gates",REJECTED_BY_HUMAN:"Rejected by a person",APPROVED:"Approved",READY_FOR_HUMAN_APPROVAL:"Waiting for a person"}[r.verdict] || r.verdict)}</span></td>` +
           `<td><span class="chip ${code.startsWith("CRASH") ? "CRASH" : esc(code)}">${esc(code)}</span></td>` +
-          `<td><span class="chip ${exp}">${exp}</span></td><td class="${ok ? "match" : "miss"}">${ok ? "matches" : "wrong"}</td></tr>`;
-      }).join("") + "</table>";
+          `<td><span class="chip ${exp}">${exp}</span></td><td class="${ok ? "match" : "miss"}">${ok ? "✓ correct" : "✗ wrong"}</td></tr>`;
+      }).join("") + "</table>" + `<div class="note" style="margin-top:10px">${esc(story)}</div>`;
   } catch (e) { $("orderOut").innerHTML = '<p class="err">' + esc(e.message) + "</p>"; }
 });
 
