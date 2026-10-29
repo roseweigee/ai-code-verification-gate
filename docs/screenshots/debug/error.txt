@@ -1,0 +1,5 @@
+page.waitForSelector: Timeout 60000ms exceeded.
+Call log:
+  - waiting for locator('#release .rel') to be visible
+
+    at /home/runner/work/ai-code-verification-gate/ai-code-verification-gate/deploy/wealth-screenshots/shoot.js:18:11

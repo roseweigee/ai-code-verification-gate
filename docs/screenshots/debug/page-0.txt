@@ -1,0 +1,65 @@
+AI CODE VERIFICATION GATE · WEALTH MANAGEMENT
+Fund subscription suitability pre-check
+
+AI writes the code. Deterministic gates decide. A second AI only advises. A named person approves. Every step is written to a hash-chained audit log. This page runs the real gates, live, in your own workspace.
+
+How this demo is built. Like testing a banknote checker with notes known to be fake: the AI answers in the three tries are a controlled scenario with planted defects. Every verdict, failing test, mutation score, auto-fix and audit entry below is computed live by the gates when you click. No AI key is used here.
+The rules (the spec a person owns)
+ID	Rule, checked in this order	Code
+AC-01	Client level exactly C1–C5, fund level exactly RR1–RR5, KYC date present	FMT
+AC-02	KYC assessment valid one year, up to and including the anniversary	KYC
+AC-03	Fund risk must not exceed the client's; equal is allowed	UNS
+AC-04	Amount above 0 and at least the fund minimum; equal is allowed	AMT
+AC-05	After the order, this fund is at most 30% of the portfolio; exactly 30% is allowed	CON
+AC-06	Otherwise accept	OK
+1 · Run the gates
+Start over
+Your name (recorded in the audit log when you decide)
+1
+Try 1: AI writes the pre-check
+Gates run on the first answer.
+BLOCKED
+2
+Try 2: AI fixes it after spec-level feedback
+Gates run again.
+READY_FOR_HUMAN_APPROVAL
+3
+You decide on try 2: reject
+The AI reviewer raised a HIGH finding. Rejecting adds two golden tests (v1.1).
+READY_FOR_HUMAN_APPROVAL
+4
+Try 3: AI fixes it after your rejection
+Gates run against golden tests v1.1.
+Run
+5
+You decide on try 3: approve
+Your name goes into the audit log with the code's SHA-256.
+Rejected run-20261029-183516-a2 by Rhosyn Wei. Recorded in this session's audit log.
+2 · Test the versions with a client order
+
+Each try above left behind one version of the code. Here you play a client: pick a scenario (or type your own order), and the same order is sent to every version. The page also works out the correct answer from the rules. A version that answers differently has a bug, and the note under the table says whether that bug could have reached clients.
+
+KYC anniversary (valid)
+Day after anniversary
+Fund equal to client level
+Malformed level C03
+Exactly 30% after order
+30% + 0.01
+No trade date
+Pick a scenario above to see what it tests.
+Client risk level
+Fund risk level
+KYC assessed on
+Trade date
+Amount
+Fund minimum
+Current holding
+Portfolio (incl. holding)
+Send this order to every version
+Correct answer by the rules: OK
+
+Result codes: OK accepted · KYC risk assessment expired · UNS fund too risky for the client · AMT invalid amount · CON too concentrated in one fund · FMT bad or missing input
+
+3 · The full report
+
+Gate by gate, with the failing lines, the AI review and the audit chain.
