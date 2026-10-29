@@ -457,8 +457,14 @@ public final class ConsoleServer {
             }
             Map<String, Object> res = (Map<String, Object>) Json.parse(Files.readString(latest.resolve("result.json")));
             Map<String, Object> app = (Map<String, Object>) Json.parse(Files.readString(approved));
-            if (!"APPROVED".equals(res.get("verdict"))
-                    || !String.valueOf(app.get("candidateSha256")).equals(String.valueOf(res.get("candidateSha256")))) {
+            if (!"APPROVED".equals(res.get("verdict"))) {
+                out.put("release", "not-approved-code");
+                return out;
+            }
+            boolean sameCode = String.valueOf(app.get("candidateSha256")).equals(String.valueOf(res.get("candidateSha256")));
+            // attempt 2 approved over its HIGH finding: a canary drill that always switches back (never a release)
+            boolean demoDrill = !sameCode && Integer.valueOf(2).equals(((Number) res.getOrDefault("attempt", 0)).intValue());
+            if (!sameCode && !demoDrill) {
                 out.put("release", "not-approved-code");
                 return out;
             }
@@ -479,9 +485,9 @@ public final class ConsoleServer {
                 if (who.length() > 40) {
                     who = who.substring(0, 40);
                 }
-                Map<String, Object> d = cicd.dispatchRelease(who.isEmpty() ? "a visitor" : who,
-                        latest.getFileName().toString());
-                if ("started".equals(d.get("release"))) {
+                Map<String, Object> d = demoDrill ? cicd.dispatchDemoDrill()
+                        : cicd.dispatchRelease(who.isEmpty() ? "a visitor" : who, latest.getFileName().toString());
+                if ("started".equals(d.get("release")) || "drill-started".equals(d.get("release"))) {
                     releases.add(now);
                 }
                 out.putAll(d);

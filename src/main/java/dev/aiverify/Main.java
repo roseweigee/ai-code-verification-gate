@@ -417,7 +417,7 @@ public final class Main {
 
     /**
      * {@code canary-prepare --attempt N}: CANARY DRILL ONLY, used by .github/workflows/canary.yml inside the CI runner.
-     * Puts a recorded attempt's code, exactly as the AI wrote it, where the release image expects it, marked as a canary
+     * Puts an attempt's code from the seeded scenario, unchanged, where the release image expects it, marked as a canary
      * that nobody approved. The drill proves the automatic rollback works; it never goes through release.yml.
      */
     private static void canaryPrepare(Map<String, String> opts) throws IOException {

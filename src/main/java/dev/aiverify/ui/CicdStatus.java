@@ -206,6 +206,27 @@ public final class CicdStatus {
             return out;
         }
         String version = bad ? "bad: attempt 1 (expiry-month bug)" : "good: the approved release";
+        return dispatchCanary(t, version);
+    }
+
+    /** Cloud demo: attempt 2 approved over its HIGH finding runs as a canary and is always switched back. */
+    synchronized Map<String, Object> dispatchDemoDrill() {
+        String t = System.getenv("GH_DISPATCH_TOKEN");
+        Map<String, Object> out = new LinkedHashMap<>();
+        if (t == null || t.isBlank()) {
+            out.put("release", "off");
+            return out;
+        }
+        Map<String, Object> r = dispatchCanary(t, "demo: attempt 2 approved over a HIGH finding");
+        out.put("release", r.containsKey("started") ? "drill-started" : "error");
+        if (r.containsKey("error")) {
+            out.put("releaseError", r.get("error"));
+        }
+        return out;
+    }
+
+    private Map<String, Object> dispatchCanary(String t, String version) {
+        Map<String, Object> out = new LinkedHashMap<>();
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(API + "/actions/workflows/canary.yml/dispatches"))
                     .timeout(Duration.ofSeconds(15)).header("Accept", "application/vnd.github+json")
@@ -230,11 +251,12 @@ public final class CicdStatus {
      * Cloud demo: a visitor approved the code that is already approved in release/iso8583/ (same SHA-256), so
      * the real CD pipeline runs again for it. GitHub Actions re-checks the approval record in the repository.
      */
-    /** True when a release run is queued or running on GitHub right now. */
+    /** True when a release or a canary drill is queued or running on GitHub right now (they share production). */
     boolean releaseRunning() {
+        for (String wf : new String[] {WORKFLOW, "canary.yml"})
         for (String st : new String[] {"in_progress", "queued"}) {
             try {
-                Map<String, Object> r = obj(Json.parse(fetch(API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=1&status=" + st)));
+                Map<String, Object> r = obj(Json.parse(fetch(API + "/actions/workflows/" + wf + "/runs?per_page=1&status=" + st)));
                 Object n = r.get("total_count");
                 if (n instanceof Number num && num.longValue() > 0) {
                     return true;

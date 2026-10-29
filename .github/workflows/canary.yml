@@ -3,6 +3,8 @@
 # Run it by hand: Actions > "Canary drill ISO 8583" > Run workflow.
 #   bad  = attempt 1 exactly as the AI wrote it (declines cards in their expiry month). Expected: ROLLED BACK.
 #   good = the approved release. Expected: PROMOTED.
+#   demo = attempt 2, approved in the cloud demo over its HIGH finding (full-width digits). It is analysed like any
+#          canary, but ALWAYS switched back to the original revision at the end: the demo never changes production.
 #
 # 1. remember the revision that serves traffic now (tag: stable)
 # 2. deploy the canary as a new revision (tag: canary) and give it 10% of traffic
@@ -20,6 +22,7 @@ on:
         options:
           - 'bad: attempt 1 (expiry-month bug)'
           - 'good: the approved release'
+          - 'demo: attempt 2 approved over a HIGH finding'
         default: 'bad: attempt 1 (expiry-month bug)'
 
 concurrency:
@@ -50,6 +53,8 @@ jobs:
         run: |
           if [[ "${{ inputs.version }}" == bad* ]]; then
             ./run.sh canary-prepare --attempt 1
+          elif [[ "${{ inputs.version }}" == demo* ]]; then
+            ./run.sh canary-prepare --attempt 2
           else
             echo "Canary = the approved release in release/iso8583/"
           fi
@@ -100,7 +105,7 @@ jobs:
           exit ${PIPESTATUS[0]}
 
       - name: 6 · Promote the canary
-        if: steps.analysis.outcome == 'success'
+        if: steps.analysis.outcome == 'success' && !startsWith(inputs.version, 'demo')
         run: |
           gcloud run services update-traffic "$SERVICE" --region "$REGION" --to-latest --quiet
           NEW=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.latestReadyRevisionName)')
@@ -123,6 +128,22 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::error::Canary rejected: its response-code mix changed. Traffic was rolled back to ${{ steps.stable.outputs.rev }}."
           exit 1
+
+      - name: 6 · Switch back to the original (cloud demo)
+        if: steps.analysis.outcome == 'success' && startsWith(inputs.version, 'demo')
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --to-revisions "${{ steps.stable.outputs.rev }}=100" --quiet
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" --remove-tags canary --quiet
+          gcloud run services describe "$SERVICE" --region "$REGION" --format='table(status.traffic[].revisionName,status.traffic[].percent,status.traffic[].tag)'
+          {
+            echo "## ⚠️ Canary analysis found no problem, switched back anyway"
+            echo "The response-code mix of attempt 2 matched the stable revision, so monitoring alone would have promoted it."
+            echo "Its full-width-digit bug is invisible in the traffic; only the human review (HIGH finding) catches it."
+            echo "All traffic is back on **${{ steps.stable.outputs.rev }}**."
+            echo '```'; cat analysis.txt; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::Monitoring would have promoted attempt 2: its bug does not show in the traffic. Switched back to ${{ steps.stable.outputs.rev }}."
 
       - name: 7 · Report to the console
         if: always()
