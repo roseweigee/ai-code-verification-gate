@@ -10,11 +10,19 @@ const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
   global.__pages = [p];
   await p.goto(CONSOLE);
   await p.click('#reset');
+  // wait for the reset to come back before the first step, or its late answer would redraw step 1 over step 2
+  await p.waitForFunction(() => /Workspace cleared/.test(document.querySelector('#log')?.textContent || ''), null, { timeout: 30000 });
   await p.fill('#name', NAME);
-  for (let i = 0; i < 5; i++) {
-    await p.click('#steps button');
-    await p.waitForFunction(() => !document.querySelector('#steps button')?.disabled, null, { timeout: 180000 });
+  // click whatever step the page offers until it says Done (max 8 clicks), waiting for each answer
+  for (let i = 0; i < 8; i++) {
+    if (await p.$('#steps .match')) break;
+    const before = await p.textContent('#log');
+    await p.click('#steps .step.now button');
+    await p.waitForFunction((b) => { const btn = document.querySelector('#steps button');
+      return (!btn || !btn.disabled) && document.querySelector('#log').textContent !== b; }, before, { timeout: 180000 });
+    console.log('Step', i + 1, ':', (await p.textContent('#log')).split('\n')[0].slice(0, 120));
   }
+  if (!(await p.$('#steps .match'))) throw new Error('The console did not reach Done: ' + await p.textContent('#log'));
   await p.waitForSelector('#release .rel', { timeout: 60000 });
   await (await p.$('#release .rel')).screenshot({ path: OUT + '/release-started.png' });
   // wait for the real pipeline to finish: the box polls GitHub every 10 s
