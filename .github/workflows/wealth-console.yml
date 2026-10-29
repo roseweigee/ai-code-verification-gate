@@ -6,6 +6,12 @@ name: Wealth demo console
 on:
   push:
     branches: [wealth-management]
+    paths-ignore:
+      - 'docs/**'
+      - 'deploy/wealth-screenshots/**'
+      - '.github/workflows/wealth-screenshots.yml'
+      - '.github/workflows/wealth-release.yml'
+      - 'deploy/wealth-release/**'
   workflow_dispatch:
 
 concurrency:
