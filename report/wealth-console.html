@@ -233,7 +233,7 @@ async function step(key, btn) {
   if (s.needsName && !name) { $("log").innerHTML = '<span class="err">Type your name first: a named person makes this decision.</span>'; $("name").focus(); return; }
   btn.disabled = true; btn.textContent = "Running…";
   try {
-    const j = await api("/api/action", { action: key, name });
+    const j = await api("/api/action", { action: key, name, rid: key + "-" + Date.now() + "-" + Math.random().toString(36).slice(2) });
     state = j;
     $("log").textContent = j.log || "";
     $("report").src = "/report?t=" + Date.now();

@@ -62,6 +62,8 @@ public final class WealthServer {
         volatile long used = System.currentTimeMillis();
         int actions;
         volatile Map<String, Object> release;   // what happened when this visitor approved try 3
+        String lastRid;                          // the last action request id, and what it returned
+        Map<String, Object> lastResponse;
         final Map<String, SubscriptionPrecheck> compiled = new ConcurrentHashMap<>();
 
         Session(String id, Path runs) {
@@ -114,7 +116,20 @@ public final class WealthServer {
                         return;
                     }
                     Map<String, Object> body = Json.parseObject(readBody(ex));
-                    json(ex, 200, action(s, String.valueOf(body.get("action")), body));
+                    // One action at a time per workspace, and a repeated request (same id: a retry by the browser or
+                    // the load balancer) gets the first answer instead of running the step twice.
+                    Map<String, Object> resp;
+                    synchronized (s) {
+                        String rid = body.get("rid") == null ? null : String.valueOf(body.get("rid"));
+                        if (rid != null && rid.equals(s.lastRid) && s.lastResponse != null) {
+                            resp = s.lastResponse;
+                        } else {
+                            resp = action(s, String.valueOf(body.get("action")), body);
+                            s.lastRid = rid;
+                            s.lastResponse = resp;
+                        }
+                    }
+                    json(ex, 200, resp);
                 }
                 case "/api/order" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {
