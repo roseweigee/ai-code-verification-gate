@@ -1,0 +1,62 @@
+# Wealth-management demo (fund subscription suitability pre-check) as a public web page on Cloud Run.
+# Deployed from the wealth-management branch. Every visitor gets an own workspace; the three AI answers are the
+# planted-defect scenario in replay-wealth/, so no AI key is needed or used. Every verdict is computed live.
+name: Wealth demo console
+
+on:
+  push:
+    branches: [wealth-management]
+  workflow_dispatch:
+
+concurrency:
+  group: wealth-console
+  cancel-in-progress: true
+
+env:
+  REGION: asia-east1
+  IMAGE: asia-east1-docker.pkg.dev/specblast/specblast/ai-gate-wealth
+  SERVICE: ai-gate-wealth
+
+jobs:
+  deploy:
+    name: Build, deploy and smoke-test the wealth demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push the image (runs the self-test and the full wealth scenario)
+        run: |
+          gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
+          docker build -f deploy/wealth/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
+          docker push "$IMAGE:$GITHUB_SHA"
+      - name: Deploy to Cloud Run
+        run: |
+          # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
+          gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
+            --allow-unauthenticated --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
+            --session-affinity --quiet
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          echo "::notice title=Wealth demo::$URL"
+          { echo "## Wealth demo"; echo "$URL"; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke test the live URL (whole story, as a visitor)
+        run: |
+          set -euo pipefail
+          C=$(mktemp)
+          curl -fsS "$URL/healthz"; echo
+          curl -fsS -c "$C" -b "$C" "$URL/" | grep -q "Fund subscription suitability pre-check"
+          act() { curl -fsS -c "$C" -b "$C" -H 'Content-Type: application/json' -X POST "$URL/api/action" -d "$1"; }
+          act '{"action":"run1"}' > /dev/null
+          act '{"action":"run2"}' > /dev/null
+          act '{"action":"reject2","name":"CI smoke test"}' > /dev/null
+          act '{"action":"run3"}' > /dev/null
+          OUT=$(act '{"action":"approve3","name":"CI smoke test"}')
+          echo "$OUT" | python3 -c "import json,sys; d=json.load(sys.stdin); v=[r['verdict'] for r in d['runs']]; print(v); assert v==['BLOCKED','REJECTED_BY_HUMAN','APPROVED'] and d['next']=='done', d"
+          ORDER='{"clientRiskLevel":"C3","fundRiskLevel":"RR3","kycAssessedOn":"2025-11-03","tradeDate":"2026-11-03","amount":"10000","minimum":"3000","holding":"0","portfolio":"100000"}'
+          curl -fsS -c "$C" -b "$C" -H 'Content-Type: application/json' -X POST "$URL/api/order" -d "$ORDER" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); c=[r['code'] for r in d['results']]; print(c); assert c==['KYC','OK','OK'], c"
+          act '{"action":"reset"}' > /dev/null
+          echo "Live URL passed the full story: $URL"

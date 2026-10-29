@@ -58,6 +58,7 @@ public final class Main {
                     "這是測試信。如果你收到了，閘門的 email 通知就設定好了。\nThis is a test. If you got it, gate email notifications work.\n"));
             case "selftest" -> System.exit(SelfTest.run() ? 0 : 1);
             case "wealth" -> dev.aiverify.wealth.WealthMain.dispatch(ROOT, opts.getOrDefault("path", "help"), opts);
+            case "wealth-console" -> dev.aiverify.wealth.WealthServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8090")));
             case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
             case "release" -> releaseCommand(opts);
             case "release-check" -> releaseCheck(opts);
