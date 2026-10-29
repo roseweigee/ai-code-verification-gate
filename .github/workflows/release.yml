@@ -5,6 +5,9 @@
 #   2. deploy  : build the image, deploy it as a canary with 10% of traffic, compare its response-code mix
 #                with the stable revision, then promote it to 100% or roll back automatically
 name: Release ISO 8583
+# A cloud-demo approval starts this with workflow_dispatch; it releases the code already approved in
+# release/iso8583/ (the console checks the visitor approved the same SHA-256) and re-checks that approval.
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.run != '' && format('Cloud demo · {0} approved {1}', inputs.by, inputs.run) || github.event.head_commit.message || 'Release ISO 8583' }}
 
 on:
   push:
@@ -12,6 +15,15 @@ on:
     paths:
       - 'release/iso8583/**'
   workflow_dispatch:
+    inputs:
+      by:
+        description: 'Who approved in the cloud demo'
+        required: false
+        default: ''
+      run:
+        description: 'The cloud-demo run that was approved'
+        required: false
+        default: ''
 
 concurrency:
   group: release-iso8583

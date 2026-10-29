@@ -1,6 +1,7 @@
 # The AI Code Verification Gate console as a public demo on Cloud Run.
 # Every visitor gets an own workspace (own runs and audit log); the three attempts are the controlled scenario with seeded defects, so no AI key
-# is needed or used; approving there does NOT deploy anything (production only changes through release.yml).
+# is needed or used. With the GH_DISPATCH_TOKEN secret, approving attempt 3 (the same SHA-256 as release/iso8583/)
+# starts release.yml for that approved code; nothing else can be deployed from the demo.
 # Needs the secret DEMO_PASSWORD (8+ characters). SMTP_USER / SMTP_PASSWORD turn on emails to the visitor.
 name: Demo console
 
@@ -65,17 +66,19 @@ jobs:
           DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
         run: |
           # Values go in a file, not on the command line: an email address contains "@", which breaks
           # gcloud's KEY=VALUE list syntax.
           python3 -c "
           import json, os
-          keys = ['DEMO_PASSWORD', 'PRODUCTION_URL']
+          keys = ['DEMO_PASSWORD', 'PRODUCTION_URL', 'GH_DISPATCH_TOKEN']
           env = {k: os.environ[k] for k in keys if os.environ.get(k)}
           if os.environ.get('SMTP_USER') and os.environ.get('SMTP_PASSWORD'):
               env['SMTP_USER'] = os.environ['SMTP_USER'].strip()
               env['SMTP_PASSWORD'] = ''.join(os.environ['SMTP_PASSWORD'].split())
           print('Demo email:', 'on' if 'SMTP_USER' in env else 'off (add the SMTP_USER and SMTP_PASSWORD secrets to turn it on)')
+          print('Real CD on approval:', 'on' if 'GH_DISPATCH_TOKEN' in env else 'off (add the GH_DISPATCH_TOKEN secret to turn it on)')
           json.dump(env, open('env.yaml', 'w'))"
           # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \

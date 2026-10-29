@@ -52,6 +52,9 @@ public final class CicdStatus {
                 row.put("sha", sha.length() > 7 ? sha.substring(0, 7) : sha);
                 Map<String, Object> commit = obj(r.get("head_commit"));
                 String msg = String.valueOf(commit.getOrDefault("message", ""));
+                if ("workflow_dispatch".equals(r.get("event")) && r.get("display_title") != null) {
+                    msg = String.valueOf(r.get("display_title")); // a cloud-demo approval names its run here
+                }
                 row.put("message", msg.contains("\n") ? msg.substring(0, msg.indexOf('\n')) : msg);
                 list.add(row);
             }
@@ -207,6 +210,7 @@ public final class CicdStatus {
             HttpRequest req = HttpRequest.newBuilder(URI.create(API + "/actions/workflows/canary.yml/dispatches"))
                     .timeout(Duration.ofSeconds(15)).header("Accept", "application/vnd.github+json")
                     .header("Authorization", "Bearer " + t).header("User-Agent", "ai-code-verification-gate")
+                    .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString("{\"ref\":\"main\",\"inputs\":{\"version\":\"" + version + "\"}}"))
                     .build();
             HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());
@@ -218,6 +222,39 @@ public final class CicdStatus {
             }
         } catch (Exception e) {
             out.put("error", String.valueOf(e.getMessage()));
+        }
+        return out;
+    }
+
+    /**
+     * Cloud demo: a visitor approved the code that is already approved in release/iso8583/ (same SHA-256), so
+     * the real CD pipeline runs again for it. GitHub Actions re-checks the approval record in the repository.
+     */
+    synchronized Map<String, Object> dispatchRelease(String by, String run) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        String t = System.getenv("GH_DISPATCH_TOKEN");
+        if (t == null || t.isBlank()) {
+            out.put("release", "off");
+            return out;
+        }
+        String body = "{\"ref\":\"main\",\"inputs\":{\"by\":" + Json.writeCompact(by) + ",\"run\":" + Json.writeCompact(run) + "}}";
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(API + "/actions/workflows/" + WORKFLOW + "/dispatches"))
+                    .timeout(Duration.ofSeconds(15)).header("Accept", "application/vnd.github+json")
+                    .header("Authorization", "Bearer " + t).header("User-Agent", "ai-code-verification-gate")
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            HttpResponse<String> r = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (r.statusCode() == 204) {
+                out.put("release", "started");
+                cached = null;
+            } else {
+                out.put("release", "error");
+                out.put("releaseError", "GitHub " + r.statusCode());
+            }
+        } catch (Exception e) {
+            out.put("release", "error");
+            out.put("releaseError", String.valueOf(e.getMessage()));
         }
         return out;
     }
@@ -253,6 +290,9 @@ public final class CicdStatus {
         }
         tokenLooked = true;
         token = System.getenv("GITHUB_TOKEN");
+        if (token == null || token.isBlank()) {
+            token = System.getenv("GH_DISPATCH_TOKEN"); // cloud demo: may start release.yml, nothing else
+        }
         if (token == null || token.isBlank()) {
             try {
                 Process p = new ProcessBuilder("gh", "auth", "token").redirectErrorStream(false).start();

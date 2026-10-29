@@ -426,7 +426,71 @@ public final class ConsoleServer {
         if (mailNote != null) {
             r.put("mail", mailNote);
         }
+        if (hosted && "approve".equals(name) && Integer.valueOf(0).equals(r.get("exitCode"))) {
+            r.putAll(demoRelease(ss, by));
+        }
         return r;
+    }
+
+    /** Cloud demo: at most one real release every 8 minutes and 12 a day, for the whole server. */
+    static final long RELEASE_GAP_MS = 8 * 60_000L;
+    static final int RELEASES_PER_DAY = 12;
+    private final java.util.ArrayDeque<Long> releases = new java.util.ArrayDeque<>();
+
+    /**
+     * After a visitor's approval: if the approved code is byte-for-byte the code already approved in
+     * release/iso8583/ (same SHA-256), start the real CD pipeline for it. Anything else is never deployed.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> demoRelease(Session ss, String by) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        try {
+            Path latest;
+            try (Stream<Path> st = Files.list(ss.root.resolve("runs"))) {
+                latest = st.filter(p -> p.getFileName().toString().startsWith("run-")).max(Comparator.naturalOrder())
+                        .orElse(null);
+            }
+            Path approved = ss.root.resolve("release/iso8583/approval.json");
+            if (latest == null || !Files.exists(approved)) {
+                out.put("release", "not-approved-code");
+                return out;
+            }
+            Map<String, Object> res = (Map<String, Object>) Json.parse(Files.readString(latest.resolve("result.json")));
+            Map<String, Object> app = (Map<String, Object>) Json.parse(Files.readString(approved));
+            if (!"APPROVED".equals(res.get("verdict"))
+                    || !String.valueOf(app.get("candidateSha256")).equals(String.valueOf(res.get("candidateSha256")))) {
+                out.put("release", "not-approved-code");
+                return out;
+            }
+            long now = System.currentTimeMillis();
+            synchronized (releases) {
+                while (!releases.isEmpty() && now - releases.peekFirst() > 86_400_000L) {
+                    releases.pollFirst();
+                }
+                if (!releases.isEmpty() && now - releases.peekLast() < RELEASE_GAP_MS) {
+                    out.put("release", "busy");
+                    return out;
+                }
+                if (releases.size() >= RELEASES_PER_DAY) {
+                    out.put("release", "day");
+                    return out;
+                }
+                String who = by.replaceAll("[^\\p{L}\\p{N} .'-]", "").strip();
+                if (who.length() > 40) {
+                    who = who.substring(0, 40);
+                }
+                Map<String, Object> d = cicd.dispatchRelease(who.isEmpty() ? "a visitor" : who,
+                        latest.getFileName().toString());
+                if ("started".equals(d.get("release"))) {
+                    releases.add(now);
+                }
+                out.putAll(d);
+            }
+        } catch (Exception e) {
+            out.put("release", "error");
+            out.put("releaseError", String.valueOf(e.getMessage()));
+        }
+        return out;
     }
 
     private Map<String, Object> runCli(Session ss, List<String> args, String mailTo) throws IOException, InterruptedException {
@@ -447,6 +511,7 @@ public final class ConsoleServer {
             Map<String, String> env = pb.environment();
             env.remove("ANTHROPIC_API_KEY");
             env.remove("GITHUB_TOKEN");
+            env.remove("GH_DISPATCH_TOKEN");
             env.remove("DEMO_PASSWORD");
             env.put("NOTIFY_TO", mailTo == null ? "" : mailTo);
             if (mailTo == null) {
@@ -539,7 +604,9 @@ public final class ConsoleServer {
     private Map<String, Object> state(Session ss) throws IOException {
         Map<String, Object> s = new LinkedHashMap<>();
         if (hosted) {
-            // the hosted demo shows the real CD history (releases Rose approved locally), not only this session's
+            // like the local console, the CD section starts empty: it shows the runs started in this session
+            s.put("sessionStart", ss.start.toString());
+            s.put("deployOn", System.getenv("GH_DISPATCH_TOKEN") != null && !System.getenv("GH_DISPATCH_TOKEN").isBlank());
             s.put("hosted", true);
             s.put("email", ss.email);
             s.put("mailEnabled", mailOn);
