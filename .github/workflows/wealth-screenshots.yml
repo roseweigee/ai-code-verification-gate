@@ -1,0 +1,42 @@
+# Takes screenshots of the LIVE wealth demo (console, run report, production service) for the documents and
+# commits them to docs/screenshots/ on this branch. Running it approves try 3 in the console under the given name,
+# which starts the real release pipeline, exactly as a visitor would.
+name: Wealth screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Name to sign the decisions with'
+        required: true
+        default: 'Rhosyn Wei'
+
+permissions:
+  contents: write
+
+jobs:
+  shoot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm install playwright@1.47.2 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Screenshot the live demo
+        run: |
+          mkdir -p docs/screenshots
+          NODE_PATH=/tmp/pw/node_modules node deploy/wealth-screenshots/shoot.js \
+            https://ai-gate-wealth-ukwryhptvq-de.a.run.app https://fund-precheck-ukwryhptvq-de.a.run.app \
+            docs/screenshots "${{ inputs.name }}"
+          ls -la docs/screenshots
+      - name: Commit the screenshots
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Screenshots of the live wealth demo [skip ci]" || echo "No change"
+          git push
