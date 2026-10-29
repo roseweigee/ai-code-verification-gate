@@ -46,7 +46,8 @@ jobs:
         run: |
           set -euo pipefail
           C=$(mktemp)
-          curl -fsS "$URL/healthz"; echo
+          # Cloud Run reserves /healthz; the app answers on /health
+          curl -fsS "$URL/health"; echo
           curl -fsS -c "$C" -b "$C" "$URL/" | grep -q "Fund subscription suitability pre-check"
           act() { curl -fsS -c "$C" -b "$C" -H 'Content-Type: application/json' -X POST "$URL/api/action" -d "$1"; }
           act '{"action":"run1"}' > /dev/null

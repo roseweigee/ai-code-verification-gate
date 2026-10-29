@@ -90,7 +90,8 @@ public final class WealthServer {
     private void handle(HttpExchange ex) throws IOException {
         try {
             String path = ex.getRequestURI().getPath();
-            if ("/healthz".equals(path)) {
+            // Cloud Run reserves paths ending in "z" (for example /healthz), so the public check is /health
+            if ("/health".equals(path) || "/healthz".equals(path)) {
                 send(ex, 200, "text/plain; charset=utf-8", "ok");
                 return;
             }
