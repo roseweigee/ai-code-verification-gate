@@ -80,7 +80,7 @@ final class LiveService {
         if (id.startsWith("run:")) {
             // exactly the code of one gate run, as the gate left it (blocked runs: the AI's code as written)
             String name = id.substring(4);
-            if (!name.matches("(live/)?run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
+            if (!name.matches("run-[0-9]{8}-[0-9]{6}-a[0-9]+")) {
                 throw new IllegalArgumentException("unknown run");
             }
             String src = Files.readString(root.resolve("runs").resolve(name).resolve("candidate/AuthorizationPrecheckImpl.java"));

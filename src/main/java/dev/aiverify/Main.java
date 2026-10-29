@@ -46,7 +46,7 @@ public final class Main {
         switch (cmd) {
             case "demo" -> demo(opts.containsKey("full"));
             case "run" -> run(Integer.parseInt(opts.getOrDefault("attempt", "1")), opts.containsKey("live"),
-                    opts.getOrDefault("golden", "latest"), opts.get("into"));
+                    opts.getOrDefault("golden", "latest"));
             case "approve" -> decide(opts, true);
             case "reject" -> decide(opts, false);
             case "verify-project" -> verifyProject(opts);
@@ -142,14 +142,6 @@ public final class Main {
     }
 
     private static void run(int attempt, boolean live, String goldenVersion) throws IOException {
-        run(attempt, live, goldenVersion, null);
-    }
-
-    /** into = "live": the run goes to runs/live/, a separate chain of real Claude attempts (used by the console). */
-    private static void run(int attempt, boolean live, String goldenVersion, String into) throws IOException {
-        if (into != null && !"live".equals(into)) {
-            fail("--into accepts only: live");
-        }
         LlmClient ai;
         if (live) {
             String model = System.getenv().getOrDefault("AI_MODEL", "claude-sonnet-5-5");
@@ -160,7 +152,7 @@ public final class Main {
         }
         String runId = "run-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
                 + "-a" + attempt;
-        Path runDir = (into == null ? ROOT.resolve("runs") : ROOT.resolve("runs").resolve(into)).resolve(runId);
+        Path runDir = ROOT.resolve("runs").resolve(runId);
         Files.createDirectories(runDir);
 
         String feedback = null;
