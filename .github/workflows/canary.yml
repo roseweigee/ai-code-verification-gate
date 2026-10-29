@@ -54,7 +54,10 @@ jobs:
           if [[ "${{ inputs.version }}" == bad* ]]; then
             ./run.sh canary-prepare --attempt 1
           elif [[ "${{ inputs.version }}" == demo* ]]; then
-            ./run.sh canary-prepare --attempt 2
+            # the code a person approves is the code as the gate left it, with the NF-05 guard it added
+            NOTIFY_ENABLED=false ./run.sh run --attempt 1 --golden 1.0
+            NOTIFY_ENABLED=false ./run.sh run --attempt 2 --golden 1.0
+            ./run.sh canary-prepare --attempt 2 --gated
           else
             echo "Canary = the approved release in release/iso8583/"
           fi

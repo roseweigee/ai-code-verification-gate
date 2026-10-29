@@ -425,8 +425,21 @@ public final class Main {
             fail("canary-prepare overwrites release/iso8583/. It is meant for the canary workflow on GitHub Actions only.");
         }
         int attempt = Integer.parseInt(opts.getOrDefault("attempt", "1"));
-        String source = dev.aiverify.ai.Prompts.extractJava(
-                Files.readString(ROOT.resolve("replay/attempt-" + attempt + "/author.txt")));
+        // --gated: the code as the gate left it after this attempt (with the NF-05 guard if it added one),
+        // i.e. exactly what a person would approve. Without it: the author's answer as written.
+        Path gated = null;
+        if (opts.containsKey("gated")) {
+            try (Stream<Path> st = Files.list(ROOT.resolve("runs"))) {
+                gated = st.filter(p -> p.getFileName().toString().matches("run-[0-9]{8}-[0-9]{6}-a" + attempt))
+                        .max(Comparator.naturalOrder()).orElse(null);
+            }
+            if (gated == null) {
+                fail("No gate run for attempt " + attempt + ": run ./run.sh run --attempt " + attempt + " first.");
+            }
+        }
+        String source = gated != null ? Files.readString(gated.resolve("candidate/AuthorizationPrecheckImpl.java"))
+                : dev.aiverify.ai.Prompts.extractJava(
+                        Files.readString(ROOT.resolve("replay/attempt-" + attempt + "/author.txt")));
         Path dir = ROOT.resolve("release/iso8583");
         Files.createDirectories(dir);
         Files.writeString(dir.resolve("AuthorizationPrecheckImpl.java"), source);
@@ -437,7 +450,9 @@ public final class Main {
         a.put("decision", "CANARY");
         a.put("approvedBy", "nobody (canary drill)");
         a.put("approvedAt", OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString());
-        a.put("note", "Rollback drill: attempt " + attempt + " as the AI wrote it, deployed as a canary to prove the automatic rollback.");
+        a.put("note", gated != null
+                ? "Cloud demo drill: attempt " + attempt + " as the gate left it (" + gated.getFileName() + "), deployed as a canary and always switched back."
+                : "Rollback drill: attempt " + attempt + " as written in the scenario, deployed as a canary to prove the automatic rollback.");
         a.put("gates", List.of());
         a.put("releasedAt", a.get("approvedAt"));
         Files.writeString(dir.resolve("approval.json"), Json.write(a));
