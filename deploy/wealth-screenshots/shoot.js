@@ -1,5 +1,6 @@
 // Screenshots of the LIVE wealth demo, for the PDFs: the gate console, its run report, and the production service.
 // Usage: node shoot.js CONSOLE_URL PRODUCTION_URL OUT_DIR "Approver Name"
+// Re-run: push a change to this file (the workflow runs on push of deploy/wealth-screenshots/).
 const { chromium } = require('playwright');
 const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
 (async () => {
