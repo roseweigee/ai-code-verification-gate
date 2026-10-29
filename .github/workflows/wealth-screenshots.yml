@@ -62,6 +62,7 @@ jobs:
             docs/screenshots "${{ inputs.name || 'Rhosyn Wei' }}"
           ls -la docs/screenshots
       - name: Commit the screenshots
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

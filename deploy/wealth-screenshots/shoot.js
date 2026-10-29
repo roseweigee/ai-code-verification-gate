@@ -7,6 +7,7 @@ const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: 1180, height: 900 }, deviceScaleFactor: 2, colorScheme: 'light' });
   const p = await ctx.newPage();
+  global.__pages = [p];
   await p.goto(CONSOLE);
   await p.click('#reset');
   await p.fill('#name', NAME);
@@ -23,6 +24,7 @@ const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
   await (await p.$$('section'))[1].screenshot({ path: OUT + '/console-steps.png' });
   // the run report of this session
   const r = await ctx.newPage();
+  global.__pages.push(r);
   await r.goto(CONSOLE.replace(/\/$/, '') + '/report');
   await r.evaluate(() => document.querySelectorAll('details').forEach((d) => d.open = true));
   for (const id of ['matrix', 'failures-1', 'review-2', 'audit']) {
@@ -31,6 +33,7 @@ const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
   }
   // the production service
   const q = await ctx.newPage();
+  global.__pages.push(q);
   await q.goto(PROD);
   await q.waitForFunction(() => document.querySelectorAll('#rel dt').length > 3);
   await q.click('text=Malformed level C03');
@@ -39,4 +42,17 @@ const [CONSOLE, PROD, OUT, NAME] = process.argv.slice(2);
   await q.screenshot({ path: OUT + '/production.png', fullPage: true });
   console.log('Production answered:', await q.textContent('#out .result'));
   await b.close();
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch(async (e) => {
+  console.error(e);
+  // leave evidence of what the page showed, committed by the workflow even on failure
+  try {
+    const fs = require('fs');
+    fs.mkdirSync(OUT + '/debug', { recursive: true });
+    fs.writeFileSync(OUT + '/debug/error.txt', String(e && e.stack || e));
+    for (const [i, pg] of (global.__pages || []).entries()) {
+      await pg.screenshot({ path: OUT + '/debug/page-' + i + '.png', fullPage: true });
+      fs.writeFileSync(OUT + '/debug/page-' + i + '.txt', await pg.evaluate(() => document.body.innerText));
+    }
+  } catch (x) { console.error(x); }
+  process.exit(1);
+});
