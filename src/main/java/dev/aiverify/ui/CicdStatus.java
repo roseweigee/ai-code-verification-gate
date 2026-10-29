@@ -230,6 +230,22 @@ public final class CicdStatus {
      * Cloud demo: a visitor approved the code that is already approved in release/iso8583/ (same SHA-256), so
      * the real CD pipeline runs again for it. GitHub Actions re-checks the approval record in the repository.
      */
+    /** True when a release run is queued or running on GitHub right now. */
+    boolean releaseRunning() {
+        for (String st : new String[] {"in_progress", "queued"}) {
+            try {
+                Map<String, Object> r = obj(Json.parse(fetch(API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=1&status=" + st)));
+                Object n = r.get("total_count");
+                if (n instanceof Number num && num.longValue() > 0) {
+                    return true;
+                }
+            } catch (Exception e) {
+                // cannot tell: do not block the release because of a read error
+            }
+        }
+        return false;
+    }
+
     synchronized Map<String, Object> dispatchRelease(String by, String run) {
         Map<String, Object> out = new LinkedHashMap<>();
         String t = System.getenv("GH_DISPATCH_TOKEN");

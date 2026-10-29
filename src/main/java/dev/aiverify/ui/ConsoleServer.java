@@ -432,9 +432,9 @@ public final class ConsoleServer {
         return r;
     }
 
-    /** Cloud demo: at most one real release every 8 minutes and 12 a day, for the whole server. */
-    static final long RELEASE_GAP_MS = 8 * 60_000L;
-    static final int RELEASES_PER_DAY = 12;
+    /** Cloud demo: one real release at a time (never while one is running on GitHub), at most 20 a day. */
+    static final long RELEASE_GAP_MS = 60_000L; // only against double clicks
+    static final int RELEASES_PER_DAY = 20;
     private final java.util.ArrayDeque<Long> releases = new java.util.ArrayDeque<>();
 
     /**
@@ -467,7 +467,7 @@ public final class ConsoleServer {
                 while (!releases.isEmpty() && now - releases.peekFirst() > 86_400_000L) {
                     releases.pollFirst();
                 }
-                if (!releases.isEmpty() && now - releases.peekLast() < RELEASE_GAP_MS) {
+                if ((!releases.isEmpty() && now - releases.peekLast() < RELEASE_GAP_MS) || cicd.releaseRunning()) {
                     out.put("release", "busy");
                     return out;
                 }
