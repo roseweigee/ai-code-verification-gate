@@ -902,7 +902,7 @@ function incidentHtml(I, demo) {
 function canaryDetail(D, kind) {
   let h = '';
     const running = D.status !== 'completed', R = D['canary-result'];
-    const demo = kind === 'drill' && String(D.input || '').startsWith('demo');
+    const demo = kind === 'drill' && (String(D.input || '').startsWith('demo') || (HOSTED() && !D.input)); // the cloud demo starts only demo drills
     let verdict = running ? 'run' : R ? (R.verdict === 'ROLLBACK' ? 'back' : 'ok') : (D.conclusion === 'success' ? 'ok' : 'back');
     if (demo && verdict === 'ok') verdict = 'demo';
     const vc = verdict === 'back' ? '#B3261E' : verdict === 'ok' ? '#1D7A4C' : '#9A6200';
@@ -1152,7 +1152,7 @@ function renderCicd() {
   const runs = C.runs || [];
   // releases and rollback drills are the same pipeline step (a canary on Cloud Run): one list, newest first
   const events = runs.map(r => ({ ...r, kind: 'release' })).concat(sessionOnly(C0.canary).map(d => ({ ...d, kind: 'drill',
-    message: String(d.input || '').startsWith('demo') ? t('c.demoMsg') : t('c.drillMsg'), sha: '', event: 'drill' }))).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    message: String(d.input || '').startsWith('demo') || (HOSTED() && !d.input) ? t('c.demoMsg') : t('c.drillMsg'), sha: '', event: 'drill' }))).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   h += `${S.drillMsg ? `<p class="note" style="margin:0 0 8px;font-weight:600">${S.drillMsg}</p>` : ''}<p class="note" style="margin:0 0 10px">${C0.fetchedAt ? t('m.updated', C0.fetchedAt) : ''}${C0.drillError ? ` · <span style="color:var(--fail)">${esc(C0.drillError)}</span>` : ''}</p>`;
   if (events.length && (events[0].steps || []).length) h += `<div style="margin:6px 0 18px">${canaryDetail(events[0], events[0].kind)}</div>`;
   if (events.length) {
