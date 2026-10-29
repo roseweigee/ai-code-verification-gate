@@ -192,10 +192,32 @@ async function step(key, btn) {
     $("log").textContent = j.log || "";
     $("report").src = "/report?t=" + Date.now();
   } catch (e) {
-    $("log").innerHTML = '<span class="err">' + esc(e.message) + "</span>";
+    // The server no longer has this workspace (the demo was redeployed, or the server restarted after sitting idle):
+    // show what the server really has instead of a stale page.
+    const fresh = await api("/api/state").catch(() => null);
+    if (fresh && fresh.next !== key) {
+      state = fresh;
+      $("log").innerHTML = '<span class="err">This workspace was restarted on the server (the demo was updated, or it restarted after '
+        + 'sitting idle), so the earlier steps are gone. Please start again from step 1; it takes about a minute.</span>';
+      $("orderOut").innerHTML = "";
+      $("report").src = "/report?t=" + Date.now();
+    } else {
+      $("log").innerHTML = '<span class="err">' + esc(e.message) + "</span>";
+    }
   }
   render();
 }
+
+// Coming back to the tab: re-read the workspace so the page never shows steps the server no longer has.
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState !== "visible") return;
+  const fresh = await api("/api/state").catch(() => null);
+  if (fresh && JSON.stringify(fresh.runs) !== JSON.stringify(state.runs)) {
+    state = fresh; render();
+    $("log").innerHTML = '<span class="err">This workspace was restarted on the server while you were away. Please start again from step 1.</span>';
+    $("orderOut").innerHTML = ""; $("report").src = "/report?t=" + Date.now();
+  }
+});
 
 $("reset").addEventListener("click", async () => {
   state = await api("/api/action", { action: "reset" });

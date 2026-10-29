@@ -34,9 +34,10 @@ jobs:
           docker push "$IMAGE:$GITHUB_SHA"
       - name: Deploy to Cloud Run
         run: |
-          # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
+          # exactly one instance, kept warm: the visitors' workspaces live in its memory, so scaling to zero after idle
+          # would wipe a visitor's steps mid-demo; session affinity keeps a browser on it
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
-            --allow-unauthenticated --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
+            --allow-unauthenticated --min-instances 1 --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
             --session-affinity --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "URL=$URL" >> "$GITHUB_ENV"
