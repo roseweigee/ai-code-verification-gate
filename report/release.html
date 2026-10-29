@@ -293,7 +293,7 @@ const emailVal = () => $('#email').value.trim();
 const emailOk = e => e.length <= 254 && /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$/.test(e);
 try { const e = localStorage.getItem('demoEmail'); if (e) $('#email').value = e; } catch (e) {}
 $('#email').onchange = () => { try { localStorage.setItem('demoEmail', emailVal()); } catch (e) {} };
-if (!RUN) fetch('/api/mail/status').then(r => r.json()).then(s => { MAIL_ON = !!s.enabled; $('#mail').classList.toggle('on', MAIL_ON); }).catch(() => {});
+// The email box is not shown on this page: the notifications belong to the gate (console inbox), not to the service.
 $('#flow').onclick = async () => {
   const e = emailVal();
   if (!emailOk(e)) { mailMsg('invalid', false); return; }
