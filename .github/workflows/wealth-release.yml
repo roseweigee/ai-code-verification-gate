@@ -1,0 +1,104 @@
+# CD for the production fund-order pre-check (wealth scenario).
+# Starts when approved code lands in release/wealth/, or when a visitor approves try 3 in the demo console
+# (workflow_dispatch; the console checks the visitor approved the same SHA-256 as release/wealth/).
+#   1. verify : approval record + SHA-256 + every golden test (refuses to deploy otherwise)
+#   2. deploy : build the image, deploy the separate Cloud Run service, smoke-test the live URL
+name: Release fund pre-check
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.run != '' && format('Wealth demo · {0} approved {1}', inputs.by, inputs.run) || github.event.head_commit.message || 'Release fund pre-check' }}
+
+on:
+  push:
+    branches: [wealth-management]
+    paths:
+      - 'release/wealth/**'
+      - 'deploy/wealth-release/**'
+      - '.github/workflows/wealth-release.yml'
+  workflow_dispatch:
+    inputs:
+      by:
+        description: 'Who approved in the demo console'
+        required: false
+        default: ''
+      run:
+        description: 'The demo run that was approved'
+        required: false
+        default: ''
+
+concurrency:
+  group: release-wealth
+  cancel-in-progress: false
+
+env:
+  REGION: asia-east1
+  IMAGE: asia-east1-docker.pkg.dev/specblast/specblast/fund-precheck
+  SERVICE: fund-precheck
+  CONSOLE_URL: https://ai-gate-wealth-ukwryhptvq-de.a.run.app
+
+jobs:
+  verify:
+    name: 1 · Verify the human approval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Approval record, SHA-256, golden tests
+        shell: bash
+        run: |
+          set +e
+          ./run.sh wealth release-check | tee check.txt
+          code=${PIPESTATUS[0]}
+          { echo "## Release check"; echo '```'; cat check.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $code
+
+  deploy:
+    name: 2 · Deploy to Cloud Run and smoke-test
+    needs: verify
+    runs-on: ubuntu-latest
+    environment:
+      name: production-wealth
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push the image (re-runs the release check inside the build)
+        run: |
+          gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
+          docker build -f deploy/wealth-release/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
+          docker push "$IMAGE:$GITHUB_SHA"
+      - name: Deploy
+        id: deploy
+        env:
+          BY: ${{ inputs.by }}
+          RUN: ${{ inputs.run }}
+        run: |
+          # values go in a file: names may contain characters that break gcloud's KEY=VALUE list syntax
+          python3 -c "
+          import json, os
+          env = {'DEPLOYED_BY': os.environ.get('BY') or '', 'DEPLOYED_RUN': os.environ.get('RUN') or '',
+                 'DEPLOYED_AT': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m-%d %H:%M UTC'),
+                 'DEPLOYED_COMMIT': os.environ['GITHUB_SHA'], 'CONSOLE_URL': os.environ['CONSOLE_URL'],
+                 'ACTIONS_RUN_URL': os.environ['GITHUB_SERVER_URL'] + '/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + os.environ['GITHUB_RUN_ID']}
+          json.dump(env, open('env.yaml', 'w'))"
+          gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
+            --allow-unauthenticated --max-instances 1 --memory 1Gi --cpu 1 --env-vars-file env.yaml --quiet
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          echo "::notice title=Production fund pre-check::$URL"
+      - name: Smoke test the live production URL
+        run: |
+          set -euo pipefail
+          curl -fsS "$URL/health"; echo
+          REL=$(curl -fsS "$URL/api/release")
+          echo "$REL" | python3 -c "import json,sys; r=json.load(sys.stdin); a=json.load(open('release/wealth/approval.json')); assert r['candidateSha256']==a['candidateSha256'], r; print('Serving', r['runId'], r['candidateSha256'], 'golden', r['goldenPassed'], '/', r['goldenTotal'])"
+          check() { curl -fsS -H 'Content-Type: application/json' -X POST "$URL/api/check" -d "$1" | python3 -c "import json,sys; r=json.load(sys.stdin)['result']; print(r); assert r=='$2', r"; }
+          check '{"clientRiskLevel":"C3","fundRiskLevel":"RR2","kycAssessedOn":"2025-11-03","tradeDate":"2026-11-03","amount":"10000","minimum":"3000","holding":"0","portfolio":"100000"}' OK
+          check '{"clientRiskLevel":"C03","fundRiskLevel":"RR2","kycAssessedOn":"2026-06-01","tradeDate":"2026-11-03","amount":"10000","minimum":"3000","holding":"0","portfolio":"100000"}' FMT
+          check '{"clientRiskLevel":"C4","fundRiskLevel":"RR3","kycAssessedOn":"2026-06-01","tradeDate":"2026-11-03","amount":"30000.01","minimum":"3000","holding":"0","portfolio":"70000"}' CON
+          { echo "## ✅ Released"; echo "$URL"; echo "Approved by ${{ inputs.by || 'the approval record' }}"; } >> "$GITHUB_STEP_SUMMARY"

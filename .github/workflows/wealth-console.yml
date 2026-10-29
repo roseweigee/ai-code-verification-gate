@@ -33,12 +33,21 @@ jobs:
           docker build -f deploy/wealth/Dockerfile -t "$IMAGE:$GITHUB_SHA" .
           docker push "$IMAGE:$GITHUB_SHA"
       - name: Deploy to Cloud Run
+        env:
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
         run: |
+          # GH_DISPATCH_TOKEN lets a visitor's approval of try 3 start wealth-release.yml (same SHA-256 only)
+          python3 -c "
+          import json, os
+          env = {'WEALTH_PRODUCTION_URL': 'https://fund-precheck-ukwryhptvq-de.a.run.app'}
+          if os.environ.get('GH_DISPATCH_TOKEN'): env['GH_DISPATCH_TOKEN'] = os.environ['GH_DISPATCH_TOKEN']
+          print('Release on approval:', 'on' if 'GH_DISPATCH_TOKEN' in env else 'off')
+          json.dump(env, open('env.yaml', 'w'))"
           # exactly one instance, kept warm: the visitors' workspaces live in its memory, so scaling to zero after idle
           # would wipe a visitor's steps mid-demo; session affinity keeps a browser on it
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
             --allow-unauthenticated --min-instances 1 --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
-            --session-affinity --quiet
+            --session-affinity --env-vars-file env.yaml --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "URL=$URL" >> "$GITHUB_ENV"
           echo "::notice title=Wealth demo::$URL"

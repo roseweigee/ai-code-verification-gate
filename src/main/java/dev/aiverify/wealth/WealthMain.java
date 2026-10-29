@@ -48,13 +48,21 @@ public final class WealthMain {
             case "reject" -> decide(root, runs, opts, false);
             case "report" -> System.out.println("Report: " + root.relativize(WealthReport.write(root, runs)));
             case "audit" -> audit(runs);
+            case "release" -> {
+                if (!opts.containsKey("run")) {
+                    throw new IllegalArgumentException("Usage: wealth release --run RUN_ID");
+                }
+                WealthRelease.release(root, runs, opts.get("run"));
+            }
+            case "release-check" -> WealthRelease.printCheck(root);
             default -> System.out.println("""
                     Wealth scenario: fund subscription suitability pre-check
                       ./run.sh wealth demo [--full]
                       ./run.sh wealth run --attempt N [--golden 1.0|1.1|latest] [--live]
                       ./run.sh wealth approve --by "Name" [--note "..."] [--ack-high]
                       ./run.sh wealth reject  --by "Name" --note "..."
-                      ./run.sh wealth report | audit""");
+                      ./run.sh wealth report | audit
+                      ./run.sh wealth release --run RUN_ID | release-check""");
         }
     }
 

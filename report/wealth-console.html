@@ -67,6 +67,13 @@ th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
 iframe { width: 100%; height: 900px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .err { color: var(--fail); font-weight: 600; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rel { border: 1px solid var(--pass); background: var(--pass-soft); border-radius: 8px; padding: 14px; display: grid; gap: 10px; }
+.rel h3 { margin: 0; font-family: var(--font-display); font-size: 17px; }
+a.btn { display: inline-block; font: 600 13px var(--font-body); padding: 8px 14px; border-radius: 6px; background: var(--pass); color: #fff; text-decoration: none; }
+a.btn.ghost { background: transparent; color: var(--pass); border: 1px solid var(--pass); }
+.pipe { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.pipe span { padding: 3px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+.pipe span.on { border-color: var(--pass); color: var(--pass); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -103,6 +110,7 @@ iframe { width: 100%; height: 900px; border: 1px solid var(--line); border-radiu
       <input id="name" maxlength="60" placeholder="e.g. Jane Lee"></label>
     <div class="steps" id="steps"></div>
     <pre class="log" id="log">Click the first step.</pre>
+    <div id="release"></div>
   </section>
 
   <section class="card">
@@ -168,6 +176,43 @@ async function api(path, body) {
   return j;
 }
 
+let relTimer = null;
+function renderRelease(info) {
+  const box = $("release");
+  if (state.next !== "done" || !state.productionUrl) { box.innerHTML = ""; return; }
+  const rel = (info && info.release) || state.release || {};
+  const latest = info && info.latest;
+  const prod = state.productionUrl;
+  const actions = (info && info.actionsUrl) || "https://github.com/roseweigee/ai-code-verification-gate/actions/workflows/wealth-release.yml";
+  let head, text, stage = 0;
+  const running = latest && latest.status !== "completed";
+  if (rel.release === "started" || rel.release === "busy") {
+    head = running ? "Deploying your approved code to production…" : (latest && latest.conclusion === "success" ? "Live in production" : "Release finished");
+    text = (rel.release === "started" ? "Your approval started the real release pipeline on GitHub Actions. "
+      : "A release was already running or just ran (someone approved the same code a moment ago), so no second one was started. ")
+      + "It re-checks the approval record and the SHA-256, runs every golden test, then deploys a separate Cloud Run service. "
+      + (running ? "This takes about 2 to 3 minutes; this box updates by itself." : "");
+    stage = running ? (latest.status === "queued" ? 1 : 2) : 3;
+    if (latest && latest.status === "completed" && latest.conclusion !== "success") { head = "The release pipeline stopped"; text = "It refused to deploy (" + latest.conclusion + "). Production keeps running the previous approved code."; }
+  } else if (rel.release === "off") {
+    head = "Production service"; text = "Automatic release is switched off on this demo right now. Production already runs this exact approved code."; stage = 3;
+  } else if (rel.release === "day") {
+    head = "Production service"; text = "Today's release limit for the public demo is reached. Production already runs this exact approved code."; stage = 3;
+  } else {
+    head = "Production service"; text = rel.releaseError ? "Could not start the release (" + rel.releaseError + "). Production keeps running the approved code." : "Production runs the approved code."; stage = 3;
+  }
+  const steps = ["Approved by you", "Re-check approval + SHA-256", "Golden tests, build, deploy", "Live"];
+  box.innerHTML = `<div class="rel"><h3>${esc(head)}</h3><p>${esc(text)}</p>` +
+    `<div class="pipe">${steps.map((s, i) => `<span class="${i <= stage ? "on" : ""}">${i + 1}. ${s}</span>`).join("")}</div>` +
+    (rel.sha256 ? `<p class="muted" style="font-size:12px">Approved code SHA-256 <span class="mono">${esc(rel.sha256)}</span></p>` : "") +
+    `<div class="row"><a class="btn" href="${esc(prod)}" target="_blank" rel="noopener">Open the production service ↗</a>` +
+    `<a class="btn ghost" href="${esc((latest && latest.url) || actions)}" target="_blank" rel="noopener">See the GitHub Actions run ↗</a></div>` +
+    `<p class="muted" style="font-size:12px">The production service is a different system from this console: it only runs code a person approved, and it refuses to start if the code's SHA-256 does not match.</p></div>`;
+  clearTimeout(relTimer);
+  if (running || (rel.release === "started" && !latest)) relTimer = setTimeout(pollRelease, 10000);
+}
+async function pollRelease() { try { renderRelease(await api("/api/release")); } catch (e) { relTimer = setTimeout(pollRelease, 15000); } }
+
 function render() {
   const order = STEPS.map((s) => s.key);
   const idx = state.next === "done" ? order.length : order.indexOf(state.next);
@@ -179,6 +224,7 @@ function render() {
     return `<div class="step ${cls}"><div class="num">${i + 1}</div><div><b>${esc(s.title)}</b><div class="muted">${esc(s.text)}</div></div><div>${btn}</div></div>`;
   }).join("") + (state.next === "done" ? `<p class="match">Done. Try 3 is approved and recorded. Now send orders below and compare the three tries.</p>` : "");
   document.querySelectorAll("#steps button").forEach((b) => b.addEventListener("click", () => step(b.dataset.k, b)));
+  if (state.next === "done") pollRelease(); else renderRelease(null);
 }
 
 async function step(key, btn) {

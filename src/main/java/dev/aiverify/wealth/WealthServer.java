@@ -61,6 +61,7 @@ public final class WealthServer {
         final Path runs;
         volatile long used = System.currentTimeMillis();
         int actions;
+        volatile Map<String, Object> release;   // what happened when this visitor approved try 3
         final Map<String, SubscriptionPrecheck> compiled = new ConcurrentHashMap<>();
 
         Session(String id, Path runs) {
@@ -106,6 +107,7 @@ public final class WealthServer {
                             + "Start with step 1.</p>");
                 }
                 case "/api/state" -> json(ex, 200, state(s));
+                case "/api/release" -> json(ex, 200, releaseStatus(s));
                 case "/api/action" -> {
                     if (!"POST".equals(ex.getRequestMethod())) {
                         json(ex, 405, Map.of("error", "POST only"));
@@ -215,6 +217,8 @@ public final class WealthServer {
         Map<String, Object> st = new LinkedHashMap<>();
         st.put("runs", runs);
         st.put("next", next(runs));
+        st.put("release", s.release);
+        st.put("productionUrl", PRODUCTION_URL);
         return st;
     }
 
@@ -226,6 +230,7 @@ public final class WealthServer {
             deleteTree(s.runs);
             Files.createDirectories(s.runs);
             s.compiled.clear();
+            s.release = null;
             return state(s);
         }
         List<Map<String, Object>> runs = runs(s);
@@ -266,9 +271,148 @@ public final class WealthServer {
             log = buf.toString(StandardCharsets.UTF_8).replaceAll("Report: .*\\R?", "")
                     .replace("runs-wealth/audit-log.jsonl", "this session's audit log");
         }
+        if ("approve3".equals(action)) {
+            s.release = releaseAfterApproval(s, name);
+        }
         Map<String, Object> st = state(s);
         st.put("log", log.strip());
         return st;
+    }
+
+    // ---------------------------------------------------------------- approval -> real deployment
+
+    private static final String PRODUCTION_URL = System.getenv().getOrDefault("WEALTH_PRODUCTION_URL", "");
+    private static final String REPO = "roseweigee/ai-code-verification-gate";
+    private static final String WORKFLOW = "wealth-release.yml";
+    private static final String BRANCH = "wealth-management";
+    private static final String API = "https://api.github.com/repos/" + REPO;
+    private static final long RELEASE_GAP_MS = 120_000;
+    private static final int RELEASES_PER_DAY = 30;
+    private final java.util.ArrayDeque<Long> releases = new java.util.ArrayDeque<>();
+    private final java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(5)).build();
+    private volatile Map<String, Object> ghCache;
+    private volatile long ghCachedAt;
+
+    /**
+     * The visitor approved try 3. Only if that code is byte-for-byte the code already approved in release/wealth/
+     * (same SHA-256) does the real release pipeline run: GitHub Actions re-checks the approval and the hash, runs
+     * the golden tests, and deploys the separate production service. Anything else is never deployed.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> releaseAfterApproval(Session s, String by) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("at", java.time.Instant.now().toString());
+        try {
+            List<Map<String, Object>> runs = runs(s);
+            Map<String, Object> last = runs.get(runs.size() - 1);
+            Map<String, Object> res = Json.parseObject(Files.readString(
+                    s.runs.resolve(String.valueOf(last.get("runId"))).resolve("result.json")));
+            Map<String, Object> app = Json.parseObject(Files.readString(
+                    root.resolve(WealthRelease.DIR).resolve(WealthRelease.APPROVAL)));
+            boolean same = String.valueOf(app.get("candidateSha256")).equals(String.valueOf(res.get("candidateSha256")));
+            out.put("sha256", res.get("candidateSha256"));
+            out.put("sameAsRelease", same);
+            if (!same || !WealthPipeline.VERDICT_APPROVED.equals(res.get("verdict"))) {
+                out.put("release", "not-approved-code");
+                return out;
+            }
+            String t = System.getenv("GH_DISPATCH_TOKEN");
+            if (t == null || t.isBlank()) {
+                out.put("release", "off");
+                return out;
+            }
+            long now = System.currentTimeMillis();
+            synchronized (releases) {
+                while (!releases.isEmpty() && now - releases.peekFirst() > 86_400_000L) {
+                    releases.pollFirst();
+                }
+                Map<String, Object> latest = latestRun(true);
+                boolean running = latest != null && !"completed".equals(latest.get("status"));
+                if (running || (!releases.isEmpty() && now - releases.peekLast() < RELEASE_GAP_MS)) {
+                    out.put("release", "busy");
+                    return out;
+                }
+                if (releases.size() >= RELEASES_PER_DAY) {
+                    out.put("release", "day");
+                    return out;
+                }
+                String who = by.replaceAll("[^\\p{L}\\p{N} .'-]", "").strip();
+                if (who.length() > 40) {
+                    who = who.substring(0, 40);
+                }
+                String body = "{\"ref\":\"" + BRANCH + "\",\"inputs\":{\"by\":" + Json.writeCompact(who.isEmpty() ? "a visitor" : who)
+                        + ",\"run\":" + Json.writeCompact(String.valueOf(last.get("runId"))) + "}}";
+                java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(
+                                java.net.URI.create(API + "/actions/workflows/" + WORKFLOW + "/dispatches"))
+                        .timeout(java.time.Duration.ofSeconds(15)).header("Accept", "application/vnd.github+json")
+                        .header("Authorization", "Bearer " + t).header("User-Agent", "ai-code-verification-gate")
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body)).build();
+                java.net.http.HttpResponse<String> r = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (r.statusCode() == 204) {
+                    releases.add(now);
+                    ghCache = null;
+                    out.put("release", "started");
+                } else {
+                    out.put("release", "error");
+                    out.put("releaseError", "GitHub " + r.statusCode());
+                }
+            }
+        } catch (Exception e) {
+            out.put("release", "error");
+            out.put("releaseError", String.valueOf(e.getMessage()));
+        }
+        return out;
+    }
+
+    /** The newest run of the release workflow on GitHub (cached a few seconds). */
+    @SuppressWarnings("unchecked")
+    private synchronized Map<String, Object> latestRun(boolean fresh) throws Exception {
+        long now = System.currentTimeMillis();
+        if (ghCache != null && now - ghCachedAt < (fresh ? 0 : 8_000)) {
+            return ghCache;
+        }
+        java.net.http.HttpRequest.Builder b = java.net.http.HttpRequest.newBuilder(java.net.URI.create(
+                        API + "/actions/workflows/" + WORKFLOW + "/runs?per_page=1&branch=" + BRANCH))
+                .timeout(java.time.Duration.ofSeconds(10)).header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "ai-code-verification-gate");
+        String t = System.getenv("GH_DISPATCH_TOKEN");
+        if (t != null && !t.isBlank()) {
+            b.header("Authorization", "Bearer " + t);
+        }
+        java.net.http.HttpResponse<String> r = http.send(b.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (r.statusCode() != 200) {
+            throw new IllegalStateException("GitHub API " + r.statusCode());
+        }
+        List<Object> list = (List<Object>) Json.parseObject(r.body()).get("workflow_runs");
+        Map<String, Object> m = null;
+        if (list != null && !list.isEmpty()) {
+            Map<String, Object> x = (Map<String, Object>) list.get(0);
+            m = new LinkedHashMap<>();
+            m.put("status", x.get("status"));
+            m.put("conclusion", x.get("conclusion"));
+            m.put("url", x.get("html_url"));
+            m.put("title", x.get("display_title"));
+            m.put("createdAt", x.get("created_at"));
+            m.put("updatedAt", x.get("updated_at"));
+        }
+        ghCache = m;
+        ghCachedAt = now;
+        return m;
+    }
+
+    private Map<String, Object> releaseStatus(Session s) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("productionUrl", PRODUCTION_URL);
+        out.put("actionsUrl", "https://github.com/" + REPO + "/actions/workflows/" + WORKFLOW);
+        out.put("release", s.release);
+        try {
+            out.put("latest", latestRun(false));
+        } catch (Exception e) {
+            out.put("latestError", String.valueOf(e.getMessage()));
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------- send a fund order to each attempt's code

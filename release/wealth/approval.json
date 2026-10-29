@@ -1,0 +1,39 @@
+{
+  "scenario": "wealth",
+  "runId": "run-20261030-020738-a3",
+  "attempt": 3,
+  "candidateSha256": "32498b7feb8de067c5ab64b88773cb05233213c8dbce61431267411023aba9ad",
+  "decision": "APPROVED",
+  "approvedBy": "Rhosyn Wei",
+  "approvedAt": "2026-10-30T02:07:42+08:00",
+  "note": "Baseline production release. All gates passed, including the NF-05 null guard the gate added; the LOW overflow note is outside any real portfolio size.",
+  "acceptedHighFindings": 0,
+  "goldenVersion": "1.1",
+  "gates": [
+    {
+      "id": "G1",
+      "status": "PASSED"
+    },
+    {
+      "id": "G2",
+      "status": "PASSED"
+    },
+    {
+      "id": "G3",
+      "status": "PASSED"
+    },
+    {
+      "id": "G4",
+      "status": "PASSED"
+    },
+    {
+      "id": "G5",
+      "status": "WARNING"
+    },
+    {
+      "id": "G6",
+      "status": "PASSED"
+    }
+  ],
+  "releasedAt": "2026-10-30T02:07:42+08:00"
+}
