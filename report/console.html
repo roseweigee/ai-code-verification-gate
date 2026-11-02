@@ -208,6 +208,14 @@ table.prod .muted { color: var(--ink-2, #4b5a65); font-size: 13px; }
 #inbox .set { background: #F3F5F6; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
 #inbox .set label { display: block; font-size: 13px; color: var(--ink-2); margin: 8px 0 3px; }
 #inbox .set input[type=email], #inbox .set input[type=password] { width: 100%; font-size: 15px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+#inbox .rc { background: #F3F5F6; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+#inbox .rc .row { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0 0; }
+#inbox .rc .row .top { display: flex; gap: 8px; }
+#inbox .rc .row input[type=email] { flex: 1 1 60%; min-width: 0; font-size: 14px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; }
+#inbox .rc .row input[type=text] { flex: 1 1 40%; min-width: 0; font-size: 14px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; }
+#inbox .rc .evs { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 13px; }
+#inbox .rc .evs label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+#inbox .rc .rm { border: 0; background: none; color: var(--ink-2); cursor: pointer; font-size: 18px; padding: 0 4px; }
 #inbox .mail { border: 1px solid var(--line); border-top: 5px solid #9A6200; border-radius: 8px; margin: 0 0 12px; }
 #inbox .mail summary { padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 15px; }
 #inbox .mail summary small { display: block; font-weight: 400; color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
@@ -312,7 +320,16 @@ const T = {
     'h.cdNote': ' <b>In this demo, approving attempt 3 starts a real run here</b>, with its canary analysis and AIOps.',
     'ib.btn': 'Inbox', 'ib.h': '📬 Notification inbox', 'ib.lead': 'Every gate result and every decision sends this email to the developer and the approver. Each one appears here the moment it is sent.',
     'ib.empty': 'No notifications yet. Run attempt 1 on tab 02.', 'ib.new': '📬 NEW NOTIFICATION',
-    'ib.set': 'Also send them to my own email', 'ib.to': 'My email (receives the notifications)', 'ib.user': 'Sender: a Gmail address', 'ib.pw': 'Its Gmail app password (16 characters)',
+    'rc.h': '👥 Who gets which email', 'rc.lead': 'Add everyone who should be told: developers, the approver, auditors. Each person picks which emails they want.',
+    'rc.ev': { blocked: 'Blocked', ready: 'Needs approval', decision: 'Approved / rejected', evidence: 'Evidence pack' },
+    'rc.evHelp': { blocked: 'the gate stopped a change', ready: 'a named person must decide', decision: 'who decided, and why', evidence: 'the release evidence pack, attached' },
+    'rc.email': 'Email', 'rc.name': 'Name or role (optional)', 'rc.add': '+ Add a recipient', 'rc.save': 'Save recipients', 'rc.rm': 'Remove',
+    'rc.saved': n => `Saved: ${n} recipient(s).`, 'rc.max': n => `Up to ${n} recipients.`, 'rc.hosted': 'Cloud demo: up to 5 recipients for your workspace only, each limited to a few emails an hour.',
+    'rc.err': e => e.startsWith('invalid:') ? `Not an email address: ${e.slice(8)}` : e.startsWith('duplicate:') ? `Listed twice: ${e.slice(10)}` : e.startsWith('too-many:') ? `At most ${e.slice(9)} recipients.` : e,
+    'rc.none': 'No recipients yet.', 'rc.att': 'Attached',
+    'ev.h': 'Release evidence pack', 'ev.lead': 'One page from the spec to production: which spec, which code, every check, who approved, what was released. Every file with its SHA-256. It is emailed to the recipients who chose "Evidence pack".',
+    'ev.make': 'Create the evidence pack and email it', 'ev.again': 'Create again and email it', 'ev.open': 'Open the evidence pack',
+    'ib.set': '✉ Sender (Gmail) and test email', 'ib.to': 'My email (receives the notifications)', 'ib.user': 'Sender: a Gmail address', 'ib.pw': 'Its Gmail app password (16 characters)',
     'ib.pwHelp': 'Gmail: turn on 2-Step Verification, then create an app password at myaccount.google.com/apppasswords. Kept in memory on this computer only.',
     'ib.remember': 'Remember on this computer (saved to notify.properties, never committed)', 'ib.save': 'Save', 'ib.test': 'Send a test email',
     'ib.stOn': to => `Emails go to ${to}.`, 'ib.stTo': to => `Shown here for ${to}. Add a sender to also email it.`, 'ib.stOff': 'Not emailed yet: notifications appear in this inbox only.',
@@ -402,7 +419,16 @@ const T = {
     'h.cdNote': ' <b>在這個示範裡，核准第 3 次嘗試就會在這裡啟動一次真實的上線</b>，附金絲雀分析和 AIOps。',
     'ib.btn': '收件匣', 'ib.h': '📬 通知收件匣', 'ib.lead': '每一次關卡結果、每一個決定，都會寄這封信給開發者和核准人。信一寄出，就會出現在這裡。',
     'ib.empty': '還沒有通知。到 02 頁執行第 1 次嘗試。', 'ib.new': '📬 新的通知信',
-    'ib.set': '也寄到我自己的信箱', 'ib.to': '我的信箱（收通知）', 'ib.user': '寄件人：一個 Gmail 地址', 'ib.pw': '這個 Gmail 的應用程式密碼（16 碼）',
+    'rc.h': '👥 誰收到哪些通知信', 'rc.lead': '把需要知道的人都加進來：開發者、核准人、稽核。每個人可以選要收哪幾種信。',
+    'rc.ev': { blocked: '被擋下', ready: '等待核准', decision: '核准／退回', evidence: '上線證據包' },
+    'rc.evHelp': { blocked: '閘門擋下了變更', ready: '需要具名的人決定', decision: '誰決定的、為什麼', evidence: '上線證據包，附檔' },
+    'rc.email': 'Email', 'rc.name': '姓名或角色（可不填）', 'rc.add': '＋ 新增收件人', 'rc.save': '儲存收件人', 'rc.rm': '移除',
+    'rc.saved': n => `已儲存：${n} 位收件人。`, 'rc.max': n => `最多 ${n} 位收件人。`, 'rc.hosted': '雲端示範：只用在你的工作區，最多 5 位收件人，每個信箱每小時只寄幾封。',
+    'rc.err': e => e.startsWith('invalid:') ? `Email 格式不對：${e.slice(8)}` : e.startsWith('duplicate:') ? `重複了：${e.slice(10)}` : e.startsWith('too-many:') ? `最多 ${e.slice(9)} 位收件人。` : e,
+    'rc.none': '還沒有收件人。', 'rc.att': '附件',
+    'ev.h': '上線證據包', 'ev.lead': '一頁看完從規格到正式環境：照哪一版規格、哪一份程式、每一關的結果、誰核准、上線了什麼，每個檔案都附 SHA-256。會寄給勾選「上線證據包」的收件人。',
+    'ev.make': '產生上線證據包並寄出', 'ev.again': '重新產生並寄出', 'ev.open': '打開證據包',
+    'ib.set': '✉ 寄件人設定（Gmail）與測試信', 'ib.to': '我的信箱（收通知）', 'ib.user': '寄件人：一個 Gmail 地址', 'ib.pw': '這個 Gmail 的應用程式密碼（16 碼）',
     'ib.pwHelp': 'Gmail：先開啟兩步驟驗證，再到 myaccount.google.com/apppasswords 產生應用程式密碼。只存在這台電腦的記憶體裡。',
     'ib.remember': '在這台電腦記住（存到 notify.properties，不會上傳到 GitHub）', 'ib.save': '儲存', 'ib.test': '寄一封測試信',
     'ib.stOn': to => `通知信會寄到 ${to}。`, 'ib.stTo': to => `收件人：${to}。再填寄件人，就會真的寄出。`, 'ib.stOff': '尚未設定寄信：通知只會出現在這個收件匣。',
@@ -571,7 +597,51 @@ async function loadInbox() {
   if (INBOX_TOP !== null && mails.length && mails[0].id !== INBOX_TOP) popMail(mails[0]);
   INBOX_TOP = mails.length ? mails[0].id : ''; INBOX = mails;
   if (!HOSTED() && MAILSET === null) { try { MAILSET = await (await fetch('/api/mail/settings')).json(); } catch (e) { MAILSET = {}; } }
+  if (RCP === null) { await loadRecipients(); return; }
   renderInbox();
+}
+let RCP = null;
+async function loadRecipients() {
+  try { RCP = await (await fetch('/api/recipients')).json(); } catch (e) { RCP = { recipients: [], max: 5, events: [] }; }
+  RCP.rows = (RCP.recipients || []).map(r => ({ ...r }));
+  renderInbox();
+}
+function recipientsHtml() {
+  if (!RCP) return '';
+  const EV = RCP.events && RCP.events.length ? RCP.events : ['blocked', 'ready', 'decision', 'evidence'];
+  const rows = RCP.rows || [];
+  let h = `<details class="rc"${S.rcOpen !== false ? ' open' : ''}><summary style="cursor:pointer;font-weight:600">${t('rc.h')} <span class="note" style="font-weight:400;margin-left:6px">${rows.filter(r => r.email).length}</span></summary>
+    <div class="note" style="margin:6px 0 0;font-size:13px">${t('rc.lead')} ${HOSTED() ? t('rc.hosted') : t('rc.max', RCP.max)}</div>`;
+  h += rows.length ? rows.map((r, i) => `<div class="row" data-i="${i}"><div class="top">
+      <input type="email" class="rc-email" placeholder="${t('rc.email')}" value="${esc(r.email || '')}" maxlength="254" autocomplete="off">
+      <input type="text" class="rc-name" placeholder="${t('rc.name')}" value="${esc(r.name || '')}" maxlength="60">
+      <button class="rm" title="${t('rc.rm')}" aria-label="${t('rc.rm')}">✕</button></div>
+      <div class="evs">${EV.map(e => `<label title="${esc((t('rc.evHelp') || {})[e] || '')}"><input type="checkbox" class="rc-ev" value="${e}"${(r.events || []).includes(e) ? ' checked' : ''}> ${esc((t('rc.ev') || {})[e] || e)}</label>`).join('')}</div></div>`).join('')
+    : `<div class="note" style="margin:10px 0 0">${t('rc.none')}</div>`;
+  h += `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" id="rc-add"${rows.length >= RCP.max ? ' disabled' : ''}>${t('rc.add')}</button><button class="btn primary" id="rc-save">${t('rc.save')}</button></div>
+    <div class="note" id="rc-msg" style="margin:8px 0 0;font-weight:600;color:${S.rcErr ? 'var(--fail)' : 'var(--pass)'}">${esc(S.rcMsg || '')}</div></details>`;
+  return h;
+}
+function readRecipientRows() {
+  RCP.rows = [...document.querySelectorAll('#ib-body .rc .row')].map(el => ({
+    email: el.querySelector('.rc-email').value.trim(), name: el.querySelector('.rc-name').value.trim(),
+    events: [...el.querySelectorAll('.rc-ev:checked')].map(x => x.value) }));
+}
+function bindRecipients() {
+  const box = $('#ib-body .rc'); if (!box) return;
+  box.ontoggle = () => { S.rcOpen = box.open; };
+  box.querySelectorAll('.row .rm').forEach(b => b.onclick = () => { readRecipientRows(); RCP.rows.splice(+b.closest('.row').dataset.i, 1); S.rcMsg = ''; renderInbox(); });
+  const add = $('#rc-add'); if (add) add.onclick = () => { readRecipientRows(); RCP.rows.push({ email: '', name: '', events: ['blocked', 'ready', 'decision', 'evidence'] }); S.rcMsg = ''; renderInbox();
+    const all = document.querySelectorAll('#ib-body .rc .rc-email'); if (all.length) all[all.length - 1].focus(); };
+  const sv = $('#rc-save'); if (sv) sv.onclick = async () => {
+    readRecipientRows();
+    const list = RCP.rows.filter(r => r.email);
+    const r = await fetch('/api/recipients?' + new URLSearchParams({ list: JSON.stringify(list) }), { method: 'POST' });
+    const d = await r.json().catch(() => ({ error: '?' }));
+    if (d.error) { S.rcErr = true; S.rcMsg = t('rc.err', d.error); }
+    else { S.rcErr = false; RCP.recipients = d.recipients; RCP.rows = d.recipients.map(x => ({ ...x })); S.rcMsg = t('rc.saved', d.recipients.length); }
+    renderInbox();
+  };
 }
 function popMail(m) {
   const el = $('#mailpop'), st = S.mailStatus || '';
@@ -596,9 +666,11 @@ function renderInbox() {
       <div style="display:flex;gap:8px;margin-top:10px"><button class="btn primary" id="ib-save">${t('ib.save')}</button><button class="btn" id="ib-test"${M.canSend ? '' : ' disabled'}>${t('ib.test')}</button></div>
       <div class="note" id="ib-msg" style="margin:8px 0 0;font-weight:600">${esc(S.ibMsg || '')}</div></details>`;
   }
-  h += INBOX.length ? INBOX.map(m => `<details class="mail"${m.id === S.inboxOpen ? ' open' : ''}><summary>${esc(m.subject)}<small>To ${esc(m.to)} · ${esc(m.date)}</small></summary><pre>${esc(String(m.body || '').split('\n').filter(l => !l.startsWith('Report:')).join('\n').trim())}</pre></details>`).join('')
+  h += recipientsHtml();
+  h += INBOX.length ? INBOX.map(m => `<details class="mail"${m.id === S.inboxOpen ? ' open' : ''}><summary>${esc(m.subject)}<small>To ${esc(m.to)} · ${esc(m.date)}${(m.attachments || []).length ? ` · 📎 ${t('rc.att')}: ${m.attachments.map(esc).join(', ')}` : ''}</small></summary><pre>${esc(String(m.body || '').split('\n').filter(l => !l.startsWith('Report:')).join('\n').trim())}</pre></details>`).join('')
     : `<div class="empty">${t('ib.empty')}</div>`;
   $('#ib-body').innerHTML = h;
+  bindRecipients();
   const set = $('#ib-body .set'); if (set) set.ontoggle = () => { S.setOpen = set.open; };
   const sv = $('#ib-save'); if (sv) sv.onclick = async () => {
     const q = new URLSearchParams({ to: $('#ib-to').value.trim(), user: $('#ib-user').value.trim(), password: $('#ib-pw').value, remember: String($('#ib-rem').checked) });
@@ -734,6 +806,7 @@ document.addEventListener('click', e => {
   else if (a === 'reset') { S.attempt = null; S.tamper = null; act('reset', {}, b); }
   else if (a.startsWith('attempt')) { S.attempt = null; act(a, {}, b); }
   else if (a === 'production') act('production', { run: b.dataset.run }, b);
+  else if (a === 'evidence') act('evidence', { run: b.dataset.run }, b);
   else if (a === 'specblast') { setASub('sb'); act('specblast', {}, b); }
   else if (a === 'reject' || a === 'approve') {
     const box = b.closest('.decision') || document;
@@ -1097,8 +1170,15 @@ function attemptDetail(r, prev) {
     const d = g6.details;
     h += `<div class="decision"><h3>${t('a.decided', d.decision, esc(d.decidedBy))}</h3><p class="note" style="margin:0">${esc(d.decidedAt)}${d.note ? ' · ' + esc(d.note) : ''}</p></div>`;
   }
-  if (v === 'APPROVED') h += productionPanel(r);
+  if (v === 'APPROVED') h += productionPanel(r) + evidencePanel(r);
   return h;
+}
+function evidencePanel(r) {
+  const run = r.runPath || r.runId;
+  return `<div class="sub">${t('ev.h')}</div><div class="card"><div style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+    <p class="note" style="margin:0;max-width:70ch">${t('ev.lead')}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${r.evidence ? `<a class="btn" href="/api/evidence?run=${encodeURIComponent(run)}" target="_blank" rel="noopener">${t('ev.open')}</a>` : ''}
+    <button class="btn primary" data-act="evidence" data-run="${esc(run)}">${r.evidence ? t('ev.again') : t('ev.make')}</button></div></div></div>`;
 }
 function productionPanel(r) {
   const pc = r.productionCheck;

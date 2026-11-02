@@ -64,7 +64,10 @@ public final class ConsoleServer {
     static final int MAX_SESSIONS = 60;
     static final long SESSION_IDLE_MS = 3 * 3_600_000L;
     static final int ACTIONS_PER_HOUR = 60;
-    private static final List<String> MAIL_ACTIONS = List.of("attempt1", "attempt2", "attempt3", "approve", "reject");
+    private static final List<String> MAIL_ACTIONS = List.of("attempt1", "attempt2", "attempt3", "approve", "reject", "evidence");
+    /** The cloud demo is public: a visitor's workspace may email at most this many recipients. */
+    static final int MAX_RECIPIENTS_HOSTED = 5;
+    static final int MAX_RECIPIENTS_LOCAL = 30;
 
     /** One visitor's workspace: the shared, read-only repository plus a runs/ folder of its own. */
     static final class Session {
@@ -78,6 +81,8 @@ public final class ConsoleServer {
         /** Local console only: email settings typed in the page, kept in memory unless the person saves them. */
         volatile String mailUser = "";
         volatile String mailPassword = "";
+        /** Cloud demo: addresses over their rate limit for the current action (not emailed this time). */
+        volatile String mailSkip = "";
 
         Session(String id, Path root) {
             this.id = id;
@@ -233,6 +238,40 @@ public final class ConsoleServer {
                         Files.readString(root.resolve("report/console.html")));
                 case "/api/state" -> json(ex, state(ss));
                 case "/api/inbox" -> json(ex, Map.of("mails", inbox(ss)));
+                case "/api/recipients" -> {
+                    int max = hosted ? MAX_RECIPIENTS_HOSTED : MAX_RECIPIENTS_LOCAL;
+                    if ("POST".equals(ex.getRequestMethod())) {
+                        try {
+                            Object list = Json.parse(q.getOrDefault("list", "[]"));
+                            if (!(list instanceof List<?>)) {
+                                throw new IllegalArgumentException("invalid:list");
+                            }
+                            @SuppressWarnings("unchecked")
+                            List<Object> l = (List<Object>) list;
+                            json(ex, Map.of("recipients", dev.aiverify.notify.Recipients.toList(
+                                    dev.aiverify.notify.Recipients.save(ss.root, l, max)), "max", max));
+                        } catch (IllegalArgumentException e) {
+                            json(ex, 400, Map.of("error", String.valueOf(e.getMessage())));
+                        }
+                    } else {
+                        json(ex, Map.of("recipients", dev.aiverify.notify.Recipients.toList(
+                                dev.aiverify.notify.Recipients.load(ss.root)), "max", max,
+                                "events", dev.aiverify.notify.Recipients.EVENTS));
+                    }
+                }
+                case "/api/evidence" -> {
+                    String run = q.getOrDefault("run", "");
+                    if (!run.matches("(specblast/)?run-[0-9]{8}-[0-9]{6}-(a[0-9]+|sb)")) {
+                        json(ex, 400, Map.of("error", "unknown run"));
+                        return;
+                    }
+                    Path f = ss.root.resolve("runs").resolve(run).resolve("evidence/evidence.html").normalize();
+                    if (!f.startsWith(ss.root.resolve("runs")) || !Files.exists(f)) {
+                        json(ex, 404, Map.of("error", "no evidence pack for this run yet"));
+                        return;
+                    }
+                    send(ex, 200, "text/html; charset=utf-8", Files.readString(f));
+                }
                 case "/api/mail/settings" -> {
                     if (hosted) {
                         json(ex, 405, Map.of("error", "local console only"));
@@ -403,21 +442,47 @@ public final class ConsoleServer {
                 }
             }
             case "specblast" -> args.addAll(List.of("verify-specblast", SPECBLAST_PROJECT, "--code-only"));
+            case "evidence" -> {
+                args.add("evidence");
+                if (!addRun(args, q)) {
+                    throw new IllegalArgumentException("unknown run");
+                }
+            }
             case "audit" -> args.add("audit");
             default -> throw new IllegalArgumentException("unknown action");
         }
         String mailTo = null;
         String mailNote = null;
+        ss.mailSkip = "";
         if (hosted && MAIL_ACTIONS.contains(name)) {
+            // every address this action may email: the visitor's own and the recipients they set up; each is rate limited
+            List<String> addrs = new ArrayList<>();
+            if (!ss.email.isEmpty()) {
+                addrs.add(ss.email);
+            }
+            for (dev.aiverify.notify.Recipients.Recipient rc : dev.aiverify.notify.Recipients.load(ss.root)) {
+                if (addrs.stream().noneMatch(a -> a.equalsIgnoreCase(rc.email()))) {
+                    addrs.add(rc.email());
+                }
+            }
             if (!mailOn) {
                 mailNote = "off";
-            } else if (ss.email.isEmpty()) {
+            } else if (addrs.isEmpty()) {
                 mailNote = "no-address";
             } else {
-                String why = mailLimit.allow(ss.email, client, 1, false);
-                if (why == null) {
-                    mailTo = ss.email;
-                } else {
+                List<String> skip = new ArrayList<>();
+                String why = null;
+                for (String a : addrs) {
+                    String w = mailLimit.allow(a, client, 1, false);
+                    if (w != null) {
+                        skip.add(a);
+                        why = w;
+                    }
+                }
+                mailTo = !ss.email.isEmpty() && !skip.contains(ss.email) ? ss.email : "";
+                ss.mailSkip = String.join(",", skip);
+                if (skip.size() == addrs.size()) {
+                    mailTo = null;
                     mailNote = why;
                 }
             }
@@ -520,6 +585,7 @@ public final class ConsoleServer {
             env.remove("GH_DISPATCH_TOKEN");
             env.remove("DEMO_PASSWORD");
             env.put("NOTIFY_TO", mailTo == null ? "" : mailTo);
+            env.put("NOTIFY_SKIP", ss.mailSkip);
             if (mailTo == null) {
                 env.put("NOTIFY_ENABLED", "false");
             }
@@ -633,6 +699,7 @@ public final class ConsoleServer {
                         if (Files.exists(pc)) {
                             m.put("productionCheck", Json.parse(Files.readString(pc)));
                         }
+                        m.put("evidence", Files.exists(d.resolve("evidence/evidence.html")));
                         runs.add(m);
                     }
                 }
@@ -670,6 +737,7 @@ public final class ConsoleServer {
                     if (Files.exists(pc)) {
                         m.put("productionCheck", Json.parse(Files.readString(pc)));
                     }
+                    m.put("evidence", Files.exists(last.resolve("evidence/evidence.html")));
                     if (Files.exists(last.resolve("source.txt"))) {
                         m.put("source", Files.readString(last.resolve("source.txt")).strip());
                     }
@@ -799,12 +867,33 @@ public final class ConsoleServer {
                     }
                 }
             }
+            java.util.regex.Matcher bm = java.util.regex.Pattern.compile("boundary=\"([^\"]+)\"").matcher(head);
+            List<String> attached = new ArrayList<>();
+            if (bm.find()) {
+                // multipart: the first part is the text, the others are attachments
+                String text = "";
+                for (String part : body.split("--" + java.util.regex.Pattern.quote(bm.group(1)))) {
+                    int ps = part.indexOf("\r\n\r\n");
+                    if (ps < 0) {
+                        continue;
+                    }
+                    String ph = part.substring(0, ps);
+                    java.util.regex.Matcher fn = java.util.regex.Pattern.compile("filename=\"([^\"]+)\"").matcher(ph);
+                    if (fn.find()) {
+                        attached.add(fn.group(1));
+                    } else if (ph.contains("text/plain") && text.isEmpty()) {
+                        text = part.substring(ps + 4);
+                    }
+                }
+                body = text;
+            }
             try {
                 m.put("body", new String(java.util.Base64.getMimeDecoder().decode(body.trim()), StandardCharsets.UTF_8)
                         .replace("\r\n", "\n"));
             } catch (IllegalArgumentException e) {
                 m.put("body", body);
             }
+            m.put("attachments", attached);
             out.add(m);
         }
         return out;

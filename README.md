@@ -183,8 +183,18 @@ right). This needs no setup. To also receive them in your own mailbox (Gmail as 
 1. On the Gmail account that will send, turn on **2-Step Verification** (Google Account → Security).
 2. Open <https://myaccount.google.com/apppasswords>, create an app password (any name, e.g. "AI Gate") and copy
    the 16 characters. Spaces do not matter.
-3. In the console: 📬 Inbox → **Also send them to my own email** → your email, the sender Gmail address, the app
+3. In the console: 📬 Inbox → **Sender (Gmail) and test email** → your email, the sender Gmail address, the app
    password → **Save** → **Send a test email**. Tick *Remember* to keep it in `notify.properties` (ignored by git).
+
+**Who gets which email.** 📬 Inbox → **Who gets which email**: add any number of people (developers, the approver,
+auditors) and tick what each one receives: *Blocked*, *Needs approval*, *Approved / rejected*, *Evidence pack*.
+Saved in `config/recipients.json` (ignored by git). `notify.to` still receives everything. The cloud demo allows
+5 recipients per workspace, each rate limited.
+
+**Release evidence pack by email.** After an approval, **Create the evidence pack and email it** (or
+`./run.sh evidence --run RUN_ID`) builds one HTML page from the spec to production, every file with its SHA-256,
+and emails it with `evidence.html` and `manifest.json` attached to everyone who ticked *Evidence pack*.
+`--no-mail` builds it without sending.
 
 Or, without the console: copy `notify.properties.example` to `notify.properties`, fill it in, and run
 `./run.sh notify-test`.

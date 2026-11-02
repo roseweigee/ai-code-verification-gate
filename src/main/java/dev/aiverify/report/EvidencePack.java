@@ -1,6 +1,8 @@
 package dev.aiverify.report;
 
 import dev.aiverify.json.Json;
+import dev.aiverify.notify.GateMail;
+import dev.aiverify.notify.Notifier;
 import dev.aiverify.pipeline.AuditLog;
 import dev.aiverify.pipeline.Hashing;
 import java.io.IOException;
@@ -106,8 +108,13 @@ public final class EvidencePack {
         Path rel = root.resolve("release/iso8583/approval.json");
         if (Files.exists(rel)) {
             Map<String, Object> a = Json.parseObject(Files.readString(rel));
-            if (runId.equals(String.valueOf(a.get("runId")))) {
-                release = a;
+            boolean sameRun = runId.equals(String.valueOf(a.get("runId")));
+            boolean sameCode = String.valueOf(a.get("candidateSha256")).equals(String.valueOf(result.get("candidateSha256")));
+            if (sameRun || sameCode) {
+                release = new LinkedHashMap<>(a);
+                if (!sameRun) {
+                    release.put("sameCodeAs", "released as run " + a.get("runId") + " (byte-for-byte the same code)");
+                }
                 copy(rel, files, "release-approval.json", "Release record (what CD deploys)", items);
             }
         }
@@ -145,10 +152,20 @@ public final class EvidencePack {
         String manifestJson = Json.write(manifest);
         Files.writeString(out.resolve("manifest.json"), manifestJson);
 
+        Map<String, String> sum = new LinkedHashMap<>();
         String html = html(result, origin, project, decision, auditEntries, auditProblem, release, cd, canary, incident,
-                items, Hashing.sha256(manifestJson));
+                items, Hashing.sha256(manifestJson), sum);
         Path page = out.resolve("evidence.html");
         Files.writeString(page, html);
+        if (!opts.containsKey("no-mail")) {
+            String word = canary != null ? String.valueOf(canary.get("verdict"))
+                    : "APPROVED".equals(decision.get("decision")) ? "APPROVED" : String.valueOf(result.get("verdict"));
+            new Notifier(root).send(GateMail.evidence(runId, sum, word, List.of(
+                    new Notifier.Attachment("evidence-" + runId + ".html", "text/html; charset=UTF-8",
+                            html.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    new Notifier.Attachment("manifest.json", "application/json",
+                            manifestJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)))));
+        }
         return page;
     }
 
@@ -219,7 +236,7 @@ public final class EvidencePack {
     private static String html(Map<String, Object> result, String origin, Map<String, Object> project,
             Map<String, Object> decision, List<Map<String, Object>> audit, String auditProblem,
             Map<String, Object> release, Map<String, Object> cd, Map<String, Object> canary, String incident,
-            List<Item> items, String manifestSha) {
+            List<Item> items, String manifestSha, Map<String, String> sum) {
         StringBuilder b = new StringBuilder();
         String runId = String.valueOf(result.get("runId"));
         Map<String, Object> spec = result.get("specSource") instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
@@ -238,22 +255,22 @@ public final class EvidencePack {
 
         // the chain at a glance
         b.append("<ol class=\"chain\">");
-        step(b, "Spec 規格", spec == null ? null : true, spec == null ? "not recorded"
+        step(b, sum, "Spec 規格", spec == null ? null : true, spec == null ? "not recorded"
                 : "v" + spec.get("version") + " · locked by " + spec.get("approvedBy"));
-        step(b, "Code 程式", true, origin != null ? origin : "sha256 " + shortSha(result.get("candidateSha256")));
+        step(b, sum, "Code 程式", true, origin != null ? origin : "sha256 " + shortSha(result.get("candidateSha256")));
         boolean accepted = String.valueOf(decision.get("note")).contains("Accepted project findings");
-        step(b, "P1–P7 project", projectVerdict == null ? null : !"BLOCKED".equals(projectVerdict),
+        step(b, sum, "P1–P7 project", projectVerdict == null ? null : !"BLOCKED".equals(projectVerdict),
                 projectVerdict == null ? "not run" : projectVerdict + (accepted ? " · findings accepted by the approver" : ""));
-        step(b, "G1–G5 gates", gatesOk || approved, String.valueOf(result.get("verdict")));
-        step(b, "G6 human 人工核准", decision.isEmpty() ? null : approved,
+        step(b, sum, "G1–G5 gates", gatesOk || approved, String.valueOf(result.get("verdict")));
+        step(b, sum, "G6 human 人工核准", decision.isEmpty() ? null : approved,
                 decision.isEmpty() ? "waiting" : decision.get("decision") + " · " + decision.get("decidedBy"));
-        step(b, "Release 發布", release == null ? null : true, release == null ? "not released" : "released " + release.get("releasedAt"));
+        step(b, sum, "Release 發布", release == null ? null : true, release == null ? "not released" : "released " + release.get("releasedAt"));
         String cdNote = cd == null ? "not attached" : cd.containsKey("error") ? "unreadable"
                 : cd.get("conclusion") + " · " + cd.get("event");
-        step(b, "CD pipeline", cd == null || cd.containsKey("error") ? null : "success".equals(cd.get("conclusion")), cdNote);
-        step(b, "Canary 金絲雀", canary == null ? null : "PROMOTE".equals(canary.get("verdict")),
+        step(b, sum, "CD pipeline", cd == null || cd.containsKey("error") ? null : "success".equals(cd.get("conclusion")), cdNote);
+        step(b, sum, "Canary 金絲雀", canary == null ? null : "PROMOTE".equals(canary.get("verdict")),
                 canary == null ? "not attached" : String.valueOf(canary.get("verdict")));
-        step(b, "Feedback → spec", incident == null ? null : true, incident == null
+        step(b, sum, "Feedback → spec", incident == null ? null : true, incident == null
                 ? (canary != null && canary.get("incident") instanceof Map<?, ?> ci && ci.get("changed") instanceof Number c
                         && c.intValue() == 0 ? "nothing to feed back (no answer changed)" : "none")
                 : "next spec version drafted");
@@ -317,6 +334,9 @@ public final class EvidencePack {
         } else {
             kv(b, List.of("Released at", release.get("releasedAt"), "Code sha256", release.get("candidateSha256"),
                     "Matches the approved code", String.valueOf(release.get("candidateSha256")).equals(result.get("candidateSha256")) ? "yes" : "NO"));
+            if (release.get("sameCodeAs") != null) {
+                b.append("<p class=\"small\">").append(esc(release.get("sameCodeAs"))).append("</p>");
+            }
         }
         if (cd != null) {
             if (cd.containsKey("error")) {
@@ -417,7 +437,8 @@ public final class EvidencePack {
         return esc(s).replaceAll("`([^`]+)`", "<code>$1</code>");
     }
 
-    private static void step(StringBuilder b, String name, Boolean ok, String note) {
+    private static void step(StringBuilder b, Map<String, String> sum, String name, Boolean ok, String note) {
+        sum.put(name, (ok == null ? "–  " : ok ? "OK " : "NO ") + note);
         String cls = ok == null ? "na" : ok ? "ok" : "bad";
         b.append("<li class=\"").append(cls).append("\"><b>").append(esc(name)).append("</b><span>").append(esc(note))
                 .append("</span></li>");

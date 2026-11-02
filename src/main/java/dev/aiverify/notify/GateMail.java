@@ -45,7 +45,7 @@ public final class GateMail {
                     .append("  ./run.sh reject  --by \"Your Name\" --note \"reason\"\n");
         }
         b.append("\nReport: runs/report.html\n");
-        return new Notifier.Message(subject, b.toString());
+        return new Notifier.Message(subject, b.toString(), blocked ? "blocked" : "ready");
     }
 
     /** After a human decision. A rejection tells the developer why; its reason is the AI's next feedback. */
@@ -69,7 +69,24 @@ public final class GateMail {
                     .append("If the AI keeps failing, hand the task to a developer: the spec is usually the problem.\n");
         }
         b.append("The decision is recorded in runs/audit-log.jsonl (hash-chained, append-only).\n");
-        return new Notifier.Message(subject, b.toString());
+        return new Notifier.Message(subject, b.toString(), "decision");
+    }
+
+    /**
+     * The release evidence pack: one line per step of the chain, with evidence.html and manifest.json attached.
+     * {@code chain}: step name → one-line status, in order (from {@link dev.aiverify.report.EvidencePack}).
+     */
+    public static Notifier.Message evidence(String runId, Map<String, String> chain, String verdictWord,
+            List<Notifier.Attachment> files) {
+        String subject = "[AI Gate] Release evidence " + verdictWord + ": " + runId;
+        StringBuilder b = new StringBuilder();
+        b.append("上線證據包：這次變更從規格到正式環境的完整紀錄，附件 evidence.html 用瀏覽器打開即可。\n")
+                .append("Release evidence pack: this change from the locked spec to production. Open the attached evidence.html.\n\n");
+        b.append("Run: ").append(runId).append("\n\n");
+        chain.forEach((k, v) -> b.append("  ").append(oneLine(v).startsWith("OK") ? "✔ " : oneLine(v).startsWith("NO") ? "✘ " : "· ")
+                .append(k).append(": ").append(oneLine(v).substring(Math.min(3, oneLine(v).length()))).append('\n'));
+        b.append("\nEvery file in the pack is listed with its SHA-256 in manifest.json: change one byte and it no longer matches.\n");
+        return new Notifier.Message(subject, b.toString(), "evidence", files);
     }
 
     private static String next(Object attempt) {

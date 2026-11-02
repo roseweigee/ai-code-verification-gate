@@ -57,13 +57,50 @@ public final class Notifier {
         }
     }
 
-    /** A message to send. The body is plain text. */
-    public record Message(String subject, String body) {
+    /** A file attached to a message. */
+    public record Attachment(String name, String contentType, byte[] data) {
+    }
+
+    /**
+     * A message to send. The body is plain text. {@code event} picks the extra recipients from
+     * config/recipients.json (see {@link Recipients}); {@code notify.to} always receives it.
+     */
+    public record Message(String subject, String body, String event, List<Attachment> attachments) {
+        public Message(String subject, String body) {
+            this(subject, body, "", List.of());
+        }
+
+        public Message(String subject, String body, String event) {
+            this(subject, body, event, List.of());
+        }
+    }
+
+    /** notify.to plus the recipients that asked for this event, without duplicates and without NOTIFY_SKIP. */
+    String to(Message m) {
+        java.util.Set<String> skip = new java.util.HashSet<>();
+        for (String x : get("notify.skip", "NOTIFY_SKIP", "").split(",")) {
+            if (!x.isBlank()) {
+                skip.add(x.trim().toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        java.util.LinkedHashMap<String, String> all = new java.util.LinkedHashMap<>();
+        for (String x : get("notify.to", "NOTIFY_TO", "").split(",")) {
+            if (!x.isBlank()) {
+                all.putIfAbsent(x.trim().toLowerCase(java.util.Locale.ROOT), x.trim());
+            }
+        }
+        if (!"false".equalsIgnoreCase(get("notify.recipients", "NOTIFY_RECIPIENTS", "true")) && !m.event().isBlank()) {
+            for (String x : Recipients.forEvent(root, m.event())) {
+                all.putIfAbsent(x.toLowerCase(java.util.Locale.ROOT), x);
+            }
+        }
+        skip.forEach(all::remove);
+        return String.join(", ", all.values());
     }
 
     /** Saves the message to the outbox, sends it if configured, and prints one line saying what happened. */
     public void send(Message m) {
-        String to = get("notify.to", "NOTIFY_TO", "");
+        String to = to(m);
         String user = get("smtp.user", "SMTP_USER", "");
         String from = user.isBlank() ? "ai-gate@localhost" : user;
         String eml = toEml(from, to.isBlank() ? "(not configured)" : to, m);
@@ -79,7 +116,7 @@ public final class Notifier {
         }
         String where = saved == null ? "" : " Saved to " + root.relativize(saved) + ".";
         if (to.isBlank()) {
-            System.out.println("Email: no recipient set in notify.properties, so nothing was sent." + where);
+            System.out.println("Email: no recipient set (notify.properties or the console's notification page), so nothing was sent." + where);
             return;
         }
         if ("false".equalsIgnoreCase(get("notify.enabled", "NOTIFY_ENABLED", "true"))) {
@@ -96,7 +133,7 @@ public final class Notifier {
             smtp(get("smtp.host", "SMTP_HOST", "smtp.gmail.com"),
                     Integer.parseInt(get("smtp.port", "SMTP_PORT", "465")), security, user, password,
                     from, recipients(to), eml);
-            System.out.println("Email sent to " + to + ": " + m.subject());
+            System.out.println("Email sent to " + recipients(to).size() + " recipient(s): " + m.subject());
         } catch (IOException | RuntimeException e) {
             System.out.println("Email not sent (" + e.getMessage() + ")." + where);
         }
@@ -150,18 +187,35 @@ public final class Notifier {
     public static String toEml(String from, String to, Message m) {
         String date = ZonedDateTime.now().truncatedTo(ChronoUnit.SECONDS)
                 .format(DateTimeFormatter.RFC_1123_DATE_TIME);
-        String body = Base64.getMimeEncoder(76, "\r\n".getBytes(StandardCharsets.US_ASCII))
-                .encodeToString(m.body().replace("\r\n", "\n").replace("\n", "\r\n")
-                        .getBytes(StandardCharsets.UTF_8));
-        return "From: AI Code Verification Gate <" + from + ">\r\n"
+        Base64.Encoder enc = Base64.getMimeEncoder(76, "\r\n".getBytes(StandardCharsets.US_ASCII));
+        String body = enc.encodeToString(m.body().replace("\r\n", "\n").replace("\n", "\r\n")
+                .getBytes(StandardCharsets.UTF_8));
+        String head = "From: AI Code Verification Gate <" + from + ">\r\n"
                 + "To: " + to + "\r\n"
                 + "Subject: " + encodeHeader(m.subject()) + "\r\n"
                 + "Date: " + date + "\r\n"
-                + "MIME-Version: 1.0\r\n"
-                + "Content-Type: text/plain; charset=UTF-8\r\n"
-                + "Content-Transfer-Encoding: base64\r\n"
-                + "\r\n"
-                + body + "\r\n";
+                + "MIME-Version: 1.0\r\n";
+        if (m.attachments().isEmpty()) {
+            return head + "Content-Type: text/plain; charset=UTF-8\r\n"
+                    + "Content-Transfer-Encoding: base64\r\n"
+                    + "\r\n"
+                    + body + "\r\n";
+        }
+        String b = "=_aigate_" + Long.toHexString(System.nanoTime());
+        StringBuilder out = new StringBuilder(head)
+                .append("Content-Type: multipart/mixed; boundary=\"").append(b).append("\"\r\n\r\n")
+                .append("--").append(b).append("\r\n")
+                .append("Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n")
+                .append(body).append("\r\n");
+        for (Attachment a : m.attachments()) {
+            String name = a.name().replaceAll("[^A-Za-z0-9._-]", "_");
+            out.append("--").append(b).append("\r\n")
+                    .append("Content-Type: ").append(a.contentType()).append("; name=\"").append(name).append("\"\r\n")
+                    .append("Content-Disposition: attachment; filename=\"").append(name).append("\"\r\n")
+                    .append("Content-Transfer-Encoding: base64\r\n\r\n")
+                    .append(enc.encodeToString(a.data())).append("\r\n");
+        }
+        return out.append("--").append(b).append("--\r\n").toString();
     }
 
     public static String encodeHeader(String s) {

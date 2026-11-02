@@ -6,3 +6,4 @@ target/
 .DS_Store
 notify.properties
 chain-runs/
+config/recipients.json
