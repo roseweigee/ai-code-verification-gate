@@ -184,14 +184,22 @@ function s1() {
       (sp.rules || []).map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.text)}</td><td class="mono">${esc(r.result)}</td><td>${(r.examples || []).length}</td></tr>`).join('') + `</table></div>`;
     b += `<div class="controls"><span class="chip ${err.length ? 'bad' : 'ok'}">${err.length} 個 ERROR</span><span class="chip ${warn.length ? 'warn' : 'ok'}">${warn.length} 個 WARNING</span></div>`;
     if (err.length) b += `<details open><summary>要 PM 回答的問題（${err.length}）</summary><ul class="small">` + err.map(x => `<li><b class="mono">${esc(x.where || '')}</b> ${esc(x.ask || x.message)}</li>`).join('') + `</ul></details>`;
-    b += `<div class="controls">${nameInput('lockby')}<button class="btn human" data-step="lock">鎖版 v1.0</button>`;
-    if (D.approval) b += `<button class="btn primary" data-step="export">匯出給 SpecBlast 與閘門</button><button class="btn danger" data-step="tamper">負面測試：鎖版後偷改再匯出</button>`;
-    b += `</div>`;
+    if (err.length && !D.approval) {
+      b += `<div class="msg err"><b>這份規格還不能鎖版：</b>有 ${err.length} 個問題 PM 還沒回答。SpecForge 不會替 PM 猜答案，所以鎖版會被拒絕，也不能交給 SpecBlast。<br>
+        正常流程：PM 回答這些問題 → SpecForge 把答案寫回規格（refine）→ 0 個 ERROR 才能鎖版。這裡請改選上面的「已回答版」，那是同一個需求、PM 回答完之後的規格。</div>`;
+      b += `<div class="controls">${nameInput('lockby')}<button class="btn danger" data-step="lock">負面測試：硬要鎖版，看會不會被擋</button></div>`;
+    } else {
+      b += `<div class="controls">${nameInput('lockby')}<button class="btn human" data-step="lock">鎖版 v1.0</button>`;
+    }
+    if (!(err.length && !D.approval)) {
+      if (D.approval) b += `<button class="btn primary" data-step="export">匯出給 SpecBlast 與閘門</button><button class="btn danger" data-step="tamper">負面測試：鎖版後偷改再匯出</button>`;
+      b += `</div>`;
+    }
     if (D.approval) b += `<dl class="kv"><dt>鎖版人</dt><dd>${esc(D.approval.by)}</dd><dt>時間</dt><dd>${esc(D.approval.at)}</dd><dt>版本</dt><dd>v${esc(D.approval.version)}</dd><dt>SHA-256</dt><dd class="mono">${esc(D.approval.sha256)}</dd></dl>`;
     if (D.exported && D.exported.length) b += `<div class="msg ok">已匯出：${D.exported.map(x => `<code>${esc(x)}</code>`).join('、')}${D.goldenCount != null ? `，黃金測試 ${D.goldenCount} 個` : ''}</div>`;
   }
   return card('s1', '不同 PM 寫法不一樣：SpecForge 把文件整理成同一種格式。文件沒寫清楚的地方變成問題，不讓 AI 猜；有 ERROR 就不能鎖版。鎖版的人與 SHA-256 會跟著後面每一步。', b, [
-    '選「PM A 的 Email」→ 載入：看到 12 個以上的問題與 ERROR；按鎖版會被拒絕（Refused: … ERROR finding(s) remain）。',
+    '選「PM A 的 Email」→ 載入：看到 15 個問題與 ERROR，紅框說明還不能鎖版；按「負面測試：硬要鎖版」→ 被拒絕（Refused: … ERROR finding(s) remain），這是正確結果。',
     '選「已回答版」→ 載入：0 個 ERROR；填名字按鎖版 → 出現鎖版人、時間、SHA-256（524608bf…）。',
     '按匯出 → 出現 4 個檔案、黃金測試 9 個。',
     '負面測試：按「鎖版後偷改再匯出」→ 輸出 Only an approved, unchanged spec can be exported。']);
