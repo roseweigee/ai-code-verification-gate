@@ -1,0 +1,324 @@
+{
+  "_about": "Reference spec written by hand from spec/authorization-precheck.md of the quality gate. NOT AI output: it shows what a complete canonical spec looks like, so check, lock and export can be tried without an API key.",
+  "title": "Card authorization pre-check",
+  "purpose": "Before a request is sent to the issuer, decline locally what can be declined locally. Returns an ISO 8583 response code (DE 39).",
+  "fields": [
+    {
+      "name": "pan",
+      "type": "string",
+      "required": true,
+      "description": "Card number",
+      "source": "pan · DE 2"
+    },
+    {
+      "name": "expiry",
+      "type": "yymm",
+      "required": true,
+      "description": "Expiry date YYMM",
+      "source": "expiry · DE 14 · format YYMM"
+    },
+    {
+      "name": "amountMinor",
+      "type": "money",
+      "required": true,
+      "description": "Amount in minor units",
+      "source": "amountMinor · DE 4"
+    },
+    {
+      "name": "availableMinor",
+      "type": "money",
+      "required": true,
+      "description": "Available balance in minor units",
+      "source": "availableMinor"
+    },
+    {
+      "name": "transactionDate",
+      "type": "date",
+      "required": true,
+      "description": "Transaction date",
+      "source": "transactionDate"
+    }
+  ],
+  "rules": [
+    {
+      "order": 1,
+      "text": "Required fields present; expiry is YYMM with month 01-12",
+      "match": "any",
+      "conditions": [
+        {
+          "field": "pan",
+          "op": "missing"
+        },
+        {
+          "field": "expiry",
+          "op": "missing"
+        },
+        {
+          "field": "amountMinor",
+          "op": "missing"
+        },
+        {
+          "field": "availableMinor",
+          "op": "missing"
+        },
+        {
+          "field": "transactionDate",
+          "op": "missing"
+        },
+        {
+          "field": "expiry",
+          "op": "notMatches",
+          "value": "^[0-9]{2}(0[1-9]|1[0-2])$"
+        }
+      ],
+      "result": "30",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2613",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "30",
+          "note": "Month 13"
+        },
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": ""
+          },
+          "expected": "30",
+          "note": "No transaction date"
+        }
+      ],
+      "source": "AC-01 pan, expiry must not be null. expiry must be exactly 4 digits, and its month (MM) must be 01-12."
+    },
+    {
+      "order": 2,
+      "text": "Card number is 13-19 digits and passes Luhn",
+      "match": "any",
+      "conditions": [
+        {
+          "field": "pan",
+          "op": "notMatches",
+          "value": "^[0-9]{13,19}$"
+        },
+        {
+          "field": "pan",
+          "op": "failsCheck",
+          "value": "luhn"
+        }
+      ],
+      "result": "14",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111112",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "14",
+          "note": "Luhn fails"
+        },
+        {
+          "input": {
+            "pan": "４111111111111111",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "14",
+          "note": "Full-width digit"
+        }
+      ],
+      "source": "AC-02 pan must be 13-19 digits (digits only) and pass the Luhn check."
+    },
+    {
+      "order": 3,
+      "text": "Expired only after the last day of the expiry month",
+      "conditions": [
+        {
+          "field": "transactionDate",
+          "op": ">",
+          "value": "lastDayOf(expiry)"
+        }
+      ],
+      "result": "54",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-31"
+          },
+          "expected": "00",
+          "note": "Last day of the expiry month is still valid",
+          "boundary": true
+        },
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-11-01"
+          },
+          "expected": "54",
+          "note": "Day after the expiry month"
+        }
+      ],
+      "source": "AC-03 The card is valid through the last day of its expiry month."
+    },
+    {
+      "order": 4,
+      "text": "Amount greater than 0",
+      "conditions": [
+        {
+          "field": "amountMinor",
+          "op": "<=",
+          "value": 0
+        }
+      ],
+      "result": "13",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 0,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "13",
+          "note": "Zero amount",
+          "boundary": true
+        }
+      ],
+      "source": "AC-04 amountMinor must be greater than 0."
+    },
+    {
+      "order": 5,
+      "text": "Amount not above the available balance (equal is allowed)",
+      "conditions": [
+        {
+          "field": "amountMinor",
+          "op": ">",
+          "value": {
+            "field": "availableMinor"
+          }
+        }
+      ],
+      "result": "51",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 5000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "00",
+          "note": "Amount equal to the balance is allowed",
+          "boundary": true
+        },
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 5001,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "51",
+          "note": "One cent over"
+        }
+      ],
+      "source": "AC-05 amountMinor must not exceed availableMinor. An amount equal to the available balance is allowed."
+    },
+    {
+      "order": 6,
+      "text": "Otherwise approve",
+      "conditions": [
+        {
+          "op": "always"
+        }
+      ],
+      "result": "00",
+      "examples": [
+        {
+          "input": {
+            "pan": "4111111111111111",
+            "expiry": "2610",
+            "amountMinor": 1000,
+            "availableMinor": 5000,
+            "transactionDate": "2026-10-15"
+          },
+          "expected": "00",
+          "note": "Normal purchase"
+        }
+      ],
+      "source": "AC-06 Otherwise approve."
+    }
+  ],
+  "resultCodes": [
+    {
+      "code": "00",
+      "meaning": "Approved"
+    },
+    {
+      "code": "13",
+      "meaning": "Invalid amount"
+    },
+    {
+      "code": "14",
+      "meaning": "Invalid card number"
+    },
+    {
+      "code": "30",
+      "meaning": "Format error"
+    },
+    {
+      "code": "51",
+      "meaning": "Insufficient funds"
+    },
+    {
+      "code": "54",
+      "meaning": "Expired card"
+    }
+  ],
+  "nonFunctional": [
+    {
+      "text": "No card number in logs or on the console (PCI DSS), 0 occurrences allowed",
+      "source": "NF-01"
+    }
+  ],
+  "api": [
+    {
+      "method": "POST",
+      "path": "/authorizations/precheck",
+      "summary": "Pre-check one authorization request",
+      "request": [
+        "pan",
+        "expiry",
+        "amountMinor",
+        "availableMinor",
+        "transactionDate"
+      ],
+      "response": [
+        "resultCode"
+      ]
+    }
+  ],
+  "openQuestions": []
+}

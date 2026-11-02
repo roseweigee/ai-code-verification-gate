@@ -1,0 +1,16 @@
+-- Card Authorization Pre-check 資料庫 Migration
+-- 僅供 SIT / UAT / PROD MySQL 使用
+-- 此服務為無狀態純規則引擎，當前版本不需要資料表
+-- 預留此檔案供未來擴充稽核記錄用途
+
+-- 若未來需要授權記錄資料表，可於此新增：
+-- CREATE TABLE IF NOT EXISTS authorization_audit_log (
+--   id            BIGINT       NOT NULL AUTO_INCREMENT,
+--   result_code   VARCHAR(2)   NOT NULL COMMENT 'ISO 8583 DE 39',
+--   expiry        VARCHAR(4)   NOT NULL COMMENT 'YYMM',
+--   amount_minor  BIGINT       NOT NULL,
+--   available_minor BIGINT     NOT NULL,
+--   transaction_date DATE      NOT NULL,
+--   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--   PRIMARY KEY (id)
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='授權預檢稽核記錄';

@@ -1,0 +1,74 @@
+# The whole chain in CI: SpecForge -> SpecBlast output -> quality gate (P1-P7, G1-G5) -> named approver (G6)
+# -> release (--no-push) -> canary + AIOps -> evidence pack -> incident back to SpecForge (with the drill).
+# Nothing is deployed: chain/run-chain.sh works in a copy with --no-push. The evidence pack and all outputs are
+# uploaded as the run's artifact.
+#
+# SpecForge is checked out from roseweigee/specforge. If that repository is private, add a fine-grained token with
+# read access to it as the secret SPECFORGE_TOKEN.
+# The SpecBlast project is chain/examples/specblast-output (real SpecBlast output, see chain/examples/SOURCE.txt),
+# so no AI key is needed. With the secret ANTHROPIC_API_KEY, G5 (independent AI review) runs too.
+name: Whole chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      approver:
+        description: 'Who approves the code (G6) and locks the spec'
+        required: true
+      accept_project_findings:
+        description: 'Go on past P1-P7 errors (each one is named in the approval)'
+        type: boolean
+        default: true
+      drill:
+        description: 'Also run the incident drill (seeded defects as a canary, feedback to the spec)'
+        type: boolean
+        default: true
+
+concurrency:
+  group: whole-chain
+  cancel-in-progress: false
+
+jobs:
+  chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: gate
+      - uses: actions/checkout@v4
+        with:
+          repository: roseweigee/specforge
+          path: specforge
+          token: ${{ secrets.SPECFORGE_TOKEN || github.token }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run the chain
+        env:
+          SPECFORGE: ${{ github.workspace }}/specforge
+          SPEC_OWNER: ${{ inputs.approver }}
+          APPROVER: ${{ inputs.approver }}
+          ACCEPT_PROJECT_FINDINGS: ${{ inputs.accept_project_findings && '1' || '0' }}
+          DRILL: ${{ inputs.drill && '1' || '0' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd gate
+          chmod +x chain/run-chain.sh ../specforge/run.sh
+          chain/run-chain.sh chain/examples/spec.canonical.json chain/examples/specblast-output
+      - name: Summary
+        if: always()
+        run: |
+          cd gate
+          W=$(ls -d chain-runs/* 2>/dev/null | tail -1)
+          [ -n "$W" ] || exit 0
+          { echo "## Whole chain"; echo; echo '```'; sed 's/\x1b\[[0-9;]*m//g' "$W/chain.log" | grep -E '^== |verdict|Verdict|G[1-6] |P[1-7] |Incident:|human golden' ; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p ../out && cp -r "$W/export" "$W/chain.log" ../out/
+          cp -r "$W"/gate/runs/specblast/*/evidence ../out/ 2>/dev/null || true
+          [ -d "$W/drill" ] && mkdir -p ../out/drill && cp -r "$W/drill/incident" "$W/drill/canary-result.json" ../out/drill/ || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chain-evidence
+          path: out

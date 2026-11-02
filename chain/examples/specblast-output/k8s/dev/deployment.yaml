@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: card-auth-precheck
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: card-auth-precheck
+  template:
+    metadata:
+      labels:
+        app: card-auth-precheck
+    spec:
+      containers:
+        - name: card-auth-precheck
+          image: card-auth-precheck:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: dev
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: card-auth-precheck
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: card-auth-precheck
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
