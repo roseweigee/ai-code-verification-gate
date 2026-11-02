@@ -10,6 +10,12 @@
 name: Whole chain
 
 on:
+  # a push that changes the chain runs it too, approved in the owner's name (marked as a CI run)
+  push:
+    branches: [main]
+    paths:
+      - 'chain/**'
+      - '.github/workflows/chain.yml'
   workflow_dispatch:
     inputs:
       approver:
@@ -48,10 +54,10 @@ jobs:
       - name: Run the chain
         env:
           SPECFORGE: ${{ github.workspace }}/specforge
-          SPEC_OWNER: ${{ inputs.approver }}
-          APPROVER: ${{ inputs.approver }}
-          ACCEPT_PROJECT_FINDINGS: ${{ inputs.accept_project_findings && '1' || '0' }}
-          DRILL: ${{ inputs.drill && '1' || '0' }}
+          SPEC_OWNER: ${{ inputs.approver || 'Rhosyn Wei (CI run)' }}
+          APPROVER: ${{ inputs.approver || 'Rhosyn Wei (CI run)' }}
+          ACCEPT_PROJECT_FINDINGS: ${{ (github.event_name == 'push' || inputs.accept_project_findings) && '1' || '0' }}
+          DRILL: ${{ (github.event_name == 'push' || inputs.drill) && '1' || '0' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           cd gate
