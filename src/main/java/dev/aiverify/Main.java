@@ -42,7 +42,43 @@ public final class Main {
         }
     }
 
+    /** --spec-file / --golden-file: a spec and golden tests exported by SpecForge, used instead of the repo's. */
+    private static Map<String, String> specOpts = Map.of();
+
+    @SuppressWarnings("unchecked")
+    static void applySpecInputs(RunContext ctx) throws IOException {
+        if (specOpts.containsKey("spec-file")) {
+            ctx.specFile = Path.of(specOpts.get("spec-file")).toAbsolutePath();
+        }
+        if (specOpts.containsKey("golden-file")) {
+            ctx.goldenFile = Path.of(specOpts.get("golden-file")).toAbsolutePath();
+            Map<String, Object> g = Json.parseObject(Files.readString(ctx.goldenFile));
+            Map<String, Object> src = new LinkedHashMap<>();
+            Object spec = g.get("spec");
+            if (spec instanceof Map<?, ?> m) {
+                src.putAll((Map<String, Object>) m);
+            }
+            src.put("goldenFile", ctx.goldenFile.getFileName().toString());
+            src.put("goldenSha256", Hashing.sha256(Files.readString(ctx.goldenFile)));
+            if (ctx.specFile != null) {
+                src.put("specFileSha256", Hashing.sha256(Files.readString(ctx.specFile)));
+            }
+            ctx.specSource = src;
+            // keep the exact inputs with the run, for the evidence pack
+            Path in = ctx.runDir.resolve("inputs");
+            Files.createDirectories(in);
+            Files.copy(ctx.goldenFile, in.resolve("golden-tests.json"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            if (ctx.specFile != null) {
+                Files.copy(ctx.specFile, in.resolve("spec.md"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            System.out.println("  spec: " + src.getOrDefault("title", "?") + " v" + src.getOrDefault("version", "?")
+                    + ", locked by " + src.getOrDefault("approvedBy", "?") + ", sha256 "
+                    + String.valueOf(src.getOrDefault("sha256", "?")).substring(0, Math.min(12, String.valueOf(src.getOrDefault("sha256", "?")).length())) + "...");
+        }
+    }
+
     private static void dispatch(String cmd, Map<String, String> opts) throws Exception {
+        specOpts = opts;
         switch (cmd) {
             case "demo" -> demo(opts.containsKey("full"));
             case "run" -> run(Integer.parseInt(opts.getOrDefault("attempt", "1")), opts.containsKey("live"),
@@ -164,6 +200,7 @@ public final class Main {
         }
         RunContext ctx = new RunContext(ROOT, runDir, runId, attempt, ai);
         ctx.goldenVersion = goldenVersion;
+        applySpecInputs(ctx);
         Map<String, Object> result = new Pipeline().run(ctx, feedback);
         System.out.println("Report: " + ROOT.relativize(ReportWriter.write(ROOT)));
         new Notifier(ROOT).send(GateMail.runFinished(result));
@@ -206,6 +243,7 @@ public final class Main {
         Files.writeString(runDir.resolve("source.txt"), project.relativize(rulesFile) + "\n" + origin + "\n");
         RunContext ctx = new RunContext(ROOT, runDir, runId, 1, ai);
         ctx.goldenVersion = "1.1";
+        applySpecInputs(ctx);
         Map<String, Object> result = new Pipeline().run(ctx, null);
         new Notifier(ROOT).send(GateMail.runFinished(result));
         System.out.println();
@@ -369,6 +407,10 @@ public final class Main {
         approval.put("note", decision.get("note"));
         approval.put("acceptedHighFindings", decision.get("acceptedHighFindings"));
         approval.put("gates", gateSummary);
+        if (result.get("specSource") != null) {
+            approval.put("specSource", result.get("specSource")); // which locked spec this code was approved against
+        }
+        approval.put("inputs", result.get("inputs"));
         approval.put("releasedAt", OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Path dir = ROOT.resolve("release/iso8583");
         Files.createDirectories(dir);
@@ -474,6 +516,10 @@ public final class Main {
         }
         System.out.println("  Approved by " + a.get("approvedBy") + " at " + a.get("approvedAt")
                 + (a.get("note") == null || String.valueOf(a.get("note")).isBlank() ? "" : ": " + a.get("note")));
+        if (a.get("specSource") instanceof Map<?, ?> sp) {
+            System.out.println("  Against spec: " + sp.get("title") + " v" + sp.get("version") + ", locked by " + sp.get("approvedBy")
+                    + ", sha256 " + String.valueOf(sp.get("sha256")).substring(0, Math.min(12, String.valueOf(sp.get("sha256")).length())) + "...");
+        }
         Object high = a.get("acceptedHighFindings");
         if (high instanceof Number n && n.longValue() > 0) {
             System.out.println("  WARNING: the approver accepted " + n + " HIGH AI finding(s).");

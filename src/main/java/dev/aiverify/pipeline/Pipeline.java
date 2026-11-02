@@ -144,6 +144,9 @@ public final class Pipeline {
         result.put("candidateSource", ctx.candidateSource);
         result.put("candidateSha256", Hashing.sha256(ctx.candidateSource));
         result.put("inputs", inputHashes(ctx));
+        if (ctx.specSource != null) {
+            result.put("specSource", ctx.specSource); // the locked SpecForge spec this run was judged against
+        }
         result.put("aiExchanges", ctx.aiExchanges);
         result.put("responsibleAi", responsibleAi(ctx));
         List<Map<String, Object>> gateMaps = new ArrayList<>();
@@ -175,14 +178,15 @@ public final class Pipeline {
 
     private static void loadInputs(RunContext ctx) {
         try {
-            ctx.spec = Files.readString(ctx.projectRoot.resolve("spec/authorization-precheck.md"));
+            ctx.spec = Files.readString(ctx.specFile != null ? ctx.specFile
+                    : ctx.projectRoot.resolve("spec/authorization-precheck.md"));
             ctx.contractSource = Files.readString(ctx.projectRoot.resolve(
                     "src/main/java/dev/aiverify/contract/AuthorizationPrecheck.java"))
                     + "\n" + Files.readString(ctx.projectRoot.resolve(
                     "src/main/java/dev/aiverify/contract/AuthRequest.java"));
-            ctx.goldenTests = TestCase.fromJson(Json.parse(Files.readString(
-                    ctx.projectRoot.resolve("tests/golden/acceptance-cases.json"))), "golden")
-                    .stream().filter(t -> t.includedIn(ctx.goldenVersion)).toList();
+            Path golden = ctx.goldenFile != null ? ctx.goldenFile : ctx.projectRoot.resolve("tests/golden/acceptance-cases.json");
+            ctx.goldenTests = TestCase.fromJson(Json.parse(Files.readString(golden)), "golden")
+                    .stream().filter(t -> ctx.goldenFile != null || t.includedIn(ctx.goldenVersion)).toList();
         } catch (IOException e) {
             throw new UncheckedIOException("Could not read pipeline inputs: " + e.getMessage(), e);
         }

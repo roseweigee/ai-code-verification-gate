@@ -24,6 +24,11 @@ public final class RunContext {
     public final LlmClient ai;
 
     public String goldenVersion = "latest";
+    /** Optional: a spec and golden tests exported by SpecForge (locked by a named owner), instead of the repo's. */
+    public Path specFile;
+    public Path goldenFile;
+    /** Where the spec came from: {tool, title, version, approvedBy, sha256}; null for the repo's own spec. */
+    public Map<String, Object> specSource;
     public String spec;
     public String contractSource;
     public String candidateSource;

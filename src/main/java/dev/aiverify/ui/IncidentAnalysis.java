@@ -165,7 +165,16 @@ final class IncidentAnalysis {
             if (!where.isEmpty()) {
                 gs.append(",\"crash\":\"").append(esc(where)).append("\"");
             }
-            gs.append(",\"line\":").append(line).append(",\"code\":[").append(code).append("]}");
+            // a few of the changed transactions, so the incident can become a spec question and a golden test
+            StringBuilder samples = new StringBuilder();
+            for (int k = 0; k < Math.min(3, idx.size()); k++) {
+                MonitorSim.Tx t = tx.get(idx.get(k));
+                samples.append(samples.length() == 0 ? "" : ",").append(String.format(Locale.ROOT,
+                        "{\"pan\":\"%s\",\"expiry\":\"%s\",\"amountMinor\":%d,\"availableMinor\":%d,\"transactionDate\":%s,\"stable\":\"%s\",\"canary\":\"%s\"}",
+                        esc(t.req().pan()), esc(t.req().expiry()), t.req().amountMinor(), t.req().availableMinor(),
+                        t.date() == null ? "null" : "\"" + t.date() + "\"", stable.get(idx.get(k)), canary.get(idx.get(k))));
+            }
+            gs.append(",\"line\":").append(line).append(",\"code\":[").append(code).append("],\"samples\":[").append(samples).append("]}");
         }
         return "{\"changed\":" + changed + ",\"n\":" + n + ",\"anomalies\":[" + an + "],\"groups\":[" + gs + "]}";
     }
