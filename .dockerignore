@@ -6,3 +6,5 @@ notify.properties
 *.iml
 .idea
 .DS_Store
+specblast-src/
+chain-runs/

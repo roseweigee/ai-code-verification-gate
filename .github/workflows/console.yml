@@ -57,6 +57,15 @@ jobs:
           repository: roseweigee/specforge
           path: specforge
           token: ${{ secrets.SPECFORGE_TOKEN || github.token }}
+      # SpecBlast (private): its backend is built into the image and runs next to the console on 127.0.0.1,
+      # so the chain page can send it the locked spec. SPECFORGE_TOKEN needs read access to roseweigee/specblast too.
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != '1'
+        continue-on-error: true
+        with:
+          repository: roseweigee/specblast
+          path: specblast-src
+          token: ${{ secrets.SPECFORGE_TOKEN || github.token }}
       - uses: google-github-actions/auth@v2
         if: steps.check.outputs.skip != '1'
         with:
@@ -67,7 +76,14 @@ jobs:
         if: steps.check.outputs.skip != '1'
         run: |
           gcloud auth configure-docker asia-east1-docker.pkg.dev --quiet
-          docker build -t "$IMAGE:$GITHUB_SHA" .
+          SB=specblast-src/backend/specttocode-backend
+          if [ -f "$SB/pom.xml" ]; then
+            echo "SpecBlast: building its backend into the image"
+            docker build --build-context specblast="$SB" -t "$IMAGE:$GITHUB_SHA" .
+          else
+            echo "::notice title=SpecBlast not in the image::Give SPECFORGE_TOKEN read access to roseweigee/specblast to run SpecBlast live on the chain page."
+            docker build -t "$IMAGE:$GITHUB_SHA" .
+          fi
           docker push "$IMAGE:$GITHUB_SHA"
       - name: Deploy to Cloud Run
         if: steps.check.outputs.skip != '1'
@@ -76,12 +92,15 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AI_CALLS_PER_DAY: '30'
         run: |
           # Values go in a file, not on the command line: an email address contains "@", which breaks
           # gcloud's KEY=VALUE list syntax.
           python3 -c "
           import json, os
-          keys = ['DEMO_PASSWORD', 'PRODUCTION_URL', 'GH_DISPATCH_TOKEN']
+          # ANTHROPIC_API_KEY: only for the chain page (SpecForge reading a document, SpecBlast), AI_CALLS_PER_DAY a day
+          keys = ['DEMO_PASSWORD', 'PRODUCTION_URL', 'GH_DISPATCH_TOKEN', 'ANTHROPIC_API_KEY', 'AI_CALLS_PER_DAY']
           env = {k: os.environ[k] for k in keys if os.environ.get(k)}
           if os.environ.get('SMTP_USER') and os.environ.get('SMTP_PASSWORD'):
               env['SMTP_USER'] = os.environ['SMTP_USER'].strip()
@@ -91,7 +110,7 @@ jobs:
           json.dump(env, open('env.yaml', 'w'))"
           # one instance: the visitors' workspaces live in its memory; session affinity keeps a browser on it
           gcloud run deploy "$SERVICE" --image "$IMAGE:$GITHUB_SHA" --region "$REGION" \
-            --allow-unauthenticated --max-instances 1 --memory 2Gi --cpu 2 --timeout 300 \
+            --allow-unauthenticated --max-instances 1 --memory 4Gi --cpu 2 --timeout 300 --no-cpu-throttling \
             --session-affinity --env-vars-file env.yaml --quiet
           URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')
           echo "::notice title=Demo console::$URL"

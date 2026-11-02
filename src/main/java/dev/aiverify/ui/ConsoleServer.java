@@ -84,6 +84,8 @@ public final class ConsoleServer {
         volatile String mailPassword = "";
         /** Cloud demo: addresses over their rate limit for the current action (not emailed this time). */
         volatile String mailSkip = "";
+        /** Cloud demo: documents this visitor uploaded to the chain page. */
+        final java.util.concurrent.atomic.AtomicInteger uploads = new java.util.concurrent.atomic.AtomicInteger();
 
         Session(String id, Path root) {
             this.id = id;
@@ -191,6 +193,7 @@ public final class ConsoleServer {
             }
         }
         ConsoleServer app = new ConsoleServer(root, hosted ? password : null);
+        startSpecBlast(root);
         if (!hosted && !"1".equals(System.getenv("KEEP_RUNS"))) {
             // every console session starts empty: no attempts, no decisions, an empty audit log
             app.deleteRuns();
@@ -254,7 +257,35 @@ public final class ConsoleServer {
                     Map<String, Object> cs = new LinkedHashMap<>(chain.state(ss.root));
                     cs.put("hosted", hosted);
                     cs.put("mailEnabled", hosted ? mailOn : true);
+                    cs.put("running", chain.running(ss.root));
+                    cs.put("aiEnabled", aiKey());
+                    cs.put("aiLeft", hosted ? aiLeft() : null);
+                    cs.put("uploadsLeft", hosted ? Math.max(0, UPLOADS_PER_SESSION - ss.uploads.get()) : null);
+                    cs.put("uploadMaxBytes", hosted ? UPLOAD_MAX_BYTES_HOSTED : 2_000_000);
+                    cs.put("specblastLive", specblastUrl != null);
                     json(ex, cs);
+                }
+                case "/api/chain/upload" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    json(ex, chainUpload(ss, ex, q));
+                }
+                case "/api/chain/pipeline" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    Map<String, String> p = new LinkedHashMap<>(q);
+                    byte[] raw = ex.getRequestBody().readNBytes(200_000);
+                    if (raw.length > 0) {
+                        Object b = Json.parse(new String(raw, StandardCharsets.UTF_8));
+                        if (b instanceof Map<?, ?> m) {
+                            m.forEach((k, v) -> p.put(String.valueOf(k), v instanceof String sv ? sv : Json.write(v)));
+                        }
+                    }
+                    json(ex, chainPipeline(ss, p, client(ex)));
                 }
                 case "/api/chain/evidence" -> {
                     Path f = chain.evidenceFile(ss.root);
@@ -422,6 +453,60 @@ public final class ConsoleServer {
         }
     }
 
+    private Map<String, Object> chainUpload(Session ss, HttpExchange ex, Map<String, String> q) throws IOException {
+        String name = q.getOrDefault("name", "").replaceAll("[^A-Za-z0-9._\\-\\u4e00-\\u9fff]", "_");
+        String ext = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase() : "";
+        if (!List.of("md", "txt", "html", "htm", "docx", "pdf").contains(ext)) {
+            return Map.of("error", "Upload a .md, .txt, .html, .docx or .pdf file.");
+        }
+        int max = hosted ? UPLOAD_MAX_BYTES_HOSTED : 2_000_000;
+        byte[] data = ex.getRequestBody().readNBytes(max + 1);
+        if (data.length > max) {
+            return Map.of("error", "The file is larger than " + max / 1000 + " KB.");
+        }
+        if (data.length == 0) {
+            return Map.of("error", "The file is empty.");
+        }
+        if (hosted && ss.uploads.incrementAndGet() > UPLOADS_PER_SESSION) {
+            return Map.of("error", "This demo allows " + UPLOADS_PER_SESSION + " documents per visitor.");
+        }
+        Path dir = Files.createDirectories(ss.root.resolve("runs/chain-upload"));
+        Files.write(dir.resolve(name), data);
+        return Map.of("upload", name, "bytes", data.length);
+    }
+
+    private Map<String, Object> chainPipeline(Session ss, Map<String, String> p, String client) throws IOException, InterruptedException {
+        if (hosted) {
+            synchronized (ss.actions) {
+                long now = System.currentTimeMillis();
+                while (!ss.actions.isEmpty() && now - ss.actions.peekFirst() > 3_600_000L) {
+                    ss.actions.pollFirst();
+                }
+                if (ss.actions.size() >= ACTIONS_PER_HOUR) {
+                    return Map.of("error", "Too many actions in this session for now. Please try again later.");
+                }
+                ss.actions.add(now);
+            }
+        }
+        String up = p.remove("upload");
+        if (up != null && !up.isBlank()) {
+            Path f = ss.root.resolve("runs/chain-upload").resolve(up).normalize();
+            if (!f.startsWith(ss.root.resolve("runs/chain-upload")) || !Files.exists(f)) {
+                return Map.of("error", "Upload the document again.");
+            }
+            if (!aiKey() || (hosted && aiLeft() <= 0)) {
+                return Map.of("error", !aiKey() ? "No AI key on this server: use one of the examples."
+                        : "Today's AI budget for this demo is used up. The examples still work.");
+            }
+            p.put("file", f.toString());
+        }
+        try {
+            return chain.pipeline(ss.root, p.getOrDefault("action", ""), p, chainCli(ss, client));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return Map.of("error", String.valueOf(e.getMessage()));
+        }
+    }
+
     private Map<String, Object> chainAct(Session ss, Map<String, String> q, String client) throws IOException, InterruptedException {
         if (hosted) {
             synchronized (ss.actions) {
@@ -435,7 +520,18 @@ public final class ConsoleServer {
                 ss.actions.add(now);
             }
         }
-        ChainConsole.Cli cli = new ChainConsole.Cli() {
+        ChainConsole.Cli cli = chainCli(ss, client);
+        synchronized (ss) {
+            try {
+                return chain.act(ss.root, q.getOrDefault("step", ""), q, cli);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return Map.of("error", String.valueOf(e.getMessage()));
+            }
+        }
+    }
+
+    private ChainConsole.Cli chainCli(Session ss, String client) {
+        return new ChainConsole.Cli() {
             @Override
             public Map<String, Object> gate(Path gateRoot, List<String> args, boolean mail) throws IOException, InterruptedException {
                 String mailTo = null;
@@ -455,29 +551,151 @@ public final class ConsoleServer {
 
             @Override
             public Map<String, Object> specforge(List<String> args) throws IOException, InterruptedException {
-                return runSpecForge(args);
+                return runSpecForge(args, false);
+            }
+
+            @Override
+            public Map<String, Object> specforgeAi(List<String> args) throws IOException, InterruptedException {
+                spendAi();
+                return runSpecForge(args, true);
+            }
+
+            @Override
+            public Map<String, Object> specblast(Path requirements, Path outDir) throws IOException, InterruptedException {
+                if (specblastUrl == null) {
+                    return null;
+                }
+                spendAi();
+                return callSpecBlast(requirements, outDir);
             }
         };
-        synchronized (ss) {
-            try {
-                return chain.act(ss.root, q.getOrDefault("step", ""), q, cli);
-            } catch (IllegalArgumentException | IllegalStateException e) {
-                return Map.of("error", String.valueOf(e.getMessage()));
+    }
+
+    // ---- AI on the chain page: the owner's key, strictly limited ------------------------------------------------
+
+    static final int UPLOADS_PER_SESSION = 3;
+    static final int UPLOAD_MAX_BYTES_HOSTED = 20_000;
+    private final int aiCallsPerDay = Integer.parseInt(System.getenv().getOrDefault("AI_CALLS_PER_DAY", "30").trim());
+    private java.time.LocalDate aiDay = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Taipei"));
+    private int aiUsed;
+    /** SpecBlast's own service (SPECBLAST_URL, or the copy this console started on 127.0.0.1), or null. */
+    static volatile String specblastUrl;
+
+    static boolean aiKey() {
+        String k = System.getenv("ANTHROPIC_API_KEY");
+        return k != null && !k.isBlank();
+    }
+
+    private synchronized int aiLeft() {
+        java.time.LocalDate today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Taipei"));
+        if (!today.equals(aiDay)) {
+            aiDay = today;
+            aiUsed = 0;
+        }
+        return hosted ? Math.max(0, aiCallsPerDay - aiUsed) : Integer.MAX_VALUE;
+    }
+
+    /** One AI call (SpecForge extract/refine, SpecBlast). The cloud demo allows AI_CALLS_PER_DAY a day, site-wide. */
+    private synchronized void spendAi() {
+        if (!aiKey()) {
+            throw new IllegalStateException("No AI key on this server (ANTHROPIC_API_KEY), so documents cannot be read by the AI here.");
+        }
+        if (aiLeft() <= 0) {
+            throw new IllegalStateException("Today's AI budget for this demo is used up (" + aiCallsPerDay
+                    + " calls a day). The examples still work; try your own document tomorrow.");
+        }
+        aiUsed++;
+    }
+
+    /** POST requirements.md to SpecBlast, exactly as its web page does, and unzip the project it returns. */
+    private Map<String, Object> callSpecBlast(Path requirements, Path outDir) throws IOException, InterruptedException {
+        String boundary = "----chain" + Long.toHexString(System.nanoTime());
+        byte[] file = Files.readAllBytes(requirements);
+        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+        body.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"requirements.md\"\r\n"
+                + "Content-Type: text/markdown\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        body.write(file);
+        body.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+        long t0 = System.currentTimeMillis();
+        java.net.http.HttpClient http = java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build();
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(specblastUrl + "/api/v1/generate/zip"))
+                .timeout(java.time.Duration.ofMinutes(10))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body.toByteArray())).build();
+        java.net.http.HttpResponse<byte[]> res = http.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("command", "POST SpecBlast /api/v1/generate/zip (requirements.md)");
+        if (res.statusCode() != 200) {
+            r.put("exitCode", 1);
+            r.put("output", "SpecBlast answered HTTP " + res.statusCode() + ": "
+                    + new String(res.body(), StandardCharsets.UTF_8).replaceAll("sk-ant[A-Za-z0-9_-]+", "***"));
+            return r;
+        }
+        Files.createDirectories(outDir);
+        Path base = outDir.toAbsolutePath().normalize();
+        List<String> names = new ArrayList<>();
+        try (java.util.zip.ZipInputStream z = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(res.body()))) {
+            java.util.zip.ZipEntry e;
+            while ((e = z.getNextEntry()) != null) {
+                Path t = base.resolve(e.getName()).normalize();
+                if (!t.startsWith(base) || e.isDirectory()) {
+                    continue; // never outside the project folder
+                }
+                Files.createDirectories(t.getParent());
+                Files.write(t, z.readNBytes(2_000_000));
+                names.add(base.relativize(t).toString());
             }
+        }
+        r.put("exitCode", names.isEmpty() ? 1 : 0);
+        r.put("output", "SpecBlast generated " + names.size() + " files in " + (System.currentTimeMillis() - t0) / 1000 + " s:\n"
+                + String.join("\n", names));
+        return r;
+    }
+
+    /** Starts SpecBlast's own service next to the console (127.0.0.1 only) when its jar is in the image. */
+    static void startSpecBlast(Path root) {
+        String url = System.getenv("SPECBLAST_URL");
+        if (url != null && !url.isBlank()) {
+            specblastUrl = url.strip().replaceAll("/+$", "");
+            System.out.println("SpecBlast: " + specblastUrl);
+            return;
+        }
+        Path jar = root.resolve("specblast/specblast.jar");
+        if (!Files.exists(jar) || !aiKey()) {
+            System.out.println("SpecBlast: not started (" + (Files.exists(jar) ? "no ANTHROPIC_API_KEY" : "no specblast/specblast.jar") + ").");
+            return;
+        }
+        try {
+            ProcessBuilder pb = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                    "-Xmx384m", "-jar", jar.toString(), "--server.port=8091", "--server.address=127.0.0.1")
+                    .redirectErrorStream(true).redirectOutput(java.nio.file.Files.createTempFile("specblast", ".log").toFile());
+            pb.environment().put("SPECBLAST_CLOUD_ENABLED", "false");
+            pb.environment().remove("PORT");
+            pb.environment().remove("DEMO_PASSWORD");
+            pb.environment().remove("GH_DISPATCH_TOKEN");
+            Process p = pb.start();
+            Runtime.getRuntime().addShutdownHook(new Thread(p::destroy));
+            specblastUrl = "http://127.0.0.1:8091";
+            System.out.println("SpecBlast: started next to the console on 127.0.0.1:8091.");
+        } catch (IOException e) {
+            System.out.println("SpecBlast: could not start (" + e.getMessage() + ").");
         }
     }
 
-    /** SpecForge's CLI in its own folder (its glossary is config/glossary.json there). Never with an AI key in the cloud. */
-    private Map<String, Object> runSpecForge(List<String> args) throws IOException, InterruptedException {
+    /** SpecForge's CLI in its own folder (its glossary is config/glossary.json there). The AI key only for extract/refine. */
+    private Map<String, Object> runSpecForge(List<String> args, boolean withKey) throws IOException, InterruptedException {
         Path sf = chain.specforgeHome();
         List<String> cmd = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
                 "-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8", "-cp", sf.resolve("build/classes").toString(), "dev.specforge.Main"));
         cmd.addAll(args);
         ProcessBuilder pb = new ProcessBuilder(cmd).directory(sf.toFile()).redirectErrorStream(true);
-        if (hosted) {
+        if (!withKey) {
             pb.environment().remove("ANTHROPIC_API_KEY");
+        }
+        if (hosted) {
             pb.environment().remove("GH_DISPATCH_TOKEN");
             pb.environment().remove("DEMO_PASSWORD");
+            pb.environment().remove("SMTP_PASSWORD");
             cpu.acquire();
         }
         String out;
