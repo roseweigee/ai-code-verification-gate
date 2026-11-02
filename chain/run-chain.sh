@@ -97,16 +97,32 @@ cp -r "$W/gate/release/iso8583" "$W/stable"   # what is live now
 gate release --run "$RUN" --no-push
 gate release-check
 
+free_port() { python3 -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1])"; }
+serve() { # $1 = folder, $2 = port, $3 = log; prints the pid
+  (cd "$W/gate" && exec java -cp build/classes -Daiverify.root=. dev.aiverify.Main serve-release --path "$1" --port "$2") > "$3" 2>&1 &
+  echo $!
+}
 canary() { # $1 = canary folder, $2 = output json
-  (cd "$W/gate" && java -cp build/classes -Daiverify.root=. dev.aiverify.Main serve-release --path "$W/stable" --port 8301 >/dev/null 2>&1 &
-   echo $! > "$W/.p1"; java -cp build/classes -Daiverify.root=. dev.aiverify.Main serve-release --path "$1" --port 8302 >/dev/null 2>&1 &
-   echo $! > "$W/.p2")
-  for p in 8301 8302; do for _ in $(seq 60); do curl -s -o /dev/null "http://localhost:$p/" && break; sleep 1; done; done
-  (cd "$W/gate" && java -cp build/classes -Daiverify.root=. dev.aiverify.Main canary-check --stable http://localhost:8301 \
-     --canary http://localhost:8302 --n 600 --source "$1/AuthorizationPrecheckImpl.java" 2>&1 | grep -v JAVA_TOOL_OPTIONS) > "$W/canary.txt" || true
-  kill "$(cat "$W/.p1")" "$(cat "$W/.p2")" 2>/dev/null || true
+  local ps pc p1 p2 ok
+  ps=$(free_port); p1=$(serve "$W/stable" "$ps" "$W/serve-stable.log")
+  pc=$(free_port); p2=$(serve "$1" "$pc" "$W/serve-canary.log")
+  for port in "$ps" "$pc"; do
+    ok=0
+    for _ in $(seq 90); do
+      [ "$(curl -s -m 2 "http://127.0.0.1:$port/healthz")" = ok ] && { ok=1; break; }
+      sleep 1
+    done
+    if [ "$ok" != 1 ]; then
+      echo "The service on port $port did not start:" | tee -a "$LOG"; cat "$W"/serve-*.log | tee -a "$LOG"
+    fi
+  done
+  (cd "$W/gate" && java -cp build/classes -Daiverify.root=. dev.aiverify.Main canary-check --stable "http://127.0.0.1:$ps" \
+     --canary "http://127.0.0.1:$pc" --n 600 --source "$1/AuthorizationPrecheckImpl.java" 2>&1 | grep -v JAVA_TOOL_OPTIONS) > "$W/canary.txt" || true
+  kill "$p1" "$p2" 2>/dev/null || true
+  wait "$p1" "$p2" 2>/dev/null || true
   grep -v '^CANARY_RESULT ' "$W/canary.txt" | tee -a "$LOG"
   grep '^CANARY_RESULT ' "$W/canary.txt" | head -1 | cut -d' ' -f2- > "$2"
+  [ -s "$2" ] || { echo "No canary result (see above)." | tee -a "$LOG"; exit 1; }
 }
 
 say "6 · Canary: the same 600 transactions to the live version and to this release; AIOps compares them"

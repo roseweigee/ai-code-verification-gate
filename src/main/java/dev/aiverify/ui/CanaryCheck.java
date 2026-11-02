@@ -63,9 +63,14 @@ public final class CanaryCheck {
             js.append(i == 0 ? "" : ",").append(String.format(java.util.Locale.ROOT, "{\"code\":\"%s\",\"stable\":%.4f,\"canary\":%.4f}",
                     keys[i], share(stable, keys[i], n), share(canary, keys[i], n)));
         }
-        // a crash is always an anomaly; for response codes, a paired z-score (same transaction, both revisions)
+        if (share(stable, "other", n) > 0.5) {
+            System.out.println("Cannot compare: the stable revision gave no response code for "
+                    + Math.round(share(stable, "other", n) * 100) + "% of the transactions (is it running at " + stableUrl + "?).");
+            return 4;
+        }
+        // a crash, or no answer at all, is always an anomaly; for response codes, a paired z-score (same transaction, both revisions)
         List<String> breached = new ArrayList<>();
-        for (String k : new String[] {"5xx", "54", "51", "14", "30", "13"}) {
+        for (String k : new String[] {"5xx", "other", "54", "51", "14", "30", "13"}) {
             double s0 = share(stable, k, n), c0 = share(canary, k, n);
             int into = 0, outOf = 0;
             for (int i = 0; i < n; i++) {
@@ -73,7 +78,7 @@ public final class CanaryCheck {
                 into += b && !a ? 1 : 0;
                 outOf += a && !b ? 1 : 0;
             }
-            boolean j = "5xx".equals(k) ? c0 > 0.003 && c0 > s0
+            boolean j = "5xx".equals(k) || "other".equals(k) ? c0 > 0.003 && c0 > s0
                     : into + outOf > 0 && (into - outOf) / Math.sqrt(into + outOf) >= IncidentAnalysis.Z;
             if (j) {
                 breached.add(k);
@@ -108,7 +113,7 @@ public final class CanaryCheck {
         System.out.println("Verdict: ROLL BACK.");
         for (String k : breached) {
             System.out.printf("  %s: %.1f%% on the stable revision, %.1f%% on the canary%n",
-                    "5xx".equals(k) ? "HTTP 500 (crash)" : "code " + k, share(stable, k, n) * 100, share(canary, k, n) * 100);
+                    "5xx".equals(k) ? "HTTP 500 (crash)" : "other".equals(k) ? "no answer (unreachable or no response code)" : "code " + k, share(stable, k, n) * 100, share(canary, k, n) * 100);
         }
         return 3;
     }
