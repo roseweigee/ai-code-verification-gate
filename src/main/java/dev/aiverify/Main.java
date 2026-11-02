@@ -64,6 +64,9 @@ public final class Main {
                 src.put("specFileSha256", Hashing.sha256(Files.readString(ctx.specFile)));
             }
             ctx.specSource = src;
+            if (src.get("version") != null) {
+                ctx.goldenVersion = String.valueOf(src.get("version")); // the golden tests come from the locked spec
+            }
             // keep the exact inputs with the run, for the evidence pack
             Path in = ctx.runDir.resolve("inputs");
             Files.createDirectories(in);
@@ -96,6 +99,8 @@ public final class Main {
             case "console" -> dev.aiverify.ui.ConsoleServer.start(ROOT, Integer.parseInt(opts.getOrDefault("port", "8080")));
             case "release" -> releaseCommand(opts);
             case "release-check" -> releaseCheck(opts);
+            case "evidence" -> System.out.println("Evidence pack: " + ROOT.relativize(
+                    dev.aiverify.report.EvidencePack.write(ROOT, req(opts, "run"), opts)));
             case "canary-prepare" -> canaryPrepare(opts);
             case "canary-check" -> System.exit(dev.aiverify.ui.CanaryCheck.run(req(opts, "stable"), req(opts, "canary"),
                     Integer.parseInt(opts.getOrDefault("n", "600")),
