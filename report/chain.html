@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 閉環測試</title>
+<style>
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --sunk: #e9edef; --ink: #142029; --ink-2: #4b5a65; --ink-3: #7a8893;
+  --line: #d3dbe0; --accent: #1f5f8b; --accent-soft: #dcebf5;
+  --pass: #1d7a4c; --pass-soft: #dcf1e5; --fail: #b3261e; --fail-soft: #fbe2df;
+  --warn: #9a6200; --warn-soft: #fbedcf; --human: #5b4bb0; --human-soft: #e7e3fa;
+  --skip: #8c979f; --skip-soft: #eceff1; --code-bg: #f7f9fa; --dark: #142029;
+  --body: -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15.5px; line-height: 1.55; }
+code, .mono { font-family: var(--mono); font-size: .92em; }
+header { background: var(--dark); color: #e4ebef; padding: 20px 32px; }
+header .row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; max-width: 1180px; margin: 0 auto; }
+header h1 { margin: 0; font-size: 24px; color: #fff; }
+header p { margin: 4px 0 0; color: #b9c6ce; font-size: 14px; max-width: 760px; }
+header a { color: #cfe3f2; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 32px 80px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; }
+aside.steps { position: sticky; top: 16px; align-self: start; }
+aside.steps a { display: flex; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14.5px; }
+aside.steps a:hover { background: var(--sunk); }
+aside.steps .dot { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--skip-soft); color: var(--ink-2); flex: none; }
+aside.steps .dot.ok { background: var(--pass); color: #fff; }
+aside.steps .dot.bad { background: var(--fail); color: #fff; }
+aside.steps .dot.wait { background: var(--human); color: #fff; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; margin: 0 0 20px; scroll-margin-top: 16px; }
+.card h2 { margin: 0; font-size: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.card h2 .n { font-family: var(--mono); color: var(--ink-3); font-size: 15px; }
+.card .why { color: var(--ink-2); margin: 4px 0 12px; font-size: 14.5px; }
+.chip { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 700; background: var(--skip-soft); color: var(--ink-2); }
+.chip.ok { background: var(--pass-soft); color: var(--pass); } .chip.bad { background: var(--fail-soft); color: var(--fail); }
+.chip.wait { background: var(--human-soft); color: var(--human); } .chip.warn { background: var(--warn-soft); color: var(--warn); }
+.controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 14.5px; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; font-family: inherit; text-decoration: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.human { background: var(--human); border-color: var(--human); color: #fff; }
+.btn.danger { border-color: var(--fail); color: var(--fail); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+input[type=text], select, textarea { font: inherit; font-size: 14.5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+label.ck { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.expect { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; margin: 12px 0 0; font-size: 14px; }
+.expect b { color: var(--accent); }
+.expect ul { margin: 4px 0 0; padding-left: 20px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; font-size: 13px; }
+.tablewrap { overflow-x: auto; max-width: 100%; }
+td, .card div, .card li, .card dd { overflow-wrap: anywhere; }
+.chip, th { white-space: nowrap; overflow-wrap: normal; } td code { word-break: break-all; }
+details, .card, .wrap > * { min-width: 0; max-width: 100%; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow: auto; margin: 6px 0; }
+details { margin: 8px 0; } details > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 16px; font-size: 14px; margin: 8px 0; }
+.kv dt { color: var(--ink-2); } .kv dd { margin: 0; word-break: break-all; }
+.msg { border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+.msg.err { background: var(--fail-soft); color: var(--fail); } .msg.ok { background: var(--pass-soft); color: var(--pass); }
+.muted { color: var(--ink-3); } .small { font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: s 0.8s linear infinite; display: inline-block; }
+.btn:not(.primary):not(.human) .spin { border-color: var(--line); border-top-color: var(--accent); }
+@keyframes s { to { transform: rotate(360deg); } }
+.locked { opacity: .55; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); padding: 16px; } aside.steps { position: static; display: flex; flex-wrap: wrap; gap: 4px; } header { padding: 16px; } }
+</style>
+</head>
+<body>
+<header><div class="row">
+  <div><h1>AI 閉環測試：一步一步跑完整條鏈</h1>
+  <p>SpecForge → SpecBlast → 品質閘門 → 人工核准 → 發布 → 金絲雀 + AIOps → 回饋規格 → 上線證據包。每一步都是真的指令，跑在你自己的工作區裡，不會部署、也不會動到別人的資料。</p></div>
+  <div class="controls"><a class="btn" href="/">← 回主控台</a><button class="btn danger" id="reset">重新開始</button></div>
+</div></header>
+<div class="wrap">
+  <aside class="steps" id="nav"></aside>
+  <main id="main"></main>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let S = null, LOG = {}, BUSY = false, NAME = '';
+try { NAME = localStorage.getItem('chain-name') || ''; } catch (e) {}
+
+const STEPS = [
+  ['s1', '1', '規格', 'SpecForge'], ['s2', '2', '產生程式', 'SpecBlast'], ['s3', '3', '品質閘門', 'P1–P7 · G1–G5'],
+  ['s4', '4', '人工核准', 'G6'], ['s5', '5', '發布', 'release'], ['s6', '6', '金絲雀 + AIOps', 'canary'],
+  ['s7', '7', '回饋規格', 'incident'], ['s8', '8', '上線證據包', 'evidence']];
+
+async function load() {
+  try { S = await (await fetch('/api/chain/state')).json(); } catch (e) { S = { error: String(e) }; }
+  render();
+}
+async function act(step, params, btn) {
+  if (BUSY) return;
+  BUSY = true;
+  const old = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> 執行中…'; }
+  try {
+    const r = await fetch('/api/chain/act?' + new URLSearchParams({ step, ...params }), { method: 'POST' });
+    const d = await r.json().catch(() => ({ error: '伺服器沒有回應' }));
+    LOG[stepCard(step)] = d;
+  } finally {
+    BUSY = false;
+    if (btn) { btn.disabled = false; btn.innerHTML = old; }
+    await load();
+  }
+}
+function stepCard(step) {
+  return { load: 's1', lock: 's1', export: 's1', tamper: 's1', specblast: 's2', verify: 's3', approve: 's4', release: 's5',
+    canary: 's6', incident: 's7', 'lock-next': 's7', rerun: 's7', evidence: 's8', reset: 's1' }[step] || 's1';
+}
+function logHtml(id) {
+  const d = LOG[id];
+  if (!d) return '';
+  if (d.error) return `<div class="msg err">${esc(d.error)}</div>`;
+  const items = d.log || [];
+  const failed = items.filter(x => x.exitCode !== 0 && x.exitCode !== undefined);
+  let h = '';
+  const mail = items.map(x => x.mail).find(Boolean);
+  if (mail) h += `<div class="msg err">通知信：${esc({ 'no-address': '還沒有收件人（到主控台的收件匣設定）', off: '雲端目前無法寄信', 'too-many': '這個信箱短時間寄太多了，這封只有存下', 'daily-limit': '今天的寄信額度已用完' }[mail] || mail)}</div>`;
+  h += `<details${failed.length ? ' open' : ''}><summary>這一步執行的指令與輸出（${items.length}）</summary>` + items.map(x =>
+    `<div class="small muted" style="margin-top:8px">$ ${esc(x.command)} <span class="chip ${x.exitCode === 0 ? 'ok' : 'bad'}">exit ${esc(x.exitCode)}</span></div>${x.note ? `<div class="small">${esc(x.note)}</div>` : ''}<pre>${esc(String(x.output || '').trim())}</pre>`).join('') + `</details>`;
+  return h;
+}
+function status(id) {
+  const P = (S && S.progress) || {};
+  const run = S && S.run;
+  switch (id) {
+    case 's1': if (!S.s1) return ['', '未開始'];
+      if (S.s1.exported && S.s1.exported.length) return ['ok', '已匯出'];
+      if (S.s1.approval) return ['ok', '已鎖版']; return ['wait', '待鎖版'];
+    case 's2': return S.s2 ? ['ok', '已取得'] : ['', '未開始'];
+    case 's3': if (!run) return ['', '未開始'];
+      return run.verdict === 'BLOCKED' ? ['bad', '擋下'] : ['ok', run.verdict === 'APPROVED' ? '已通過' : '等待核准'];
+    case 's4': return P.approved ? ['ok', '已核准'] : run && run.verdict === 'READY_FOR_HUMAN_APPROVAL' ? ['wait', '等你決定'] : ['', '未開始'];
+    case 's5': return P.released ? ['ok', '已發布'] : ['', '未開始'];
+    case 's6': { const a = S['canary-release'], b = S['canary-drill'];
+      if (!a && !b) return ['', '未開始'];
+      return a ? (a.verdict === 'PROMOTE' ? ['ok', '可以上線'] : ['bad', '回滾']) : ['warn', '只跑了演練']; }
+    case 's7': if (!S.s7) return ['', '未開始'];
+      return P.rerun ? ['ok', '已重跑'] : S.s7.approval ? ['ok', 'v1.1 已鎖'] : ['wait', '待鎖 v1.1'];
+    case 's8': return S.evidence ? ['ok', '已產生'] : ['', '未開始'];
+  }
+  return ['', ''];
+}
+function card(id, why, body, expect) {
+  const st = status(id), s = STEPS.find(x => x[0] === id);
+  return `<section class="card" id="${id}"><h2><span class="n">STEP ${s[1]}</span>${s[2]}<span class="muted small" style="font-weight:400">${esc(s[3])}</span><span class="chip ${st[0]}">${st[1]}</span></h2>
+    <div class="why">${why}</div>${body}${logHtml(id)}<div class="expect"><b>怎麼驗收</b><ul>${expect.map(x => `<li>${x}</li>`).join('')}</ul></div></section>`;
+}
+function nameInput(id) { return `<input type="text" id="${id}" placeholder="你的名字" value="${esc(NAME)}" maxlength="60" style="width:160px">`; }
+
+function render() {
+  if (!S) return;
+  $('#nav').innerHTML = STEPS.map(s => { const st = status(s[0]); return `<a href="#${s[0]}"><span class="dot ${st[0]}">${s[1]}</span>${s[2]}</a>`; }).join('');
+  if (S.error) { $('#main').innerHTML = `<div class="msg err">${esc(S.error)}</div>`; return; }
+  let h = '';
+  if (!S.specforge) h += `<div class="msg err">這台伺服器沒有安裝 SpecForge（要放在閘門旁邊的 ../specforge），步驟 1 和 7 無法執行。</div>`;
+  h += s1() + s2() + s3() + s4() + s5() + s6() + s7() + s8();
+  $('#main').innerHTML = h;
+  bind();
+}
+
+/* ---------- step 1 ---------- */
+function s1() {
+  const D = S.s1, P = S.progress || {};
+  let b = `<div class="controls"><select id="in">
+      <option value="ref">已回答版：PM 回答完所有問題的規格（可以鎖版）</option>
+      <option value="pm-a">PM A 的 Email（AI 抽取，有問題要問）</option>
+      <option value="pm-b">PM B 的 User Stories（AI 抽取）</option>
+      <option value="pm-c">PM C 的 Jira 單 .docx（AI 抽取）</option></select>
+      <button class="btn primary" data-step="load">載入並檢查</button></div>`;
+  if (D) {
+    const f = D.findings || [], err = f.filter(x => x.severity === 'ERROR'), warn = f.filter(x => x.severity === 'WARNING');
+    const sp = D.spec || {};
+    b += `<div class="small muted">目前的輸入：${esc({ ref: '已回答版', 'pm-a': 'PM A 的 Email', 'pm-b': 'PM B 的 User Stories', 'pm-c': 'PM C 的 Jira 單' }[P.input] || P.input)}</div>`;
+    if (D.source) b += `<details><summary>PM 原始文件</summary><pre>${esc(D.source)}</pre></details>`;
+    b += `<div class="tablewrap"><table><tr><th>規則</th><th>內容（依順序，第一條成立的決定結果）</th><th>結果碼</th><th>範例</th></tr>` +
+      (sp.rules || []).map(r => `<tr><td class="mono">${esc(r.id)}</td><td>${esc(r.text)}</td><td class="mono">${esc(r.result)}</td><td>${(r.examples || []).length}</td></tr>`).join('') + `</table></div>`;
+    b += `<div class="controls"><span class="chip ${err.length ? 'bad' : 'ok'}">${err.length} 個 ERROR</span><span class="chip ${warn.length ? 'warn' : 'ok'}">${warn.length} 個 WARNING</span></div>`;
+    if (err.length) b += `<details open><summary>要 PM 回答的問題（${err.length}）</summary><ul class="small">` + err.map(x => `<li><b class="mono">${esc(x.where || '')}</b> ${esc(x.ask || x.message)}</li>`).join('') + `</ul></details>`;
+    b += `<div class="controls">${nameInput('lockby')}<button class="btn human" data-step="lock">鎖版 v1.0</button>`;
+    if (D.approval) b += `<button class="btn primary" data-step="export">匯出給 SpecBlast 與閘門</button><button class="btn danger" data-step="tamper">負面測試：鎖版後偷改再匯出</button>`;
+    b += `</div>`;
+    if (D.approval) b += `<dl class="kv"><dt>鎖版人</dt><dd>${esc(D.approval.by)}</dd><dt>時間</dt><dd>${esc(D.approval.at)}</dd><dt>版本</dt><dd>v${esc(D.approval.version)}</dd><dt>SHA-256</dt><dd class="mono">${esc(D.approval.sha256)}</dd></dl>`;
+    if (D.exported && D.exported.length) b += `<div class="msg ok">已匯出：${D.exported.map(x => `<code>${esc(x)}</code>`).join('、')}${D.goldenCount != null ? `，黃金測試 ${D.goldenCount} 個` : ''}</div>`;
+  }
+  return card('s1', '不同 PM 寫法不一樣：SpecForge 把文件整理成同一種格式。文件沒寫清楚的地方變成問題，不讓 AI 猜；有 ERROR 就不能鎖版。鎖版的人與 SHA-256 會跟著後面每一步。', b, [
+    '選「PM A 的 Email」→ 載入：看到 12 個以上的問題與 ERROR；按鎖版會被拒絕（Refused: … ERROR finding(s) remain）。',
+    '選「已回答版」→ 載入：0 個 ERROR；填名字按鎖版 → 出現鎖版人、時間、SHA-256（524608bf…）。',
+    '按匯出 → 出現 4 個檔案、黃金測試 9 個。',
+    '負面測試：按「鎖版後偷改再匯出」→ 輸出 Only an approved, unchanged spec can be exported。']);
+}
+/* ---------- step 2 ---------- */
+function s2() {
+  const D = S.s2, ready = S.s1 && S.s1.exported && S.s1.exported.length;
+  let b = `<div class="controls"><button class="btn primary" data-step="specblast"${ready ? '' : ' disabled'}>取得 SpecBlast 產出</button>${ready ? '' : '<span class="small muted">先完成步驟 1 的匯出</span>'}</div>`;
+  if (D) {
+    if (D.requirements) b += `<details><summary>送給 SpecBlast 的 requirements.md</summary><pre>${esc(D.requirements)}</pre></details>`;
+    b += `<div class="small">專案共 ${D.files.length} 個檔案。規則類別：<code>${esc(D.rulesPath || '找不到')}</code></div>`;
+    b += `<details><summary>檔案清單</summary><pre>${esc(D.files.join('\n'))}</pre></details>`;
+    if (D.rules) b += `<details><summary>AuthorizationRules.java（SpecBlast 寫的）</summary><pre>${esc(D.rules)}</pre></details>`;
+  }
+  return card('s2', 'SpecBlast 依步驟 1 匯出的 requirements.md 產生完整的 Spring Boot 專案。這裡用的是 2026-11-02 用 SpecBlast 自己的 prompt 真實產生、沒有手改的專案（雲端不放 AI 金鑰）。', b, [
+    '出現 20 多個檔案的清單。',
+    '找得到 <code>rules/AuthorizationRules.java</code>：這是閘門的驗證契約要求的，沒有它閘門無法單獨測規則。',
+    'requirements.md 最後有「Verification contract (owned by the quality gate)」一節。']);
+}
+/* ---------- step 3 ---------- */
+function gateRows(gates) {
+  return `<div class="tablewrap"><table><tr><th>關卡</th><th>檢查</th><th>狀態</th><th>結果</th></tr>` + gates.map(g =>
+    `<tr><td class="mono">${esc(g.id)}</td><td>${esc(g.name)}</td><td><span class="chip ${chipCls(g.status)}">${esc(g.status)}</span></td><td class="small">${esc(g.summary ?? `${g.errors} error · ${g.warnings} warning`)}</td></tr>`).join('') + `</table></div>`;
+}
+function chipCls(s) { return { PASSED: 'ok', PASS: 'ok', FAILED: 'bad', BLOCKED: 'bad', WARNING: 'warn', SKIPPED: '', PENDING: 'wait', READY_FOR_HUMAN_APPROVAL: 'wait', APPROVED: 'ok', PROMOTE: 'ok', ROLLBACK: 'bad' }[s] || ''; }
+function s3() {
+  const R = S.run, Pj = S.project, ready = !!S.s2;
+  let b = `<div class="controls"><button class="btn primary" data-step="verify"${ready ? '' : ' disabled'}>執行品質閘門</button>${ready ? '' : '<span class="small muted">先完成步驟 2</span>'}</div>`;
+  if (Pj) {
+    b += `<div class="small"><b>整個專案 P1–P7</b>：<span class="chip ${chipCls(Pj.verdict)}">${esc(Pj.verdict)}</span></div>` + gateRows(Pj.gates);
+    const errs = []; Pj.gates.forEach(g => g.findings.forEach(f => { if (f.severity === 'ERROR') errs.push(f); }));
+    if (errs.length) b += `<ul class="small">` + errs.map(f => `<li><b>${esc(f.rule)}</b> ${esc(f.title)} <span class="muted mono">${esc(f.file || '')}</span></li>`).join('') + `</ul>`;
+  }
+  if (R) {
+    const sp = R.specSource || {};
+    b += `<div class="small" style="margin-top:12px"><b>規則類別 G1–G6</b>：<span class="chip ${chipCls(R.verdict)}">${esc(R.verdict)}</span> · 依據規格 ${esc(sp.title || '')} v${esc(sp.version || '?')}（${esc(sp.approvedBy || '')} 鎖版）</div>` + gateRows(R.gates);
+    if (R.autoFix && typeof R.autoFix === 'object') {
+      const F = R.autoFix, f0 = (F.found || [])[0] || {};
+      b += `<div class="msg ok" style="background:var(--warn-soft);color:var(--warn)">閘門自動修正（${esc(F.rule)}）：${esc(f0.description || '')} 時 SpecBlast 的程式 ${esc(f0.detail || f0.actual || '')}，規格要求回 ${esc(f0.expected || '')}。閘門補上防護後所有關卡重跑，核准人看到的是補過的程式。</div>`;
+      if (F.added) b += `<details><summary>閘門加上的程式</summary><pre>${esc(F.added.map(x => x.n + '  ' + x.text).join('\n'))}</pre></details>`;
+    }
+  }
+  return card('s3', '整個專案跑 P1–P7（資安、程式規範、K8s、交付流程、測試、供應鏈），SpecBlast 的規則類別跑 G1–G5，而且用的是「這一版規格」匯出的黃金測試。', b, [
+    'P1–P7：P5 擋下（服務類別沒有單元測試），另有 K8s 與交付流程的警告。',
+    'G1–G5：上面一行寫「依據規格 Card authorization pre-check v1.0（你的名字 鎖版）」。',
+    'G3：黃金測試 9/9 通過；空值會當掉時閘門自動補防護、所有關卡重跑；G4 突變 88.2%。',
+    '最後是「READY_FOR_HUMAN_APPROVAL」：機器不會自己核准。']);
+}
+/* ---------- step 4 ---------- */
+function s4() {
+  const R = S.run, P = S.progress || {};
+  const errs = []; if (S.project) S.project.gates.forEach(g => g.findings.forEach(f => { if (f.severity === 'ERROR') errs.push(f.rule + ' ' + f.title); }));
+  let high = 0; if (R) R.gates.forEach(g => { if (g.id === 'G5' && g.details && g.details.highFindings) high = g.details.highFindings; });
+  const ready = R && R.verdict === 'READY_FOR_HUMAN_APPROVAL';
+  let b = '';
+  if (ready) {
+    b += `<div class="controls">${nameInput('appby')}<input type="text" id="appnote" placeholder="備註（可不填）" style="flex:1 1 240px"></div>`;
+    if (errs.length) b += `<label class="ck"><input type="checkbox" id="accept"> 我接受專案的已知問題：${esc(errs.join('；'))}（會具名寫進核准紀錄）</label>`;
+    if (high) b += `<label class="ck"><input type="checkbox" id="ackhigh"> AI 審查有 ${high} 個 HIGH 問題，我接受這個風險</label>`;
+    b += `<div class="controls"><button class="btn human" data-step="approve">核准</button></div>`;
+  } else if (!R) b += `<div class="small muted">先完成步驟 3。</div>`;
+  if (R) {
+    const g6 = R.gates.find(g => g.id === 'G6');
+    if (g6 && g6.details && g6.details.decision) b += `<dl class="kv"><dt>決定</dt><dd>${esc(g6.details.decision)}</dd><dt>核准人</dt><dd>${esc(g6.details.decidedBy)}</dd><dt>時間</dt><dd>${esc(g6.details.decidedAt)}</dd><dt>備註</dt><dd>${esc(g6.details.note)}</dd></dl>`;
+  }
+  return card('s4', '機器只能把變更送到人面前；要上線一定要有具名的人核准。接受了哪些已知問題、接受了什麼風險，都會跟名字一起寫進雜湊鏈稽核紀錄。', b, [
+    '不填名字按核准 → 被拒絕（A named person must do this）。',
+    '專案有 ERROR 卻沒勾「我接受」→ 被拒絕，訊息列出是哪些問題。',
+    '勾選後核准 → 決定 APPROVED，備註寫著「Accepted project findings: T-01 …」。',
+    '勾了「等待核准／核准退回」的收件人會收到通知信。']);
+}
+/* ---------- step 5 ---------- */
+function s5() {
+  const P = S.progress || {}, Rel = S.release;
+  let b = `<div class="controls"><button class="btn primary" data-step="release"${P.approved ? '' : ' disabled'}>發布（不推送、不部署）</button>${P.approved ? '' : '<span class="small muted">先完成步驟 4</span>'}</div>`;
+  if (Rel) {
+    const sp = Rel.specSource || {};
+    b += `<dl class="kv"><dt>發布的執行</dt><dd class="mono">${esc(Rel.runId)}</dd><dt>核准人</dt><dd>${esc(Rel.approvedBy)}</dd><dt>依據規格</dt><dd>${esc(sp.title || '')} v${esc(sp.version || '')}，${esc(sp.approvedBy || '')} 鎖版，sha256 ${esc(String(sp.sha256 || '').slice(0, 12))}…</dd><dt>程式指紋</dt><dd class="mono">${esc(Rel.candidateSha256)}</dd></dl>`;
+  }
+  return card('s5', '把核准的程式寫進發布紀錄（approval.json），再用 release-check 確認：有具名核准、程式指紋和核准時一模一樣，再用規格涵蓋的交易跑一次煙霧測試。', b, [
+    '發布紀錄有「依據規格 … v1.0」。',
+    'release-check 輸出「Code hash … matches what the approver saw」與「All 7 transactions covered by the spec behave as the spec says」。']);
+}
+/* ---------- step 6 ---------- */
+function canaryHtml(C, title) {
+  if (!C) return '';
+  let h = `<div style="margin-top:10px"><b>${title}</b>：<span class="chip ${chipCls(C.verdict)}">${C.verdict === 'PROMOTE' ? 'PROMOTE 可以上線' : 'ROLLBACK 自動回滾'}</span> · ${esc(C.n)} 筆相同交易</div>`;
+  h += `<div class="tablewrap"><table><tr><th>回應碼</th><th>舊版（stable）</th><th>新版（canary）</th></tr>` + (C.rows || []).map(r =>
+    `<tr><td class="mono">${esc(r.code)}</td><td>${(r.stable * 100).toFixed(1)}%</td><td${Math.abs(r.canary - r.stable) > 0.003 ? ' style="color:var(--fail);font-weight:700"' : ''}>${(r.canary * 100).toFixed(1)}%</td></tr>`).join('') + `</table></div>`;
+  const G = (C.incident || {}).groups || [];
+  if (G.length) h += `<div class="small"><b>AIOps 找到答案改變的交易</b></div><div class="tablewrap"><table><tr><th>舊版 → 新版</th><th>筆數</th><th>共同點</th><th>追到</th></tr>` + G.map(g =>
+    `<tr><td class="mono">${esc(g.from)} → ${esc(g.to)}</td><td>${esc(g.count)}</td><td class="small">${esc(g.zh || g.en || '')}</td><td class="mono small">${esc(g.rule || '')}${g.line ? ' 第 ' + esc(g.line) + ' 行' : ''}</td></tr>`).join('') + `</table></div>`;
+  return h;
+}
+function s6() {
+  const P = S.progress || {};
+  let b = `<div class="controls"><button class="btn primary" data-step="canary" data-mode="release"${P.released ? '' : ' disabled'}>金絲雀：這次發布</button><button class="btn danger" data-step="canary" data-mode="drill"${P.released ? '' : ' disabled'}>事故演練：植入缺陷的版本</button>${P.released ? '' : '<span class="small muted">先完成步驟 5</span>'}</div>`;
+  b += canaryHtml(S['canary-release'], '這次發布') + canaryHtml(S['canary-drill'], '事故演練（第 1 次嘗試，植入已知缺陷）');
+  return card('s6', '同一批 600 筆交易同時送給舊版和新版，比較每一筆的回應碼。分布一變、或新版沒回應，就自動回滾；AIOps 把答案改變的交易分組，追到是哪一條規則、哪一行程式。', b, [
+    '金絲雀：這次發布 → 兩邊分布一樣，PROMOTE。',
+    '事故演練 → ROLLBACK：HTTP 500 約 0.7%、54 從 1.5% 升到 4.3%；AIOps 列出 3 組（30→5xx、00→54、00→51）並追到規則與行號。']);
+}
+/* ---------- step 7 ---------- */
+function mdTable(md) {
+  const lines = String(md || '').split('\n'); let h = '', inT = false, head = true;
+  for (const l of lines) {
+    const t = l.trim();
+    if (t.startsWith('|')) {
+      if (/^\|[\s\-|]+\|$/.test(t)) continue;
+      const cells = t.slice(1, -1).split(' | ');
+      if (!inT) { h += '<div class="tablewrap"><table>'; inT = true; head = true; }
+      h += '<tr>' + cells.map(c => head ? `<th>${esc(c)}</th>` : `<td class="small">${esc(c).replace(/`([^`]+)`/g, '<code>$1</code>')}</td>`).join('') + '</tr>'; head = false;
+    } else { if (inT) { h += '</table></div>'; inT = false; } if (t.startsWith('- ')) h += `<div class="small">• ${esc(t.slice(2))}</div>`; }
+  }
+  return h + (inT ? '</table></div>' : '');
+}
+function s7() {
+  const D = S.s7, P = S.progress || {};
+  const hasDrill = !!S['canary-drill'], hasRel = !!S['canary-release'];
+  let b = `<div class="controls"><button class="btn primary" data-step="incident" data-mode="drill"${hasDrill ? '' : ' disabled'}>把演練的事故回饋到規格</button><button class="btn" data-step="incident" data-mode="release"${hasRel ? '' : ' disabled'}>把這次發布的結果回饋到規格</button></div>`;
+  if (D) {
+    b += `<div class="controls"><span class="chip ok">新增 ${D.added} 個範例（新的黃金測試）</span><span class="chip ${D.questions.length ? 'bad' : 'ok'}">${D.questions.length} 個問題要 PM 回答</span></div>`;
+    b += `<details><summary>事故報告（incident.md）</summary>${mdTable(D.report)}</details>`;
+    b += `<div class="controls">${nameInput('nextby')}<button class="btn human" data-step="lock-next">鎖成 v1.1 並匯出</button>`;
+    if (D.approval) b += `<button class="btn primary" data-step="rerun">用 v1.1 重跑閘門</button>`;
+    b += `</div>`;
+    if (D.approval) b += `<div class="small">v1.1 由 ${esc(D.approval.by)} 鎖版，sha256 <span class="mono">${esc(String(D.approval.sha256).slice(0, 12))}…</span></div>`;
+    if (D.reruns && D.reruns.length) b += `<div class="tablewrap"><table><tr><th>程式</th><th>規格</th><th>結果</th><th>G3 黃金測試</th></tr>` + D.reruns.map(r =>
+      `<tr><td>${r.code === 'specblast' ? 'SpecBlast 的程式' : '植入缺陷的程式（第 1 次）'}</td><td>v${esc(r.spec)}</td><td><span class="chip ${chipCls(r.verdict)}">${esc(r.verdict)}</span></td><td class="small">${esc(r.g3)}</td></tr>`).join('') + `</table></div>`;
+  }
+  return card('s7', '上線出事時，答錯的交易回到 SpecForge：規格有答案的變成新範例（下一版的黃金測試），規格答不出來的變成 PM 要回答的問題。下一版要再由具名的人鎖版，閘門用新的黃金測試重跑，同樣的錯就再也上不去。', b, [
+    '回饋演練的事故 → 「新增 9 個範例、0 個問題」。',
+    '鎖成 v1.1 → 出現新的 SHA-256；匯出後黃金測試變多。',
+    '用 v1.1 重跑 → 植入缺陷的程式 v1.0 錯 5/9、v1.1 錯 11/15，兩次都 BLOCKED；SpecBlast 的程式 v1.1 全部通過。',
+    '回饋「這次發布」的結果 → 沒有答案改變，新增 0 個範例。']);
+}
+/* ---------- step 8 ---------- */
+function s8() {
+  const P = S.progress || {};
+  let b = `<div class="controls"><button class="btn primary" data-step="evidence"${P.approved ? '' : ' disabled'}>產生上線證據包並寄出</button>${S.evidence ? `<a class="btn" href="/api/chain/evidence" target="_blank" rel="noopener">打開證據包</a>` : ''}<a class="btn" href="/" target="_blank" rel="noopener">設定收件人（主控台 → 📬 收件匣）</a></div>`;
+  return card('s8', '一頁看完這次變更：照哪一版規格、哪一份程式、每一關的結果、誰核准、發布了什麼、金絲雀的結果。每個檔案都附 SHA-256，寄給勾選「上線證據包」的收件人，附件是 evidence.html 與 manifest.json。', b, [
+    '打開證據包：最上面一排 9 個步驟都有狀態；規格是 v1.0、你的名字鎖版；核准人是你；金絲雀 PROMOTE。',
+    '最下面的檔案清單每個都有 SHA-256，稽核紀錄顯示「hash chain intact」。',
+    '主控台的收件匣多一封「[AI Gate] Release evidence …」，附件兩個；只有勾「上線證據包」的人收到。']);
+}
+
+function bind() {
+  document.querySelectorAll('[data-step]').forEach(btn => btn.onclick = () => {
+    const step = btn.dataset.step, p = {};
+    const nm = id => { const v = ($('#' + id) || {}).value || ''; if (v.trim()) { NAME = v.trim(); try { localStorage.setItem('chain-name', NAME); } catch (e) {} } return v.trim(); };
+    if (step === 'load') p.input = $('#in').value;
+    if (step === 'lock') p.by = nm('lockby');
+    if (step === 'lock-next') p.by = nm('nextby');
+    if (step === 'approve') { p.by = nm('appby'); p.note = ($('#appnote') || {}).value || ''; p.acceptFindings = String(!!($('#accept') && $('#accept').checked)); p.ackHigh = String(!!($('#ackhigh') && $('#ackhigh').checked)); }
+    if (btn.dataset.mode) p.mode = btn.dataset.mode;
+    act(step, p, btn);
+  });
+  const sel = $('#in'); if (sel && S.progress && S.progress.input) sel.value = S.progress.input;
+}
+$('#reset').onclick = e => { LOG = {}; act('reset', {}, e.target); };
+load();
+</script>
+</body>
+</html>

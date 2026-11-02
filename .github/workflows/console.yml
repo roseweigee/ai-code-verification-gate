@@ -16,6 +16,7 @@ on:
       - 'tests/**'
       - 'config/**'
       - 'examples/**'
+      - 'chain/**'
       - 'Dockerfile'
       - '.github/workflows/console.yml'
   workflow_dispatch:
@@ -48,6 +49,14 @@ jobs:
           fi
       - uses: actions/checkout@v4
         if: steps.check.outputs.skip != '1'
+      # SpecForge (private) goes into the image for the chain page (/chain); without the token the page says so
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != '1'
+        continue-on-error: true
+        with:
+          repository: roseweigee/specforge
+          path: specforge
+          token: ${{ secrets.SPECFORGE_TOKEN || github.token }}
       - uses: google-github-actions/auth@v2
         if: steps.check.outputs.skip != '1'
         with:

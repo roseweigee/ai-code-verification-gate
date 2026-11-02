@@ -7,3 +7,4 @@ target/
 notify.properties
 chain-runs/
 config/recipients.json
+specforge/

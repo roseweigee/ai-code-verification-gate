@@ -46,6 +46,19 @@ public final class ReleaseServer {
                 + (app.mailer.enabled() ? " - demo email on" : " - demo email off (no SMTP_USER / SMTP_PASSWORD)"));
     }
 
+    /** For the chain page: serves a release folder on 127.0.0.1 and a free port, in this process. Stop it after use. */
+    public static HttpServer startLocal(Path root, Path dir) throws IOException {
+        if (!Files.exists(dir.resolve("AuthorizationPrecheckImpl.java")) || !Files.exists(dir.resolve("approval.json"))) {
+            throw new IllegalStateException("No release in " + dir.getFileName() + ". Nothing to serve.");
+        }
+        ReleaseServer app = new ReleaseServer(root, dir);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", app::handle);
+        server.setExecutor(Executors.newFixedThreadPool(4));
+        server.start();
+        return server;
+    }
+
     private void handle(HttpExchange ex) throws IOException {
         try {
             String path = ex.getRequestURI().getPath();

@@ -10,9 +10,16 @@ COPY . .
 
 # Build with the plain JDK, then prove the engine works before the image is accepted.
 RUN mkdir -p build/classes \
- && javac -d build/classes --release 17 $(find src/main/java -name '*.java') \
+ && javac -encoding UTF-8 -d build/classes --release 17 $(find src/main/java -name '*.java') \
  && java -cp build/classes -Daiverify.root=/app dev.aiverify.Main selftest \
  && rm -rf runs
+
+# SpecForge, when the build checked it out next to the gate (the chain page, /chain, runs it)
+RUN if [ -d specforge/src/main/java ]; then \
+      rm -rf specforge/.git specforge/out specforge/build && mkdir -p specforge/build/classes \
+      && javac -encoding UTF-8 -d specforge/build/classes --release 17 $(find specforge/src/main/java -name '*.java') \
+      && (cd specforge && java -cp build/classes dev.specforge.Main selftest); \
+    else echo "SpecForge not in the build context: the chain page will say so"; fi
 
 # Run as a non-root user; it only needs to write runs/ under /app.
 RUN useradd --system --uid 10001 --home /app gate && chown -R 10001 /app

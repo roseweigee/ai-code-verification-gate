@@ -52,6 +52,7 @@ public final class ConsoleServer {
     private final byte[] password;
     private final boolean hosted;
     private final CicdStatus cicd = new CicdStatus();
+    private final ChainConsole chain;
     /** Locally: one session over the repository itself. Hosted: one per visitor (cookie), each with its own runs/. */
     private final Session local;
     private final Map<String, Session> sessions = new java.util.concurrent.ConcurrentHashMap<>();
@@ -98,6 +99,7 @@ public final class ConsoleServer {
         this.local = new Session("local", root);
         this.sessionsDir = hosted ? Files.createTempDirectory("gate-sessions") : null;
         this.mailLimit = new DemoMailer(root, 15);
+        this.chain = new ChainConsole(root, ChainConsole.findSpecForge(root));
         this.mailOn = hosted && new dev.aiverify.notify.Notifier(root).canDeliver();
     }
 
@@ -145,7 +147,17 @@ public final class ConsoleServer {
         try (Stream<Path> st = Files.list(root)) {
             for (Path e : st.toList()) {
                 String n = e.getFileName().toString();
-                if (!n.equals("runs") && !n.equals(".git") && !n.equals("notify.properties")) {
+                if (n.equals("config")) {
+                    // a real folder: this visitor's recipients.json is written here, the shared files are linked
+                    Path cfg = Files.createDirectories(dir.resolve("config"));
+                    try (Stream<Path> cs = Files.list(e)) {
+                        for (Path f : cs.toList()) {
+                            if (!f.getFileName().toString().equals("recipients.json")) {
+                                Files.createSymbolicLink(cfg.resolve(f.getFileName().toString()), f);
+                            }
+                        }
+                    }
+                } else if (!n.equals("runs") && !n.equals(".git") && !n.equals("notify.properties")) {
                     Files.createSymbolicLink(dir.resolve(n), e);
                 }
             }
@@ -237,6 +249,28 @@ public final class ConsoleServer {
                 case "/" -> send(ex, 200, "text/html; charset=utf-8",
                         Files.readString(root.resolve("report/console.html")));
                 case "/api/state" -> json(ex, state(ss));
+                case "/chain" -> send(ex, 200, "text/html; charset=utf-8", Files.readString(root.resolve("report/chain.html")));
+                case "/api/chain/state" -> {
+                    Map<String, Object> cs = new LinkedHashMap<>(chain.state(ss.root));
+                    cs.put("hosted", hosted);
+                    cs.put("mailEnabled", hosted ? mailOn : true);
+                    json(ex, cs);
+                }
+                case "/api/chain/evidence" -> {
+                    Path f = chain.evidenceFile(ss.root);
+                    if (f == null) {
+                        json(ex, 404, Map.of("error", "no evidence pack yet"));
+                    } else {
+                        send(ex, 200, "text/html; charset=utf-8", Files.readString(f));
+                    }
+                }
+                case "/api/chain/act" -> {
+                    if (!"POST".equals(ex.getRequestMethod())) {
+                        json(ex, 405, Map.of("error", "POST only"));
+                        return;
+                    }
+                    json(ex, chainAct(ss, q, client(ex)));
+                }
                 case "/api/inbox" -> json(ex, Map.of("mails", inbox(ss)));
                 case "/api/recipients" -> {
                     int max = hosted ? MAX_RECIPIENTS_HOSTED : MAX_RECIPIENTS_LOCAL;
@@ -388,6 +422,87 @@ public final class ConsoleServer {
         }
     }
 
+    private Map<String, Object> chainAct(Session ss, Map<String, String> q, String client) throws IOException, InterruptedException {
+        if (hosted) {
+            synchronized (ss.actions) {
+                long now = System.currentTimeMillis();
+                while (!ss.actions.isEmpty() && now - ss.actions.peekFirst() > 3_600_000L) {
+                    ss.actions.pollFirst();
+                }
+                if (ss.actions.size() >= ACTIONS_PER_HOUR) {
+                    return Map.of("error", "Too many actions in this session for now. Please try again later.");
+                }
+                ss.actions.add(now);
+            }
+        }
+        ChainConsole.Cli cli = new ChainConsole.Cli() {
+            @Override
+            public Map<String, Object> gate(Path gateRoot, List<String> args, boolean mail) throws IOException, InterruptedException {
+                String mailTo = null;
+                ss.mailSkip = "";
+                String note = null;
+                if (hosted && mail) {
+                    String[] m = mailFor(ss, client);
+                    mailTo = m[0];
+                    note = m[1];
+                }
+                Map<String, Object> r = runCli(ss, args, mailTo, gateRoot);
+                if (note != null) {
+                    r.put("mail", note);
+                }
+                return r;
+            }
+
+            @Override
+            public Map<String, Object> specforge(List<String> args) throws IOException, InterruptedException {
+                return runSpecForge(args);
+            }
+        };
+        synchronized (ss) {
+            try {
+                return chain.act(ss.root, q.getOrDefault("step", ""), q, cli);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return Map.of("error", String.valueOf(e.getMessage()));
+            }
+        }
+    }
+
+    /** SpecForge's CLI in its own folder (its glossary is config/glossary.json there). Never with an AI key in the cloud. */
+    private Map<String, Object> runSpecForge(List<String> args) throws IOException, InterruptedException {
+        Path sf = chain.specforgeHome();
+        List<String> cmd = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-Dfile.encoding=UTF-8", "-Dsun.stdout.encoding=UTF-8", "-Dsun.stderr.encoding=UTF-8", "-cp", sf.resolve("build/classes").toString(), "dev.specforge.Main"));
+        cmd.addAll(args);
+        ProcessBuilder pb = new ProcessBuilder(cmd).directory(sf.toFile()).redirectErrorStream(true);
+        if (hosted) {
+            pb.environment().remove("ANTHROPIC_API_KEY");
+            pb.environment().remove("GH_DISPATCH_TOKEN");
+            pb.environment().remove("DEMO_PASSWORD");
+            cpu.acquire();
+        }
+        String out;
+        int code;
+        try {
+            Process p = pb.start();
+            out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            code = p.waitFor();
+        } finally {
+            if (hosted) {
+                cpu.release();
+            }
+        }
+        StringBuilder shown = new StringBuilder("specforge");
+        for (String a : args) {
+            String b = a.startsWith("/") ? Path.of(a).getFileName().toString() : a;
+            shown.append(' ').append(b.contains(" ") ? "\"" + b + "\"" : b);
+        }
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("command", shown.toString());
+        r.put("exitCode", code);
+        r.put("output", out.lines().filter(l -> !l.startsWith("Picked up JAVA_TOOL_OPTIONS")).reduce("", (a, b) -> a + b + "\n"));
+        return r;
+    }
+
     private Map<String, Object> actionLocked(Session ss, Map<String, String> q, String name, String client)
             throws IOException, InterruptedException {
         String by = q.getOrDefault("by", "").trim();
@@ -455,37 +570,9 @@ public final class ConsoleServer {
         String mailNote = null;
         ss.mailSkip = "";
         if (hosted && MAIL_ACTIONS.contains(name)) {
-            // every address this action may email: the visitor's own and the recipients they set up; each is rate limited
-            List<String> addrs = new ArrayList<>();
-            if (!ss.email.isEmpty()) {
-                addrs.add(ss.email);
-            }
-            for (dev.aiverify.notify.Recipients.Recipient rc : dev.aiverify.notify.Recipients.load(ss.root)) {
-                if (addrs.stream().noneMatch(a -> a.equalsIgnoreCase(rc.email()))) {
-                    addrs.add(rc.email());
-                }
-            }
-            if (!mailOn) {
-                mailNote = "off";
-            } else if (addrs.isEmpty()) {
-                mailNote = "no-address";
-            } else {
-                List<String> skip = new ArrayList<>();
-                String why = null;
-                for (String a : addrs) {
-                    String w = mailLimit.allow(a, client, 1, false);
-                    if (w != null) {
-                        skip.add(a);
-                        why = w;
-                    }
-                }
-                mailTo = !ss.email.isEmpty() && !skip.contains(ss.email) ? ss.email : "";
-                ss.mailSkip = String.join(",", skip);
-                if (skip.size() == addrs.size()) {
-                    mailTo = null;
-                    mailNote = why;
-                }
-            }
+            String[] m = mailFor(ss, client);
+            mailTo = m[0];
+            mailNote = m[1];
         }
         Map<String, Object> r = runCli(ss, args, mailTo);
         if (mailNote != null) {
@@ -495,6 +582,43 @@ public final class ConsoleServer {
             r.putAll(demoRelease(ss, by));
         }
         return r;
+    }
+
+    /**
+     * Cloud demo: which addresses this action may email (the visitor's own and their recipients, each rate limited).
+     * Returns {NOTIFY_TO or null, a note for the page or null}; sets ss.mailSkip to the addresses over their limit.
+     */
+    private String[] mailFor(Session ss, String client) {
+        ss.mailSkip = "";
+        List<String> addrs = new ArrayList<>();
+        if (!ss.email.isEmpty()) {
+            addrs.add(ss.email);
+        }
+        for (dev.aiverify.notify.Recipients.Recipient rc : dev.aiverify.notify.Recipients.load(ss.root)) {
+            if (addrs.stream().noneMatch(a -> a.equalsIgnoreCase(rc.email()))) {
+                addrs.add(rc.email());
+            }
+        }
+        if (!mailOn) {
+            return new String[] {null, "off"};
+        }
+        if (addrs.isEmpty()) {
+            return new String[] {null, "no-address"};
+        }
+        List<String> skip = new ArrayList<>();
+        String why = null;
+        for (String a : addrs) {
+            String w = mailLimit.allow(a, client, 1, false);
+            if (w != null) {
+                skip.add(a);
+                why = w;
+            }
+        }
+        ss.mailSkip = String.join(",", skip);
+        if (skip.size() == addrs.size()) {
+            return new String[] {null, why};
+        }
+        return new String[] {!ss.email.isEmpty() && !skip.contains(ss.email) ? ss.email : "", null};
     }
 
     /** Cloud demo: one real release at a time (never while one is running on GitHub), at most 20 a day. */
@@ -565,6 +689,11 @@ public final class ConsoleServer {
     }
 
     private Map<String, Object> runCli(Session ss, List<String> args, String mailTo) throws IOException, InterruptedException {
+        return runCli(ss, args, mailTo, ss.root);
+    }
+
+    private Map<String, Object> runCli(Session ss, List<String> args, String mailTo, Path gateRoot)
+            throws IOException, InterruptedException {
         List<String> cmd = new ArrayList<>();
         cmd.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         cmd.add("-cp");
@@ -573,10 +702,10 @@ public final class ConsoleServer {
             cp.append(cp.length() == 0 ? "" : java.io.File.pathSeparator).append(Path.of(e).toAbsolutePath());
         }
         cmd.add(cp.toString());
-        cmd.add("-Daiverify.root=" + ss.root);
+        cmd.add("-Daiverify.root=" + gateRoot);
         cmd.add("dev.aiverify.Main");
         cmd.addAll(args);
-        ProcessBuilder pb = new ProcessBuilder(cmd).directory(ss.root.toFile()).redirectErrorStream(true);
+        ProcessBuilder pb = new ProcessBuilder(cmd).directory(gateRoot.toFile()).redirectErrorStream(true);
         if (hosted) {
             // the demo runs the seeded-defect attempts: no AI key, no GitHub token, and mail only to this visitor
             Map<String, String> env = pb.environment();
@@ -614,7 +743,8 @@ public final class ConsoleServer {
             }
         }
         StringBuilder shown = new StringBuilder("./run.sh");
-        for (String a : args) {
+        for (String a0 : args) {
+            String a = a0.replace(gateRoot + "/", "").replace(ss.root + "/", "");
             shown.append(' ').append(a.contains(" ") || a.isEmpty() ? "\"" + a + "\"" : a);
         }
         Map<String, Object> r = new LinkedHashMap<>();
